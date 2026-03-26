@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file=../../.env src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "dev": "bun --watch --env-file=../../.env src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
@@ -16,7 +16,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@e2b/code-interpreter": "^1.0.4",
-    "@hono/node-server": "^1.19.11",
     "@supabase/supabase-js": "^2.49.1",
     "@web-ai-coding-agent/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
@@ -28,7 +27,6 @@
     "@types/node": "^22.0.0",
     "dotenv": "^16.4.0",
     "drizzle-kit": "^0.30.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

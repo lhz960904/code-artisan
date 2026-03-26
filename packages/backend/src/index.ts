@@ -1,4 +1,3 @@
-import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -18,6 +17,9 @@ app.use(
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-serve({ fetch: app.fetch, port: env.PORT }, () => {
-  console.log(`Backend running on http://localhost:${env.PORT}`);
-});
+console.log(`Backend running on http://localhost:${env.PORT}`);
+
+export default {
+  port: env.PORT,
+  fetch: app.fetch,
+};
