@@ -16,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@e2b/code-interpreter": "^1.0.4",
+    "@hono/node-server": "^1.19.11",
     "@supabase/supabase-js": "^2.49.1",
     "@web-ai-coding-agent/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
