@@ -1,0 +1,12 @@
+{
+  "name": "@web-ai-coding-agent/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "src/types.ts",
+  "types": "src/types.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  }
+}
