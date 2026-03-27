@@ -1,13 +1,5 @@
 // Event types flowing through the system
-export type EventType =
-  | "user_message"
-  | "ai_text"
-  | "tool_call"
-  | "tool_result"
-  | "confirm_required"
-  | "confirm_response"
-  | "preview_url"
-  | "error";
+export type EventType = "user_message" | "ai_text" | "tool_call" | "tool_result" | "confirm_required" | "confirm_response" | "preview_url" | "error";
 
 export interface AgentEvent {
   id: string;
@@ -82,12 +74,12 @@ export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];
 
 // Tool call/result payloads
 export interface ToolCallData {
-  tool: ToolName;
+  tool: string;
   args: Record<string, string>;
 }
 
 export interface ToolResultData {
-  tool: ToolName;
+  tool: string;
   output: string;
   error?: string;
 }
