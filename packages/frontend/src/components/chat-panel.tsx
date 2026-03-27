@@ -38,10 +38,7 @@ export function ChatPanel() {
         }
       }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", content: `Error: ${err}` },
-      ]);
+      setMessages((prev) => [...prev, { role: "agent", content: `Error: ${err}` }]);
     } finally {
       setLoading(false);
     }
@@ -65,11 +62,7 @@ export function ChatPanel() {
               </div>
             </div>
           ))}
-          {loading && (
-            <div className="animate-pulse text-sm text-[#8b949e]">
-              Thinking...
-            </div>
-          )}
+          {loading && <div className="animate-pulse text-sm text-[#8b949e]">Thinking...</div>}
         </div>
       </div>
       <div className="border-t border-[#30363d] p-3">

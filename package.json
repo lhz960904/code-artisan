@@ -2,14 +2,13 @@
   "name": "web-ai-coding-agent",
   "private": true,
   "scripts": {
-    "dev:frontend": "pnpm --filter frontend dev",
-    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter @web-ai-coding-agent/frontend dev",
+    "dev:backend": "pnpm --filter @web-ai-coding-agent/backend dev",
     "dev": "pnpm run --parallel dev:frontend dev:backend",
-    "build": "pnpm --filter shared build && pnpm --filter frontend build && pnpm --filter backend build",
-    "test": "pnpm --filter backend test"
+    "build": "pnpm --filter @web-ai-coding-agent/shared build && pnpm --filter @web-ai-coding-agent/frontend build && pnpm --filter @web-ai-coding-agent/backend build",
+    "test": "pnpm --filter @web-ai-coding-agent/backend test"
   },
   "engines": {
     "node": ">=20"
-  },
-  "packageManager": "pnpm@10.33.0"
+  }
 }
