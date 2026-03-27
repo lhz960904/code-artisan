@@ -91,6 +91,22 @@ conversationsRouter.get("/:id/events", async (c) => {
   return c.json(result);
 });
 
+// Get file snapshots for conversation (for editor initial load)
+conversationsRouter.get("/:id/files", async (c) => {
+  const id = c.req.param("id");
+
+  const result = await db
+    .select({
+      path: fileSnapshots.path,
+      content: fileSnapshots.content,
+      updatedAt: fileSnapshots.updatedAt,
+    })
+    .from(fileSnapshots)
+    .where(eq(fileSnapshots.conversationId, id));
+
+  return c.json(result);
+});
+
 // Send message — fire-and-forget, agent runs in background
 conversationsRouter.post("/:id/messages", async (c) => {
   const id = c.req.param("id");

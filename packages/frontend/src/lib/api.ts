@@ -62,3 +62,15 @@ export async function updateConversation(
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+export interface FileSnapshot {
+  path: string;
+  content: string;
+  updatedAt: string;
+}
+
+export async function getFileSnapshots(conversationId: string): Promise<FileSnapshot[]> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/files`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}

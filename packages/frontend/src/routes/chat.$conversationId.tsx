@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChatPanel } from "../components/chat-panel";
+import { WorkspaceProvider } from "../contexts/workspace-context";
+import { WorkspaceLayout } from "../components/workspace-layout";
 
 export const Route = createFileRoute("/chat/$conversationId")({
   component: ChatPage,
@@ -9,8 +10,8 @@ function ChatPage() {
   const { conversationId } = Route.useParams();
 
   return (
-    <div className="flex h-full flex-col">
-      <ChatPanel conversationId={conversationId} />
-    </div>
+    <WorkspaceProvider>
+      <WorkspaceLayout conversationId={conversationId} />
+    </WorkspaceProvider>
   );
 }

@@ -10,9 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-router": "^1.95.0",
     "@web-ai-coding-agent/shared": "workspace:*",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^9.0.0"
@@ -22,6 +25,7 @@
     "@tailwindcss/vite": "^4.0.0",
     "@tanstack/router-devtools": "^1.95.0",
     "@tanstack/router-plugin": "^1.95.0",
+    "@types/node": "^22.19.15",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.4.0",

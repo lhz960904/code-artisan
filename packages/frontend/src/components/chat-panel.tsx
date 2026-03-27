@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { sendMessage } from "../lib/api";
 import { useConversationEvents, type RealtimeEvent } from "../lib/supabase";
 import { ToolCallCard } from "./tool-call-card";
+import { useWorkspace } from "../contexts/workspace-context";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -12,6 +13,13 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const processedSeqRef = useRef(0);
+  const { updateFile, openFile, appendTerminal, setPreviewUrl, loadSnapshots } = useWorkspace();
+
+  // Load initial file snapshots
+  useEffect(() => {
+    loadSnapshots(conversationId);
+  }, [conversationId, loadSnapshots]);
 
   // Auto-scroll to bottom on new events
   useEffect(() => {
@@ -19,6 +27,62 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [events]);
+
+  // Process events into workspace state
+  useEffect(() => {
+    for (const event of events) {
+      if (event.seq <= processedSeqRef.current) continue;
+      processedSeqRef.current = event.seq;
+
+      const data = event.data as Record<string, unknown>;
+
+      if (event.type === "tool_call") {
+        const tool = data.tool as string;
+        const args = data.args as Record<string, string>;
+
+        if (tool === "write_file" && args.path && args.content) {
+          updateFile(args.path, args.content);
+          openFile(args.path);
+        }
+      }
+
+      if (event.type === "tool_result") {
+        const tool = data.tool as string;
+        if (tool === "execute_command") {
+          const callEvent = events.find(
+            (e) => e.type === "tool_call" && e.seq === event.seq - 1,
+          );
+          const command = callEvent
+            ? ((callEvent.data as Record<string, unknown>).args as Record<string, string>)?.command ?? "command"
+            : "command";
+
+          appendTerminal({
+            command,
+            output: (data.output as string) ?? "",
+            error: (data.error as string) || undefined,
+          });
+        }
+
+        if (tool === "read_file") {
+          const callEvent = events.find(
+            (e) => e.type === "tool_call" && e.seq === event.seq - 1,
+          );
+          const path = callEvent
+            ? ((callEvent.data as Record<string, unknown>).args as Record<string, string>)?.path
+            : null;
+
+          if (path && data.output) {
+            updateFile(path, data.output as string);
+            openFile(path);
+          }
+        }
+      }
+
+      if (event.type === "preview_url") {
+        setPreviewUrl(data.url as string);
+      }
+    }
+  }, [events, updateFile, openFile, appendTerminal, setPreviewUrl]);
 
   // Check if agent is currently processing
   const isAgentRunning =
