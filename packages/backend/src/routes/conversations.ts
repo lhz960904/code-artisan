@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db/index.js";
-import { conversations, events } from "../db/schema.js";
+import { conversations, events, fileSnapshots } from "../db/schema.js";
 import { eq, desc, gt, and } from "drizzle-orm";
 import { AgentService } from "../services/agent.js";
+import { env } from "../env.js";
 
 const conversationsRouter = new Hono();
 
@@ -13,7 +15,7 @@ conversationsRouter.post("/", async (c) => {
   const [conv] = await db
     .insert(conversations)
     .values({
-      userId: "00000000-0000-0000-0000-000000000000", // Phase 2: no auth, placeholder
+      userId: "00000000-0000-0000-0000-000000000000",
       title: title || null,
     })
     .returning();
@@ -58,6 +60,18 @@ conversationsRouter.patch("/:id", async (c) => {
   return c.json(conv);
 });
 
+// Delete conversation
+conversationsRouter.delete("/:id", async (c) => {
+  const id = c.req.param("id");
+
+  // Delete events and file snapshots first (FK constraint)
+  await db.delete(events).where(eq(events.conversationId, id));
+  await db.delete(fileSnapshots).where(eq(fileSnapshots.conversationId, id));
+  await db.delete(conversations).where(eq(conversations.id, id));
+
+  return c.json({ status: "deleted" });
+});
+
 // Get events for conversation (with optional afterSeq for catchup)
 conversationsRouter.get("/:id/events", async (c) => {
   const id = c.req.param("id");
@@ -100,6 +114,13 @@ conversationsRouter.post("/:id/messages", async (c) => {
     console.error(`Agent error for conversation ${id}:`, err);
   });
 
+  // Auto-generate title if this is the first message
+  if (!conv.title) {
+    generateTitle(id, content).catch((err) => {
+      console.error(`Title generation error for conversation ${id}:`, err);
+    });
+  }
+
   // Update conversation timestamp
   await db
     .update(conversations)
@@ -108,5 +129,33 @@ conversationsRouter.post("/:id/messages", async (c) => {
 
   return c.json({ status: "started" });
 });
+
+async function generateTitle(conversationId: string, userMessage: string): Promise<void> {
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 30,
+    messages: [
+      {
+        role: "user",
+        content: `Generate a very short title (max 6 words, no quotes) for a coding conversation that starts with this message:\n\n${userMessage}`,
+      },
+    ],
+  });
+
+  const title = response.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b as Anthropic.TextBlock).text)
+    .join("")
+    .trim();
+
+  if (title) {
+    await db
+      .update(conversations)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(conversations.id, conversationId));
+  }
+}
 
 export { conversationsRouter };

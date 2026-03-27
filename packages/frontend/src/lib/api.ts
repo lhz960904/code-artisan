@@ -43,6 +43,13 @@ export async function sendMessage(conversationId: string, content: string): Prom
   return res.json();
 }
 
+export async function deleteConversation(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/conversations/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+}
+
 export async function updateConversation(
   id: string,
   updates: { title?: string; mode?: string },
