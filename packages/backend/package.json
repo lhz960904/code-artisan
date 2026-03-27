@@ -9,9 +9,9 @@
     "start": "bun dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
+    "db:push": "dotenv -e ../../.env -- drizzle-kit push",
+    "db:studio": "dotenv -e ../../.env -- drizzle-kit studio"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "dotenv": "^16.4.0",
+    "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.30.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
