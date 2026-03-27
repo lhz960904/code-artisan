@@ -84,6 +84,17 @@ export interface ToolResultData {
   error?: string;
 }
 
+// Confirm mode payloads
+export interface ConfirmRequiredData {
+  tool: string;
+  args: Record<string, string>;
+  description: string;
+}
+
+export interface ConfirmResponseData {
+  approved: boolean;
+}
+
 // API request/response types
 export interface SendMessageRequest {
   content: string;

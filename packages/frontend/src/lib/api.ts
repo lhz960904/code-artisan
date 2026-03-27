@@ -74,3 +74,28 @@ export async function getFileSnapshots(conversationId: string): Promise<FileSnap
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
+
+export async function confirmAction(
+  conversationId: string,
+  approved: boolean,
+): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/conversations/${conversationId}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved }),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export interface QuotaResponse {
+  totalTokens: number;
+  usedTokens: number;
+  remaining: number;
+}
+
+export async function getQuota(): Promise<QuotaResponse> {
+  const res = await fetch(`${API_BASE}/quota`);
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}

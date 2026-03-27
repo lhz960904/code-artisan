@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { sendMessage } from "../lib/api";
 import { useConversationEvents, type RealtimeEvent } from "../lib/supabase";
 import { ToolCallCard } from "./tool-call-card";
+import { ConfirmCard } from "./confirm-card";
 import { useWorkspace } from "../contexts/workspace-context";
 
 interface ChatPanelProps {
@@ -152,6 +153,20 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
                     result={getToolResult(event)}
                   />
                 );
+              case "confirm_required": {
+                const responseEvent = events.find(
+                  (e) => e.type === "confirm_response" && e.seq > event.seq,
+                );
+                return (
+                  <ConfirmCard
+                    key={event.id}
+                    event={event}
+                    conversationId={conversationId}
+                    hasResponse={!!responseEvent}
+                    wasApproved={responseEvent ? (responseEvent.data as { approved: boolean }).approved : undefined}
+                  />
+                );
+              }
               case "error":
                 return (
                   <div

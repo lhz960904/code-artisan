@@ -146,6 +146,33 @@ conversationsRouter.post("/:id/messages", async (c) => {
   return c.json({ status: "started" });
 });
 
+// User approves/rejects a confirm_required event
+conversationsRouter.post("/:id/confirm", async (c) => {
+  const id = c.req.param("id");
+  const { approved } = await c.req.json<{ approved: boolean }>();
+
+  const [conv] = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id));
+
+  if (!conv) return c.json({ error: "Conversation not found" }, 404);
+
+  await db.insert(events).values({
+    conversationId: id,
+    type: "confirm_response",
+    data: { approved },
+  });
+
+  // Re-invoke agent to continue (fire-and-forget, no new userMessage)
+  const agent = new AgentService();
+  agent.run({ conversationId: id }).catch((err) => {
+    console.error(`Agent error after confirm for conversation ${id}:`, err);
+  });
+
+  return c.json({ status: "ok" });
+});
+
 async function generateTitle(conversationId: string, userMessage: string): Promise<void> {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 

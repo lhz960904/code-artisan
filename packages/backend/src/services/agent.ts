@@ -2,16 +2,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ClaudeService } from "./claude.js";
 import { SandboxService } from "./sandbox.js";
 import { EventStore } from "./event-store.js";
+import { QuotaService } from "./quota.js";
 import { db } from "../db/index.js";
 import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
-import type { ToolCallData, ToolResultData } from "@web-ai-coding-agent/shared";
+import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@web-ai-coding-agent/shared";
 
-export type AgentEventData = ToolCallData | ToolResultData | { content: string };
+export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string };
 
 interface AgentRunOptions {
   conversationId: string;
-  userMessage: string;
+  userMessage?: string;
   maxIterations?: number;
 }
 
@@ -26,25 +27,58 @@ export class AgentService {
     const { conversationId, userMessage, maxIterations = 10 } = options;
     const store = new EventStore(conversationId);
 
-    // Write user message event
-    await store.writeEvent("user_message", { content: userMessage });
+    // Get conversation info
+    const [conv] = await db
+      .select({ userId: conversations.userId, mode: conversations.mode })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
+
+    const userId = conv?.userId ?? "00000000-0000-0000-0000-000000000000";
+    const quota = new QuotaService(userId);
+
+    // Write user message event (only if this is a new message, not a confirm continuation)
+    if (userMessage) {
+      await store.writeEvent("user_message", { content: userMessage });
+    }
 
     // Get or create sandbox
     const sandbox = await this.getOrCreateSandbox(conversationId, store);
 
     try {
-      // Build message history from existing events
+      // If resuming after confirm, handle the pending tool call first
+      const pendingHandled = await this.handlePendingConfirm(store, sandbox);
+
+      // Build message history from all events (including any just-written tool_result)
       const history = await this.buildMessageHistory(store);
 
+      // If we just handled a rejected confirm, Claude needs to respond to the rejection
+      // If we just handled an approved confirm, Claude continues with the tool result
+      // If no pending confirm, normal flow
+      // In all cases, continue the loop unless the pending was a rejection and Claude should respond
+
       for (let i = 0; i < maxIterations; i++) {
+        // Skip first Claude call if we already handled a pending tool (history already has the result)
+        if (i === 0 && pendingHandled) {
+          // History already includes the tool_result from pending confirm
+          // Continue to let Claude process it
+        }
+
+        const hasBalance = await quota.checkBalance();
+        if (!hasBalance) {
+          await store.writeEvent("error", { content: "Token quota exceeded." });
+          break;
+        }
+
         const response = await this.claude.chat(history);
 
         if (response.type === "text") {
+          await quota.addUsage(response.usage.inputTokens, response.usage.outputTokens);
           await store.writeEvent("ai_text", { content: response.content });
           break;
         }
 
-        // Handle tool call
+        await quota.addUsage(response.usage.inputTokens, response.usage.outputTokens);
+
         if (response.textContent) {
           await store.writeEvent("ai_text", { content: response.textContent });
         }
@@ -55,16 +89,34 @@ export class AgentService {
         };
         await store.writeEvent("tool_call", toolCallData);
 
-        // Execute tool
+        // Check current mode
+        const [currentConv] = await db
+          .select({ mode: conversations.mode })
+          .from(conversations)
+          .where(eq(conversations.id, conversationId));
+
+        const mode = currentConv?.mode ?? "yolo";
+
+        // In confirm mode: write confirm_required and STOP
+        if (mode === "confirm") {
+          const description = `${response.toolName}(${JSON.stringify(response.toolInput)})`;
+          const confirmData: ConfirmRequiredData = {
+            tool: response.toolName,
+            args: response.toolInput,
+            description,
+          };
+          await store.writeEvent("confirm_required", confirmData);
+          return; // Stop — frontend will call POST /confirm, which re-invokes run()
+        }
+
+        // YOLO mode: execute immediately
         const toolResult = await this.executeTool(sandbox, response.toolName, response.toolInput);
         await store.writeEvent("tool_result", toolResult);
 
-        // If write_file, persist snapshot
         if (response.toolName === "write_file") {
           await store.upsertFileSnapshot(response.toolInput.path, response.toolInput.content);
         }
 
-        // Add to history for next iteration
         history.push({
           role: "assistant",
           content: [
@@ -96,8 +148,64 @@ export class AgentService {
     }
   }
 
+  /**
+   * Check if there's a pending tool_call that was confirmed/rejected.
+   * Pattern: tool_call → confirm_required → confirm_response (no tool_result yet)
+   * Returns true if a pending confirm was handled.
+   */
+  private async handlePendingConfirm(store: EventStore, sandbox: SandboxService): Promise<boolean> {
+    const allEvents = await store.getEvents();
+    if (allEvents.length < 3) return false;
+
+    // Find the last confirm_response
+    let lastConfirmIdx = -1;
+    for (let i = allEvents.length - 1; i >= 0; i--) {
+      if (allEvents[i].type === "confirm_response") {
+        lastConfirmIdx = i;
+        break;
+      }
+    }
+    if (lastConfirmIdx === -1) return false;
+
+    // Check there's no tool_result after this confirm_response
+    const hasToolResultAfter = allEvents.slice(lastConfirmIdx + 1).some((e) => e.type === "tool_result");
+    if (hasToolResultAfter) return false;
+
+    // Find the matching tool_call (before confirm_required before confirm_response)
+    let toolCallEvent = null;
+    for (let i = lastConfirmIdx - 1; i >= 0; i--) {
+      if (allEvents[i].type === "tool_call") {
+        toolCallEvent = allEvents[i];
+        break;
+      }
+    }
+    if (!toolCallEvent) return false;
+
+    const confirmData = allEvents[lastConfirmIdx].data as unknown as ConfirmResponseData;
+    const toolData = toolCallEvent.data as unknown as ToolCallData;
+
+    if (confirmData.approved) {
+      // Execute the tool
+      const toolResult = await this.executeTool(sandbox, toolData.tool, toolData.args);
+      await store.writeEvent("tool_result", toolResult);
+
+      if (toolData.tool === "write_file") {
+        await store.upsertFileSnapshot(toolData.args.path, toolData.args.content);
+      }
+    } else {
+      // Write rejection result
+      const rejectResult: ToolResultData = {
+        tool: toolData.tool,
+        output: "User rejected this tool call.",
+        error: "rejected",
+      };
+      await store.writeEvent("tool_result", rejectResult);
+    }
+
+    return true;
+  }
+
   private async getOrCreateSandbox(conversationId: string, store: EventStore): Promise<SandboxService> {
-    // Check if conversation has an active sandbox
     const [conv] = await db
       .select({ sandboxId: conversations.sandboxId })
       .from(conversations)
@@ -111,14 +219,12 @@ export class AgentService {
       }
     }
 
-    // Create new sandbox and restore files
     const sandbox = await SandboxService.create();
     const snapshots = await store.getFileSnapshots();
     if (snapshots.length > 0) {
       await sandbox.restoreFiles(snapshots);
     }
 
-    // Store sandbox ID
     await db
       .update(conversations)
       .set({ sandboxId: sandbox.id })
@@ -166,12 +272,21 @@ export class AgentService {
         }
         case "tool_result": {
           const resultData = data as unknown as ToolResultData;
+          // Find the matching tool_call by searching backwards (confirm events may be in between)
+          const eventIdx = allEvents.indexOf(event);
+          let matchingToolSeq = event.seq - 1;
+          for (let j = eventIdx - 1; j >= 0; j--) {
+            if (allEvents[j].type === "tool_call") {
+              matchingToolSeq = allEvents[j].seq;
+              break;
+            }
+          }
           messages.push({
             role: "user",
             content: [
               {
                 type: "tool_result" as const,
-                tool_use_id: `tool_${event.seq - 1}`,
+                tool_use_id: `tool_${matchingToolSeq}`,
                 content: resultData.error
                   ? `Error: ${resultData.error}\nOutput: ${resultData.output}`
                   : resultData.output,
@@ -180,6 +295,7 @@ export class AgentService {
           });
           break;
         }
+        // confirm_required and confirm_response are UI-only events, not part of Claude history
       }
     }
 
