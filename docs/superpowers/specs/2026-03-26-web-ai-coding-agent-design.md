@@ -15,7 +15,7 @@ A browser-based AI coding agent: user describes a programming task, AI autonomou
 
 ## 2. Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
 │                   Tencent Cloud VPS               │
 │                                                   │
@@ -68,6 +68,7 @@ A browser-based AI coding agent: user describes a programming task, AI autonomou
 ### Supabase Auth (built-in)
 
 Using Supabase Auth with two providers:
+
 - **Email OTP**: Passwordless, user receives verification code
 - **GitHub OAuth**: Reuses the same GitHub App for future GitHub integration
 
@@ -135,7 +136,7 @@ user_quotas (
 
 ### Flow
 
-```
+```text
 User sends message
     │
     ▼
@@ -184,7 +185,7 @@ Create / restore E2B sandbox
 
 ### AI Tools
 
-```
+```text
 read_file(path)            → Read file content from sandbox
 write_file(path, content)  → Write/overwrite file in sandbox
 execute_command(cmd)       → Execute shell command, return stdout/stderr
@@ -210,10 +211,13 @@ list_files(path)           → List directory structure
 ## 6. Execution Modes
 
 ### YOLO Mode
+
 All tool calls execute immediately without user intervention. Agent loop runs to completion autonomously.
 
 ### Confirm Mode
+
 Every tool call pauses for user approval before execution:
+
 1. Backend writes `confirm_required` event
 2. Frontend displays confirmation card (tool name, arguments, description)
 3. User clicks Approve or Reject
@@ -226,7 +230,7 @@ Every tool call pauses for user approval before execution:
 
 ### Layout
 
-```
+```text
 ┌──────────────────────────────────────────────────────┐
 │  Toolbar: Logo | Session Title | YOLO/Confirm | Preview | Deploy | Avatar │
 ├────────────┬─────────────────────────────────────────┤
@@ -258,7 +262,7 @@ Every tool call pauses for user approval before execution:
 
 ### Routes (TanStack Router)
 
-```
+```text
 /login              → Login page (Email OTP + GitHub OAuth)
 /                   → Conversation list (history)
 /chat/:id           → Main workspace (Chat + Editor + Terminal)
@@ -276,7 +280,7 @@ Every tool call pauses for user approval before execution:
 
 ## 8. API Design
 
-```
+```text
 POST   /api/conversations                  → Create conversation
 GET    /api/conversations                  → List user's conversations
 GET    /api/conversations/:id              → Get conversation detail
@@ -296,12 +300,14 @@ Realtime data (events, file changes) goes through Supabase Realtime subscription
 ## 9. Deploy Feature
 
 ### Live Preview (during development)
+
 - E2B sandbox exposes ports for running web servers
 - Agent detects port exposure → writes `preview_url` event
 - Frontend shows preview via iframe or new tab
 - Requires active sandbox — temporary, not permanent
 
 ### Production Deploy (user action)
+
 - User connects Vercel account via OAuth (stored in Supabase)
 - User clicks "Deploy" when satisfied with project
 - Backend flow:
@@ -311,6 +317,7 @@ Realtime data (events, file changes) goes through Supabase Realtime subscription
   4. Store URL in `conversations.deploy_url`
 
 ### GitHub Integration (nice-to-have)
+
 - Same GitHub OAuth used for login, request additional `repo` scope
 - Export: Create GitHub repo from project files
 - Import: Clone user's GitHub repo into E2B sandbox for AI-assisted development
@@ -345,12 +352,13 @@ services:
 
 ### Nginx Config (simplified)
 
-```
+```text
 / → serve frontend static files
 /api/* → proxy to backend:3001
 ```
 
 ### Server Requirements
+
 - Tencent Cloud lightweight server, 2C4G recommended
 - Docker + Docker Compose
 - Domain + HTTPS (Let's Encrypt) — optional for MVP, can use IP initially
@@ -360,6 +368,7 @@ services:
 ## 11. MVP Scope
 
 ### Must Have
+
 - [x] Chat interface with Markdown rendering
 - [x] Monaco Editor with multi-file tabs
 - [x] File tree (from sandbox filesystem)
@@ -376,6 +385,7 @@ services:
 - [x] Docker Compose deployment
 
 ### Nice-to-Have (time permitting)
+
 - [ ] GitHub export (create repo from project)
 - [ ] GitHub import (clone repo into sandbox)
 - [ ] Code diff view

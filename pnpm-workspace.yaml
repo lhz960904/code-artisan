@@ -1,4 +1,9 @@
 packages:
   - packages/*
 
-onlyBuiltDependencies: esbuild
+onlyBuiltDependencies:
+  - esbuild
+
+catalog:
+  vite: ^8.0.0
+  vite-plus: ^0.1.0
