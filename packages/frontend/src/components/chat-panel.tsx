@@ -1,68 +1,111 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { sendMessage } from "../lib/api";
+import { useConversationEvents, type RealtimeEvent } from "../lib/supabase";
+import { ToolCallCard } from "./tool-call-card";
 
-interface Message {
-  role: "user" | "agent";
-  content: string;
+interface ChatPanelProps {
+  conversationId: string;
 }
 
-export function ChatPanel() {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function ChatPanel({ conversationId }: ChatPanelProps) {
+  const { events } = useConversationEvents(conversationId);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new events
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events]);
+
+  // Check if agent is currently processing
+  const isAgentRunning =
+    events.length > 0 &&
+    !["ai_text", "error"].includes(events[events.length - 1].type) &&
+    events.some((e) => e.type === "user_message");
 
   async function handleSend() {
     const content = input.trim();
-    if (!content || loading) return;
+    if (!content || sending) return;
 
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content }]);
-    setLoading(true);
+    setSending(true);
 
     try {
-      const result = await sendMessage(content);
-      for (const event of result.events) {
-        if (event.type === "ai_text") {
-          setMessages((prev) => [
-            ...prev,
-            { role: "agent", content: event.data.content as string },
-          ]);
-        } else if (event.type === "tool_result") {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "agent",
-              content: `\`${event.data.tool}\`: ${event.data.output}`,
-            },
-          ]);
-        }
-      }
+      await sendMessage(conversationId, content);
     } catch (err) {
-      setMessages((prev) => [...prev, { role: "agent", content: `Error: ${err}` }]);
+      console.error("Failed to send message:", err);
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   }
 
+  // Pair tool_call events with their tool_result
+  function getToolResult(toolCallEvent: RealtimeEvent): RealtimeEvent | undefined {
+    const idx = events.indexOf(toolCallEvent);
+    for (let i = idx + 1; i < events.length; i++) {
+      if (events[i].type === "tool_result") return events[i];
+      if (events[i].type === "tool_call") break;
+    }
+    return undefined;
+  }
+
   return (
-    <div className="flex h-[600px] flex-col rounded-lg border border-[#30363d] bg-[#161b22]">
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
-          {messages.map((msg, i) => (
-            <div key={i} className="space-y-1">
-              <div
-                className={`text-xs font-semibold uppercase tracking-wide ${
-                  msg.role === "agent" ? "text-[#58a6ff]" : "text-[#8b949e]"
-                }`}
-              >
-                {msg.role === "agent" ? "Agent" : "You"}
-              </div>
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#e6edf3]">
-                {msg.content}
-              </div>
+    <div className="flex h-full flex-col">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-3">
+          {events.map((event) => {
+            switch (event.type) {
+              case "user_message":
+                return (
+                  <div key={event.id} className="space-y-1">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#8b949e]">
+                      You
+                    </div>
+                    <div className="text-sm leading-relaxed text-[#e6edf3]">
+                      {(event.data as { content: string }).content}
+                    </div>
+                  </div>
+                );
+              case "ai_text":
+                return (
+                  <div key={event.id} className="space-y-1">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-[#58a6ff]">
+                      Agent
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#e6edf3]">
+                      {(event.data as { content: string }).content}
+                    </div>
+                  </div>
+                );
+              case "tool_call":
+                return (
+                  <ToolCallCard
+                    key={event.id}
+                    event={event}
+                    result={getToolResult(event)}
+                  />
+                );
+              case "error":
+                return (
+                  <div
+                    key={event.id}
+                    className="rounded-md border border-[#f85149]/30 bg-[#f85149]/10 p-3 text-sm text-[#f85149]"
+                  >
+                    Error: {(event.data as { content: string }).content}
+                  </div>
+                );
+              default:
+                return null;
+            }
+          })}
+          {isAgentRunning && (
+            <div className="animate-pulse text-sm text-[#8b949e]">
+              Agent is working...
             </div>
-          ))}
-          {loading && <div className="animate-pulse text-sm text-[#8b949e]">Thinking...</div>}
+          )}
         </div>
       </div>
       <div className="border-t border-[#30363d] p-3">
@@ -77,11 +120,12 @@ export function ChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe your task..."
-            className="flex-1 rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#e6edf3] placeholder:text-[#484f58] outline-none focus:border-[#58a6ff]"
+            disabled={isAgentRunning}
+            className="flex-1 rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#e6edf3] placeholder:text-[#484f58] outline-none focus:border-[#58a6ff] disabled:opacity-50"
           />
           <button
             type="submit"
-            disabled={loading || !input.trim()}
+            disabled={sending || isAgentRunning || !input.trim()}
             className="rounded-md bg-[#238636] px-4 py-2 text-sm font-medium text-white hover:bg-[#2ea043] disabled:opacity-50"
           >
             Send
