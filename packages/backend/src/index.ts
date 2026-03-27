@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { env } from "./env.js";
-import { conversations } from "./routes/conversations.js";
+import { conversationsRouter } from "./routes/conversations.js";
 
 const app = new Hono();
 
@@ -17,7 +17,7 @@ app.use(
 );
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
-app.route("/api/conversations", conversations);
+app.route("/api/conversations", conversationsRouter);
 
 console.log(`Backend running on http://localhost:${env.PORT}`);
 
