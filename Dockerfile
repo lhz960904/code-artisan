@@ -6,16 +6,19 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend/package.json packages/backend/
 
-# Install pnpm and all dependencies (including devDependencies for build)
-RUN bun install -g pnpm && pnpm install --frozen-lockfile --dev
+# Install pnpm and dependencies
+RUN bun install -g pnpm && pnpm install --frozen-lockfile
+
+# Install typescript globally for tsc
+RUN bun install -g typescript
 
 # Copy source files
 COPY packages/shared/ packages/shared/
 COPY packages/backend/ packages/backend/
 
 # Build shared (tsc) + backend (bun build)
-RUN cd packages/shared && pnpm run build
-RUN cd packages/backend && pnpm run build
+RUN cd packages/shared && tsc
+RUN cd packages/backend && bun run build
 
 # Production stage
 FROM oven/bun:1-slim
