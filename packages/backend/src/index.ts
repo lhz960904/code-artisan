@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { serveStatic } from "hono/bun";
 import { eq } from "drizzle-orm";
 import { env } from "./env.js";
 import { db } from "./db/index.js";
@@ -10,20 +10,6 @@ import { conversationsRouter } from "./routes/conversations.js";
 const app = new Hono();
 
 app.use("*", logger());
-app.use(
-  "*",
-  cors({
-    origin: (origin) => {
-      const allowed = [
-        "http://localhost:5173",
-        process.env.FRONTEND_URL,
-      ].filter(Boolean) as string[];
-      return allowed.includes(origin) ? origin : allowed[0];
-    },
-    allowMethods: ["GET", "POST", "PATCH", "DELETE"],
-    allowHeaders: ["Content-Type", "Authorization"],
-  })
-);
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 app.route("/api/conversations", conversationsRouter);
@@ -48,7 +34,12 @@ app.get("/api/quota", async (c) => {
   });
 });
 
-console.log(`Backend running on http://localhost:${env.PORT}`);
+// Serve frontend static files (production)
+app.use("*", serveStatic({ root: "./dist/public" }));
+// SPA fallback — serve index.html for all non-API routes
+app.get("*", serveStatic({ root: "./dist/public", path: "index.html" }));
+
+console.log(`Server running on http://localhost:${env.PORT}`);
 
 export default {
   port: env.PORT,

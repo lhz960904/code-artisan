@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : "/api";
+const API_BASE = "/api";
 
 export interface StreamEvent {
   id: string;
