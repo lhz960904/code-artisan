@@ -19,12 +19,24 @@ export class SandboxService {
 
   async executeCommand(
     command: string,
+    opts?: { timeoutMs?: number },
   ): Promise<{ output: string; error?: string }> {
-    const result = await this.sandbox.commands.run(command);
+    const result = await this.sandbox.commands.run(command, {
+      timeoutMs: opts?.timeoutMs ?? 30_000,
+    });
     return {
       output: result.stdout,
       error: result.stderr || undefined,
     };
+  }
+
+  async startBackgroundCommand(command: string): Promise<void> {
+    await this.sandbox.commands.run(command, { background: true });
+  }
+
+  getHostUrl(port: number): string {
+    const host = this.sandbox.getHost(port);
+    return `https://${host}`;
   }
 
   async writeFile(path: string, content: string): Promise<void> {

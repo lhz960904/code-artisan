@@ -8,7 +8,7 @@ import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@web-ai-coding-agent/shared";
 
-export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string };
+export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string } | { url: string; port: number };
 
 interface AgentRunOptions {
   conversationId: string;
@@ -117,6 +117,13 @@ export class AgentService {
           await store.upsertFileSnapshot(response.toolInput.path, response.toolInput.content);
         }
 
+        // Write preview_url event when a server is started
+        if (response.toolName === "start_server") {
+          const port = Number(response.toolInput.port) || 3000;
+          const url = sandbox.getHostUrl(port);
+          await store.writeEvent("preview_url", { url, port });
+        }
+
         history.push({
           role: "assistant",
           content: [
@@ -191,6 +198,11 @@ export class AgentService {
 
       if (toolData.tool === "write_file") {
         await store.upsertFileSnapshot(toolData.args.path, toolData.args.content);
+      }
+      if (toolData.tool === "start_server") {
+        const port = Number(toolData.args.port) || 3000;
+        const url = sandbox.getHostUrl(port);
+        await store.writeEvent("preview_url", { url, port });
       }
     } else {
       // Write rejection result
@@ -320,6 +332,14 @@ export class AgentService {
         case "list_files": {
           const files = await sandbox.listFiles(args.path);
           return { tool, output: files.join("\n") };
+        }
+        case "start_server": {
+          await sandbox.startBackgroundCommand(args.command);
+          // Wait briefly for the server to start
+          await new Promise((r) => setTimeout(r, 2000));
+          const port = Number(args.port) || 3000;
+          const url = sandbox.getHostUrl(port);
+          return { tool, output: `Server started. Preview URL: ${url}` };
         }
         default:
           return { tool, output: "", error: `Unknown tool: ${tool}` };

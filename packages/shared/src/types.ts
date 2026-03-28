@@ -68,6 +68,18 @@ export const TOOL_DEFINITIONS = [
       required: ["path"],
     },
   },
+  {
+    name: "start_server",
+    description: "Start a long-running server process in the background (e.g. node server.js, python -m http.server). Returns a public preview URL. Use this instead of execute_command for any command that starts a web server or long-running process.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: { type: "string" as const, description: "Shell command to start the server" },
+        port: { type: "number" as const, description: "Port the server listens on" },
+      },
+      required: ["command", "port"],
+    },
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];

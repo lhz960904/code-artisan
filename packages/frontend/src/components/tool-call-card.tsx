@@ -10,6 +10,7 @@ const TOOL_ICONS: Record<string, { icon: string; color: string }> = {
   read_file: { icon: "R", color: "text-[#d29922] bg-[#d29922]/15" },
   execute_command: { icon: "$", color: "text-[#3fb950] bg-[#3fb950]/15" },
   list_files: { icon: "L", color: "text-[#bc8cff] bg-[#bc8cff]/15" },
+  start_server: { icon: "▶", color: "text-[#f778ba] bg-[#f778ba]/15" },
 };
 
 export function ToolCallCard({ event, result }: ToolCallCardProps) {
@@ -26,6 +27,7 @@ export function ToolCallCard({ event, result }: ToolCallCardProps) {
   else if (data.tool === "read_file") label = `read ${data.args.path}`;
   else if (data.tool === "execute_command") label = data.args.command;
   else if (data.tool === "list_files") label = `ls ${data.args.path}`;
+  else if (data.tool === "start_server") label = `server :${data.args.port}`;
 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-[#30363d] bg-[#1c2128] px-3 py-2 font-mono text-xs">
