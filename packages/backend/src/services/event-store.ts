@@ -6,12 +6,19 @@ import type { AgentEventData } from "./agent.js";
 export class EventStore {
   constructor(private conversationId: string) {}
 
-  async writeEvent(type: string, data: AgentEventData): Promise<void> {
-    await db.insert(events).values({
-      conversationId: this.conversationId,
-      type,
-      data: data as Record<string, unknown>,
-    });
+  async writeEvent(
+    type: string,
+    data: AgentEventData,
+  ): Promise<{ id: string; seq: number }> {
+    const [row] = await db
+      .insert(events)
+      .values({
+        conversationId: this.conversationId,
+        type,
+        data: data as Record<string, unknown>,
+      })
+      .returning({ id: events.id, seq: events.seq });
+    return row;
   }
 
   async getEvents(afterSeq?: number): Promise<

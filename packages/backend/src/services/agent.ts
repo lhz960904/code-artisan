@@ -3,6 +3,7 @@ import { ClaudeService } from "./claude.js";
 import { SandboxService } from "./sandbox.js";
 import { EventStore } from "./event-store.js";
 import { QuotaService } from "./quota.js";
+import { eventBus } from "./event-bus.js";
 import { db } from "../db/index.js";
 import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
@@ -23,6 +24,23 @@ export class AgentService {
     this.claude = new ClaudeService();
   }
 
+  /** Write event to DB and emit to SSE */
+  private async emitAndPersist(
+    store: EventStore,
+    conversationId: string,
+    type: string,
+    data: AgentEventData,
+  ): Promise<{ id: string; seq: number }> {
+    const row = await store.writeEvent(type, data);
+    eventBus.emit(conversationId, {
+      id: row.id,
+      type,
+      data: data as Record<string, unknown>,
+      seq: row.seq,
+    });
+    return row;
+  }
+
   async run(options: AgentRunOptions): Promise<void> {
     const { conversationId, userMessage, maxIterations = 10 } = options;
     const store = new EventStore(conversationId);
@@ -36,9 +54,9 @@ export class AgentService {
     const userId = conv?.userId ?? "00000000-0000-0000-0000-000000000000";
     const quota = new QuotaService(userId);
 
-    // Write user message event (only if this is a new message, not a confirm continuation)
+    // Write user message event
     if (userMessage) {
-      await store.writeEvent("user_message", { content: userMessage });
+      await this.emitAndPersist(store, conversationId, "user_message", { content: userMessage });
     }
 
     // Get or create sandbox
@@ -46,48 +64,52 @@ export class AgentService {
 
     try {
       // If resuming after confirm, handle the pending tool call first
-      const pendingHandled = await this.handlePendingConfirm(store, sandbox);
+      const pendingHandled = await this.handlePendingConfirm(store, sandbox, conversationId);
 
-      // Build message history from all events (including any just-written tool_result)
+      // Build message history from all events
       const history = await this.buildMessageHistory(store);
 
-      // If we just handled a rejected confirm, Claude needs to respond to the rejection
-      // If we just handled an approved confirm, Claude continues with the tool result
-      // If no pending confirm, normal flow
-      // In all cases, continue the loop unless the pending was a rejection and Claude should respond
-
       for (let i = 0; i < maxIterations; i++) {
-        // Skip first Claude call if we already handled a pending tool (history already has the result)
         if (i === 0 && pendingHandled) {
           // History already includes the tool_result from pending confirm
-          // Continue to let Claude process it
         }
 
         const hasBalance = await quota.checkBalance();
         if (!hasBalance) {
-          await store.writeEvent("error", { content: "Token quota exceeded." });
+          await this.emitAndPersist(store, conversationId, "error", { content: "Token quota exceeded." });
           break;
         }
 
-        const response = await this.claude.chat(history);
+        // Stream text via SSE only (no DB writes per chunk)
+        const streamId = `stream_${Date.now()}`;
+
+        const response = await this.claude.chatStream(history, (text) => {
+          eventBus.emit(conversationId, {
+            id: streamId,
+            type: "ai_text_delta",
+            data: { content: text },
+          });
+        });
 
         if (response.type === "text") {
+          // Write final text to DB and emit
+          await this.emitAndPersist(store, conversationId, "ai_text", { content: response.content });
           await quota.addUsage(response.usage.inputTokens, response.usage.outputTokens);
-          await store.writeEvent("ai_text", { content: response.content });
           break;
         }
 
         await quota.addUsage(response.usage.inputTokens, response.usage.outputTokens);
 
+        // Tool use response — persist any text content
         if (response.textContent) {
-          await store.writeEvent("ai_text", { content: response.textContent });
+          await this.emitAndPersist(store, conversationId, "ai_text", { content: response.textContent });
         }
 
         const toolCallData: ToolCallData = {
           tool: response.toolName,
           args: response.toolInput,
         };
-        await store.writeEvent("tool_call", toolCallData);
+        await this.emitAndPersist(store, conversationId, "tool_call", toolCallData);
 
         // Check current mode
         const [currentConv] = await db
@@ -105,23 +127,22 @@ export class AgentService {
             args: response.toolInput,
             description,
           };
-          await store.writeEvent("confirm_required", confirmData);
+          await this.emitAndPersist(store, conversationId, "confirm_required", confirmData);
           return; // Stop — frontend will call POST /confirm, which re-invokes run()
         }
 
         // YOLO mode: execute immediately
         const toolResult = await this.executeTool(sandbox, response.toolName, response.toolInput);
-        await store.writeEvent("tool_result", toolResult);
+        await this.emitAndPersist(store, conversationId, "tool_result", toolResult);
 
         if (response.toolName === "write_file") {
           await store.upsertFileSnapshot(response.toolInput.path, response.toolInput.content);
         }
 
-        // Write preview_url event when a server is started
         if (response.toolName === "start_server") {
           const port = Number(response.toolInput.port) || 3000;
           const url = sandbox.getHostUrl(port);
-          await store.writeEvent("preview_url", { url, port });
+          await this.emitAndPersist(store, conversationId, "preview_url", { url, port });
         }
 
         history.push({
@@ -151,20 +172,20 @@ export class AgentService {
         });
       }
     } catch (err) {
-      await store.writeEvent("error", { content: String(err) });
+      await this.emitAndPersist(store, conversationId, "error", { content: String(err) });
     }
+
+    eventBus.emitDone(conversationId);
   }
 
-  /**
-   * Check if there's a pending tool_call that was confirmed/rejected.
-   * Pattern: tool_call → confirm_required → confirm_response (no tool_result yet)
-   * Returns true if a pending confirm was handled.
-   */
-  private async handlePendingConfirm(store: EventStore, sandbox: SandboxService): Promise<boolean> {
+  private async handlePendingConfirm(
+    store: EventStore,
+    sandbox: SandboxService,
+    conversationId: string,
+  ): Promise<boolean> {
     const allEvents = await store.getEvents();
     if (allEvents.length < 3) return false;
 
-    // Find the last confirm_response
     let lastConfirmIdx = -1;
     for (let i = allEvents.length - 1; i >= 0; i--) {
       if (allEvents[i].type === "confirm_response") {
@@ -174,11 +195,9 @@ export class AgentService {
     }
     if (lastConfirmIdx === -1) return false;
 
-    // Check there's no tool_result after this confirm_response
     const hasToolResultAfter = allEvents.slice(lastConfirmIdx + 1).some((e) => e.type === "tool_result");
     if (hasToolResultAfter) return false;
 
-    // Find the matching tool_call (before confirm_required before confirm_response)
     let toolCallEvent = null;
     for (let i = lastConfirmIdx - 1; i >= 0; i--) {
       if (allEvents[i].type === "tool_call") {
@@ -192,9 +211,8 @@ export class AgentService {
     const toolData = toolCallEvent.data as unknown as ToolCallData;
 
     if (confirmData.approved) {
-      // Execute the tool
       const toolResult = await this.executeTool(sandbox, toolData.tool, toolData.args);
-      await store.writeEvent("tool_result", toolResult);
+      await this.emitAndPersist(store, conversationId, "tool_result", toolResult);
 
       if (toolData.tool === "write_file") {
         await store.upsertFileSnapshot(toolData.args.path, toolData.args.content);
@@ -202,16 +220,15 @@ export class AgentService {
       if (toolData.tool === "start_server") {
         const port = Number(toolData.args.port) || 3000;
         const url = sandbox.getHostUrl(port);
-        await store.writeEvent("preview_url", { url, port });
+        await this.emitAndPersist(store, conversationId, "preview_url", { url, port });
       }
     } else {
-      // Write rejection result
       const rejectResult: ToolResultData = {
         tool: toolData.tool,
         output: "User rejected this tool call.",
         error: "rejected",
       };
-      await store.writeEvent("tool_result", rejectResult);
+      await this.emitAndPersist(store, conversationId, "tool_result", rejectResult);
     }
 
     return true;
@@ -284,7 +301,6 @@ export class AgentService {
         }
         case "tool_result": {
           const resultData = data as unknown as ToolResultData;
-          // Find the matching tool_call by searching backwards (confirm events may be in between)
           const eventIdx = allEvents.indexOf(event);
           let matchingToolSeq = event.seq - 1;
           for (let j = eventIdx - 1; j >= 0; j--) {
@@ -307,7 +323,6 @@ export class AgentService {
           });
           break;
         }
-        // confirm_required and confirm_response are UI-only events, not part of Claude history
       }
     }
 
@@ -335,7 +350,6 @@ export class AgentService {
         }
         case "start_server": {
           await sandbox.startBackgroundCommand(args.command);
-          // Wait briefly for the server to start
           await new Promise((r) => setTimeout(r, 2000));
           const port = Number(args.port) || 3000;
           const url = sandbox.getHostUrl(port);

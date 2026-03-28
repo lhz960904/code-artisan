@@ -1,8 +1,8 @@
-import type { RealtimeEvent } from "../lib/supabase";
+import type { StreamEvent } from "../lib/event-source";
 
 interface ToolCallCardProps {
-  event: RealtimeEvent;
-  result?: RealtimeEvent;
+  event: StreamEvent;
+  result?: StreamEvent;
 }
 
 const TOOL_ICONS: Record<string, { icon: string; color: string }> = {

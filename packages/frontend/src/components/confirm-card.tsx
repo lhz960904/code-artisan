@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { confirmAction } from "../lib/api";
-import type { RealtimeEvent } from "../lib/supabase";
+import type { StreamEvent } from "../lib/event-source";
 
 interface ConfirmCardProps {
-  event: RealtimeEvent;
+  event: StreamEvent;
   conversationId: string;
   hasResponse: boolean;
   wasApproved?: boolean;

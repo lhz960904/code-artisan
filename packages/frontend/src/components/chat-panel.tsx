@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { sendMessage } from "../lib/api";
-import { useConversationEvents, type RealtimeEvent } from "../lib/supabase";
+import { useConversationStream, type StreamEvent } from "../lib/event-source";
 import { ToolCallCard } from "./tool-call-card";
 import { ConfirmCard } from "./confirm-card";
+import { MarkdownRenderer } from "./markdown-renderer";
 import { useWorkspace } from "../contexts/workspace-context";
 
 interface ChatPanelProps {
@@ -10,7 +11,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ conversationId }: ChatPanelProps) {
-  const { events } = useConversationEvents(conversationId);
+  const { events, streamingText } = useConversationStream(conversationId);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -22,18 +23,19 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     loadSnapshots(conversationId);
   }, [conversationId, loadSnapshots]);
 
-  // Auto-scroll to bottom on new events
+  // Auto-scroll to bottom on new events or streaming text
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [events]);
+  }, [events, streamingText]);
 
   // Process events into workspace state
   useEffect(() => {
     for (const event of events) {
-      if (event.seq <= processedSeqRef.current) continue;
-      processedSeqRef.current = event.seq;
+      const seq = event.seq ?? 0;
+      if (seq <= processedSeqRef.current) continue;
+      processedSeqRef.current = seq;
 
       const data = event.data as Record<string, unknown>;
 
@@ -51,7 +53,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
         const tool = data.tool as string;
         if (tool === "execute_command") {
           const callEvent = events.find(
-            (e) => e.type === "tool_call" && e.seq === event.seq - 1,
+            (e) => e.type === "tool_call" && (e.seq ?? 0) === seq - 1,
           );
           const command = callEvent
             ? ((callEvent.data as Record<string, unknown>).args as Record<string, string>)?.command ?? "command"
@@ -66,7 +68,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
 
         if (tool === "read_file") {
           const callEvent = events.find(
-            (e) => e.type === "tool_call" && e.seq === event.seq - 1,
+            (e) => e.type === "tool_call" && (e.seq ?? 0) === seq - 1,
           );
           const path = callEvent
             ? ((callEvent.data as Record<string, unknown>).args as Record<string, string>)?.path
@@ -87,9 +89,10 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
 
   // Check if agent is currently processing
   const isAgentRunning =
-    events.length > 0 &&
-    !["ai_text", "error"].includes(events[events.length - 1].type) &&
-    events.some((e) => e.type === "user_message");
+    streamingText !== null ||
+    (events.length > 0 &&
+      !["ai_text", "error", "done"].includes(events[events.length - 1].type) &&
+      events.some((e) => e.type === "user_message"));
 
   async function handleSend() {
     const content = input.trim();
@@ -107,8 +110,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     }
   }
 
-  // Pair tool_call events with their tool_result
-  function getToolResult(toolCallEvent: RealtimeEvent): RealtimeEvent | undefined {
+  function getToolResult(toolCallEvent: StreamEvent): StreamEvent | undefined {
     const idx = events.indexOf(toolCallEvent);
     for (let i = idx + 1; i < events.length; i++) {
       if (events[i].type === "tool_result") return events[i];
@@ -140,8 +142,8 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
                     <div className="text-xs font-semibold uppercase tracking-wide text-[#58a6ff]">
                       Agent
                     </div>
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#e6edf3]">
-                      {(event.data as { content: string }).content}
+                    <div className="text-sm leading-relaxed text-[#e6edf3]">
+                      <MarkdownRenderer content={(event.data as { content: string }).content} />
                     </div>
                   </div>
                 );
@@ -155,7 +157,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
                 );
               case "confirm_required": {
                 const responseEvent = events.find(
-                  (e) => e.type === "confirm_response" && e.seq > event.seq,
+                  (e) => e.type === "confirm_response" && (e.seq ?? 0) > (event.seq ?? 0),
                 );
                 return (
                   <ConfirmCard
@@ -180,7 +182,17 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
                 return null;
             }
           })}
-          {isAgentRunning && (
+          {streamingText && (
+            <div key="streaming" className="space-y-1">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[#58a6ff]">
+                Agent
+              </div>
+              <div className="text-sm leading-relaxed text-[#e6edf3]">
+                <MarkdownRenderer content={streamingText} />
+              </div>
+            </div>
+          )}
+          {isAgentRunning && !streamingText && (
             <div className="animate-pulse text-sm text-[#8b949e]">
               Agent is working...
             </div>

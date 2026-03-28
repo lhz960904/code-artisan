@@ -1,9 +1,11 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db/index.js";
 import { conversations, events, fileSnapshots } from "../db/schema.js";
 import { eq, desc, gt, and } from "drizzle-orm";
 import { AgentService } from "../services/agent.js";
+import { eventBus } from "../services/event-bus.js";
 import { env } from "../env.js";
 
 const conversationsRouter = new Hono();
@@ -105,6 +107,45 @@ conversationsRouter.get("/:id/files", async (c) => {
     .where(eq(fileSnapshots.conversationId, id));
 
   return c.json(result);
+});
+
+// SSE stream — real-time events for a conversation
+conversationsRouter.get("/:id/stream", (c) => {
+  const id = c.req.param("id");
+
+  return streamSSE(c, async (stream) => {
+    const unsub = eventBus.subscribe(id, async (event) => {
+      try {
+        await stream.writeSSE({
+          data: JSON.stringify(event),
+          event: event.type,
+          id: event.id,
+        });
+      } catch {
+        // Client disconnected
+      }
+    });
+
+    stream.onAbort(() => {
+      unsub();
+    });
+
+    // Heartbeat every 30s to keep connection alive
+    const heartbeat = setInterval(async () => {
+      try {
+        await stream.writeSSE({ data: "", event: "heartbeat", id: "hb" });
+      } catch {
+        clearInterval(heartbeat);
+      }
+    }, 30_000);
+
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        clearInterval(heartbeat);
+        resolve();
+      });
+    });
+  });
 });
 
 // Send message — fire-and-forget, agent runs in background
