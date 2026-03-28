@@ -1,5 +1,5 @@
 {
-  "name": "@web-ai-coding-agent/backend",
+  "name": "@code-artisan/backend",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@e2b/code-interpreter": "^1.0.4",
     "@supabase/supabase-js": "^2.49.1",
-    "@web-ai-coding-agent/shared": "workspace:*",
+    "@code-artisan/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.7.0",
     "postgres": "^3.4.5",

@@ -7,7 +7,7 @@ import { eventBus } from "./event-bus.js";
 import { db } from "../db/index.js";
 import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
-import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@web-ai-coding-agent/shared";
+import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@code-artisan/shared";
 
 export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string } | { url: string; port: number };
 

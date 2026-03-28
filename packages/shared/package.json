@@ -1,5 +1,5 @@
 {
-  "name": "@web-ai-coding-agent/shared",
+  "name": "@code-artisan/shared",
   "version": "0.0.1",
   "private": true,
   "type": "module",

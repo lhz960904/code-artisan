@@ -13,15 +13,15 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.39.0
         version: 0.39.0
+      '@code-artisan/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@e2b/code-interpreter':
         specifier: ^1.0.4
         version: 1.5.1
       '@supabase/supabase-js':
         specifier: ^2.49.1
         version: 2.100.1
-      '@web-ai-coding-agent/shared':
-        specifier: workspace:*
-        version: link:../shared
       drizzle-orm:
         specifier: ^0.38.0
         version: 0.38.4(@types/react@19.2.14)(postgres@3.4.8)(react@19.2.4)
@@ -56,6 +56,9 @@ importers:
 
   packages/frontend:
     dependencies:
+      '@code-artisan/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -68,9 +71,6 @@ importers:
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
-      '@web-ai-coding-agent/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0

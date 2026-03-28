@@ -13,7 +13,13 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:5173"],
+    origin: (origin) => {
+      const allowed = [
+        "http://localhost:5173",
+        process.env.FRONTEND_URL,
+      ].filter(Boolean) as string[];
+      return allowed.includes(origin) ? origin : allowed[0];
+    },
     allowMethods: ["GET", "POST", "PATCH", "DELETE"],
     allowHeaders: ["Content-Type", "Authorization"],
   })

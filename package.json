@@ -1,12 +1,12 @@
 {
-  "name": "web-ai-coding-agent",
+  "name": "code-artisan",
   "private": true,
   "scripts": {
-    "dev:frontend": "pnpm --filter @web-ai-coding-agent/frontend dev",
-    "dev:backend": "pnpm --filter @web-ai-coding-agent/backend dev",
+    "dev:frontend": "pnpm --filter @code-artisan/frontend dev",
+    "dev:backend": "pnpm --filter @code-artisan/backend dev",
     "dev": "pnpm run --parallel dev:frontend dev:backend",
-    "build": "pnpm --filter @web-ai-coding-agent/shared build && pnpm --filter @web-ai-coding-agent/frontend build && pnpm --filter @web-ai-coding-agent/backend build",
-    "test": "pnpm --filter @web-ai-coding-agent/backend test"
+    "build": "pnpm --filter @code-artisan/shared build && pnpm --filter @code-artisan/frontend build && pnpm --filter @code-artisan/backend build",
+    "test": "pnpm --filter @code-artisan/backend test"
   },
   "engines": {
     "node": ">=20"

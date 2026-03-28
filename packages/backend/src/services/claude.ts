@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { TOOL_DEFINITIONS } from "@web-ai-coding-agent/shared";
+import { TOOL_DEFINITIONS } from "@code-artisan/shared";
 import { env } from "../env.js";
 
 type MessageParam = Anthropic.MessageParam;

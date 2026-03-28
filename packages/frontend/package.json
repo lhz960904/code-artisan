@@ -1,5 +1,5 @@
 {
-  "name": "@web-ai-coding-agent/frontend",
+  "name": "@code-artisan/frontend",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-router": "^1.95.0",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@web-ai-coding-agent/shared": "workspace:*",
+    "@code-artisan/shared": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "react": "^19.2.4",
