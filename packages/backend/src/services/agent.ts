@@ -8,6 +8,7 @@ import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { getSandboxProvider } from "../sandbox/index.js";
 import type { Sandbox } from "../sandbox/index.js";
+import { toolRegistry, type ToolRuntime } from "../tools/index.js";
 import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@code-artisan/shared";
 
 export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string } | { url: string; port: number };
@@ -133,13 +134,13 @@ export class AgentService {
         }
 
         // YOLO mode: execute immediately
-        const toolResult = await this.executeTool(sandbox, response.toolName, response.toolInput);
+        const toolResult = await this.executeTool(sandbox, response.toolName, response.toolInput, conversationId);
         await this.emitAndPersist(store, conversationId, "tool_result", toolResult);
 
+        // Side effects: file snapshots and preview URLs
         if (response.toolName === "write_file") {
           await store.upsertFileSnapshot(response.toolInput.path, response.toolInput.content);
         }
-
         if (response.toolName === "start_server") {
           const port = Number(response.toolInput.port) || 3000;
           const url = sandbox.getHostUrl(port);
@@ -165,9 +166,7 @@ export class AgentService {
             {
               type: "tool_result" as const,
               tool_use_id: response.toolCallId,
-              content: toolResult.error
-                ? `Error: ${toolResult.error}\nOutput: ${toolResult.output}`
-                : toolResult.output,
+              content: toolResult.output,
             },
           ],
         });
@@ -212,7 +211,7 @@ export class AgentService {
     const toolData = toolCallEvent.data as unknown as ToolCallData;
 
     if (confirmData.approved) {
-      const toolResult = await this.executeTool(sandbox, toolData.tool, toolData.args);
+      const toolResult = await this.executeTool(sandbox, toolData.tool, toolData.args, conversationId);
       await this.emitAndPersist(store, conversationId, "tool_result", toolResult);
 
       if (toolData.tool === "write_file") {
@@ -227,7 +226,6 @@ export class AgentService {
       const rejectResult: ToolResultData = {
         tool: toolData.tool,
         output: "User rejected this tool call.",
-        error: "rejected",
       };
       await this.emitAndPersist(store, conversationId, "tool_result", rejectResult);
     }
@@ -314,9 +312,7 @@ export class AgentService {
               {
                 type: "tool_result" as const,
                 tool_use_id: `tool_${matchingToolSeq}`,
-                content: resultData.error
-                  ? `Error: ${resultData.error}\nOutput: ${resultData.output}`
-                  : resultData.output,
+                content: resultData.output,
               },
             ],
           });
@@ -328,37 +324,13 @@ export class AgentService {
     return messages;
   }
 
-  private async executeTool(sandbox: Sandbox, tool: string, args: Record<string, string>): Promise<ToolResultData> {
-    try {
-      switch (tool) {
-        case "read_file": {
-          const content = await sandbox.readFile(args.path);
-          return { tool, output: content };
-        }
-        case "write_file": {
-          await sandbox.writeFile(args.path, args.content);
-          return { tool, output: `File written to ${args.path}` };
-        }
-        case "execute_command": {
-          const output = await sandbox.executeCommand(args.command);
-          return { tool, output };
-        }
-        case "list_files": {
-          const entries = await sandbox.listDir(args.path);
-          return { tool, output: entries.join("\n") };
-        }
-        case "start_server": {
-          await sandbox.executeCommand(args.command, { background: true });
-          await new Promise((r) => setTimeout(r, 2000));
-          const port = Number(args.port) || 3000;
-          const url = sandbox.getHostUrl(port);
-          return { tool, output: `Server started. Preview URL: ${url}` };
-        }
-        default:
-          return { tool, output: "", error: `Unknown tool: ${tool}` };
-      }
-    } catch (err) {
-      return { tool, output: "", error: String(err) };
+  private async executeTool(sandbox: Sandbox, toolName: string, args: Record<string, unknown>, conversationId: string): Promise<ToolResultData> {
+    const tool = toolRegistry.get(toolName);
+    if (!tool) {
+      return { tool: toolName, output: `Error: Unknown tool: ${toolName}` };
     }
+    const runtime: ToolRuntime = { sandbox, conversationId };
+    const output = await tool.call(runtime, args);
+    return { tool: toolName, output };
   }
 }
