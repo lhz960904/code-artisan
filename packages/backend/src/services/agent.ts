@@ -1,12 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ClaudeService } from "./claude.js";
-import { SandboxService } from "./sandbox.js";
 import { EventStore } from "./event-store.js";
 import { QuotaService } from "./quota.js";
 import { eventBus } from "./event-bus.js";
 import { db } from "../db/index.js";
 import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { getSandboxProvider } from "../sandbox/index.js";
+import type { Sandbox } from "../sandbox/index.js";
 import type { ToolCallData, ToolResultData, ConfirmRequiredData, ConfirmResponseData } from "@code-artisan/shared";
 
 export type AgentEventData = ToolCallData | ToolResultData | ConfirmRequiredData | ConfirmResponseData | { content: string } | { url: string; port: number };
@@ -180,7 +181,7 @@ export class AgentService {
 
   private async handlePendingConfirm(
     store: EventStore,
-    sandbox: SandboxService,
+    sandbox: Sandbox,
     conversationId: string,
   ): Promise<boolean> {
     const allEvents = await store.getEvents();
@@ -234,30 +235,28 @@ export class AgentService {
     return true;
   }
 
-  private async getOrCreateSandbox(conversationId: string, store: EventStore): Promise<SandboxService> {
+  private async getOrCreateSandbox(conversationId: string, store: EventStore): Promise<Sandbox> {
+    const provider = getSandboxProvider();
+
     const [conv] = await db
       .select({ sandboxId: conversations.sandboxId })
       .from(conversations)
       .where(eq(conversations.id, conversationId));
 
-    if (conv?.sandboxId) {
-      try {
-        return await SandboxService.reconnect(conv.sandboxId);
-      } catch {
-        // Sandbox expired, create new one
+    const sandbox = await provider.acquire(conv?.sandboxId ?? undefined);
+
+    // If we got a new sandbox (different ID), restore file snapshots
+    if (sandbox.id !== conv?.sandboxId) {
+      const snapshots = await store.getFileSnapshots();
+      if (snapshots.length > 0) {
+        await provider.restoreFiles(sandbox, snapshots);
       }
-    }
 
-    const sandbox = await SandboxService.create();
-    const snapshots = await store.getFileSnapshots();
-    if (snapshots.length > 0) {
-      await sandbox.restoreFiles(snapshots);
+      await db
+        .update(conversations)
+        .set({ sandboxId: sandbox.id })
+        .where(eq(conversations.id, conversationId));
     }
-
-    await db
-      .update(conversations)
-      .set({ sandboxId: sandbox.id })
-      .where(eq(conversations.id, conversationId));
 
     return sandbox;
   }
@@ -329,7 +328,7 @@ export class AgentService {
     return messages;
   }
 
-  private async executeTool(sandbox: SandboxService, tool: string, args: Record<string, string>): Promise<ToolResultData> {
+  private async executeTool(sandbox: Sandbox, tool: string, args: Record<string, string>): Promise<ToolResultData> {
     try {
       switch (tool) {
         case "read_file": {
@@ -341,15 +340,15 @@ export class AgentService {
           return { tool, output: `File written to ${args.path}` };
         }
         case "execute_command": {
-          const result = await sandbox.executeCommand(args.command);
-          return { tool, output: result.output, error: result.error };
+          const output = await sandbox.executeCommand(args.command);
+          return { tool, output };
         }
         case "list_files": {
-          const files = await sandbox.listFiles(args.path);
-          return { tool, output: files.join("\n") };
+          const entries = await sandbox.listDir(args.path);
+          return { tool, output: entries.join("\n") };
         }
         case "start_server": {
-          await sandbox.startBackgroundCommand(args.command);
+          await sandbox.executeCommand(args.command, { background: true });
           await new Promise((r) => setTimeout(r, 2000));
           const port = Number(args.port) || 3000;
           const url = sandbox.getHostUrl(port);
