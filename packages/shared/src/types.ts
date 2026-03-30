@@ -90,8 +90,15 @@ export interface StreamTextDelta {
   textDelta: string;
 }
 
+/** thinking delta (streaming, not persisted) */
+export interface StreamThinkingDelta {
+  messageId: string;
+  type: "thinking-delta";
+  thinkingDelta: string;
+}
+
 /** streaming data union type */
-export type StreamData = StreamEvent | StreamTextDelta;
+export type StreamData = StreamEvent | StreamTextDelta | StreamThinkingDelta;
 
 // ============================================================
 // Conversation

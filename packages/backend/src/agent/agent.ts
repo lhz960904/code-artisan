@@ -167,6 +167,13 @@ export class Agent {
             textDelta: text,
           });
         },
+        onThinkingDelta: (thinking) => {
+          runtime.emitStream({
+            messageId: msgId,
+            type: "thinking-delta",
+            thinkingDelta: thinking,
+          });
+        },
       },
     );
   }

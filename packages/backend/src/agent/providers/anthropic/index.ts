@@ -56,6 +56,10 @@ export class AnthropicProvider implements LLMProvider {
       callbacks.onTextDelta?.(fullText);
     });
 
+    stream.on("thinking", (_delta, snapshot) => {
+      callbacks.onThinkingDelta?.(snapshot);
+    });
+
     const response = await stream.finalMessage();
     return parseResponse(response);
   }

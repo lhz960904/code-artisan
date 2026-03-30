@@ -6,6 +6,7 @@ const API_BASE = "/api";
 export function useConversationStream(conversationId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [streamingThinking, setStreamingThinking] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
@@ -39,6 +40,13 @@ export function useConversationStream(conversationId: string | null) {
         // Done signal
         if (data.type === "done") {
           setStreamingText(null);
+          setStreamingThinking(null);
+          return;
+        }
+
+        // Thinking delta (streaming, not persisted)
+        if (data.type === "thinking-delta") {
+          setStreamingThinking(data.thinkingDelta);
           return;
         }
 
@@ -48,10 +56,11 @@ export function useConversationStream(conversationId: string | null) {
           return;
         }
 
-        // StreamEvent with part
+        // StreamEvent with part (persisted) — clears all streaming states
         if (data.messageId && data.part) {
           const streamEvent = data as { messageId: string; part: MessagePart };
           setStreamingText(null);
+          setStreamingThinking(null);
 
           setMessages((prev) => {
             const existing = prev.find((m) => m.id === streamEvent.messageId);
@@ -94,6 +103,7 @@ export function useConversationStream(conversationId: string | null) {
     // Listen to all SSE event types
     es.addEventListener("stream", handleMessage);
     es.addEventListener("text-delta", handleMessage);
+    es.addEventListener("thinking-delta", handleMessage);
     es.addEventListener("done", handleMessage);
 
     // Also listen to generic message event as fallback
@@ -111,11 +121,12 @@ export function useConversationStream(conversationId: string | null) {
       esRef.current = null;
       setMessages([]);
       setStreamingText(null);
+      setStreamingThinking(null);
       setReady(false);
     };
   }, [conversationId, fetchHistory]);
 
-  return { messages, streamingText, ready };
+  return { messages, streamingText, streamingThinking, ready };
 }
 
 /** Infer message role from the first part */

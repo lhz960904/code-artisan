@@ -11,7 +11,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ conversationId }: ChatPanelProps) {
-  const { messages, streamingText } = useConversationStream(conversationId);
+  const { messages, streamingText, streamingThinking } = useConversationStream(conversationId);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -29,7 +29,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingText]);
+  }, [messages, streamingText, streamingThinking]);
 
   // Process messages into workspace state (side effects)
   useEffect(() => {
@@ -75,6 +75,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   // Check if agent is running
   const isAgentRunning =
     streamingText !== null ||
+    streamingThinking !== null ||
     (messages.length > 0 &&
       messages[messages.length - 1].role === "assistant" &&
       messages[messages.length - 1].parts.some(
@@ -108,6 +109,17 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
               conversationId={conversationId}
             />
           ))}
+          {streamingThinking && (
+            <div key="streaming-thinking" className="rounded-md border border-[#8b949e]/20 bg-[#161b22] p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[#8b949e]">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#8b949e]" />
+                Thinking...
+              </div>
+              <div className="max-h-40 overflow-y-auto text-xs leading-relaxed text-[#8b949e]/80 whitespace-pre-wrap">
+                {streamingThinking}
+              </div>
+            </div>
+          )}
           {streamingText && (
             <div key="streaming" className="space-y-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-[#58a6ff]">
@@ -176,6 +188,36 @@ function MessageRenderer({
   );
 }
 
+function ThinkingBlock({ thinking }: { thinking: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-[#8b949e]/20 bg-[#161b22]">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 p-3 text-xs font-medium text-[#8b949e] hover:text-[#c9d1d9] transition-colors"
+      >
+        <svg
+          className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+        Thinking
+        <span className="text-[#8b949e]/50">({thinking.length} chars)</span>
+      </button>
+      {open && (
+        <div className="border-t border-[#8b949e]/10 p-3 max-h-60 overflow-y-auto text-xs leading-relaxed text-[#8b949e]/80 whitespace-pre-wrap">
+          {thinking}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PartRenderer({
   part,
   message,
@@ -229,11 +271,7 @@ function PartRenderer({
       );
 
     case "thinking":
-      return (
-        <div className="rounded-md border border-[#8b949e]/20 bg-[#161b22] p-3 text-xs text-[#8b949e] italic">
-          Thinking...
-        </div>
-      );
+      return <ThinkingBlock thinking={part.thinking} />;
 
     // step-start, step-end, image, document — skip rendering for now
     default:
