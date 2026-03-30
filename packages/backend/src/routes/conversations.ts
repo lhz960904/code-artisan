@@ -1,12 +1,10 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db/index.js";
 import { conversations, events, fileSnapshots } from "../db/schema.js";
 import { eq, desc, gt, and } from "drizzle-orm";
-import { AgentService } from "../services/agent.js";
+import { createAgent } from "../agent/index.js";
 import { eventBus } from "../services/event-bus.js";
-import { env } from "../env.js";
 
 const conversationsRouter = new Hono();
 
@@ -166,17 +164,11 @@ conversationsRouter.post("/:id/messages", async (c) => {
   if (!conv) return c.json({ error: "Conversation not found" }, 404);
 
   // Fire-and-forget: start agent loop in background
-  const agent = new AgentService();
+  // Title generation is handled by TitleGenerationMiddleware
+  const agent = createAgent();
   agent.run({ conversationId: id, userMessage: content }).catch((err) => {
     console.error(`Agent error for conversation ${id}:`, err);
   });
-
-  // Auto-generate title if this is the first message
-  if (!conv.title) {
-    generateTitle(id, content).catch((err) => {
-      console.error(`Title generation error for conversation ${id}:`, err);
-    });
-  }
 
   // Update conversation timestamp
   await db
@@ -206,40 +198,12 @@ conversationsRouter.post("/:id/confirm", async (c) => {
   });
 
   // Re-invoke agent to continue (fire-and-forget, no new userMessage)
-  const agent = new AgentService();
+  const agent = createAgent();
   agent.run({ conversationId: id }).catch((err) => {
     console.error(`Agent error after confirm for conversation ${id}:`, err);
   });
 
   return c.json({ status: "ok" });
 });
-
-async function generateTitle(conversationId: string, userMessage: string): Promise<void> {
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 30,
-    messages: [
-      {
-        role: "user",
-        content: `Generate a very short title (max 6 words, no quotes) for a coding conversation that starts with this message:\n\n${userMessage}`,
-      },
-    ],
-  });
-
-  const title = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join("")
-    .trim();
-
-  if (title) {
-    await db
-      .update(conversations)
-      .set({ title, updatedAt: new Date() })
-      .where(eq(conversations.id, conversationId));
-  }
-}
 
 export { conversationsRouter };
