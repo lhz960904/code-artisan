@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { db } from "../db/index.js";
-import { conversations, events, fileSnapshots } from "../db/schema.js";
-import { eq, desc, gt, and } from "drizzle-orm";
+import { conversations, messages, fileSnapshots } from "../db/schema.js";
+import { eq, desc } from "drizzle-orm";
 import { createAgent } from "../agent/index.js";
 import { eventBus } from "../services/event-bus.js";
+import { MessageStore } from "../services/message-store.js";
 
 const conversationsRouter = new Hono();
 
@@ -64,34 +65,22 @@ conversationsRouter.patch("/:id", async (c) => {
 conversationsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
 
-  // Delete events and file snapshots first (FK constraint)
-  await db.delete(events).where(eq(events.conversationId, id));
+  await db.delete(messages).where(eq(messages.conversationId, id));
   await db.delete(fileSnapshots).where(eq(fileSnapshots.conversationId, id));
   await db.delete(conversations).where(eq(conversations.id, id));
 
   return c.json({ status: "deleted" });
 });
 
-// Get events for conversation (with optional afterSeq for catchup)
-conversationsRouter.get("/:id/events", async (c) => {
+// Get messages for conversation
+conversationsRouter.get("/:id/messages", async (c) => {
   const id = c.req.param("id");
-  const afterSeq = c.req.query("afterSeq");
-
-  const conditions = [eq(events.conversationId, id)];
-  if (afterSeq) {
-    conditions.push(gt(events.seq, Number(afterSeq)));
-  }
-
-  const result = await db
-    .select()
-    .from(events)
-    .where(and(...conditions))
-    .orderBy(events.seq);
-
+  const store = new MessageStore(id);
+  const result = await store.getMessages();
   return c.json(result);
 });
 
-// Get file snapshots for conversation (for editor initial load)
+// Get file snapshots for conversation
 conversationsRouter.get("/:id/files", async (c) => {
   const id = c.req.param("id");
 
@@ -107,17 +96,16 @@ conversationsRouter.get("/:id/files", async (c) => {
   return c.json(result);
 });
 
-// SSE stream — real-time events for a conversation
+// SSE stream — real-time stream for a conversation
 conversationsRouter.get("/:id/stream", (c) => {
   const id = c.req.param("id");
 
   return streamSSE(c, async (stream) => {
-    const unsub = eventBus.subscribe(id, async (event) => {
+    const unsub = eventBus.subscribe(id, async (data) => {
       try {
         await stream.writeSSE({
-          data: JSON.stringify(event),
-          event: event.type,
-          id: event.id,
+          data: JSON.stringify(data),
+          event: "type" in data ? (data as { type: string }).type : "stream",
         });
       } catch {
         // Client disconnected
@@ -128,10 +116,10 @@ conversationsRouter.get("/:id/stream", (c) => {
       unsub();
     });
 
-    // Heartbeat every 30s to keep connection alive
+    // Heartbeat every 30s
     const heartbeat = setInterval(async () => {
       try {
-        await stream.writeSSE({ data: "", event: "heartbeat", id: "hb" });
+        await stream.writeSSE({ data: "", event: "heartbeat" });
       } catch {
         clearInterval(heartbeat);
       }
@@ -146,7 +134,7 @@ conversationsRouter.get("/:id/stream", (c) => {
   });
 });
 
-// Send message — fire-and-forget, agent runs in background
+// Send message
 conversationsRouter.post("/:id/messages", async (c) => {
   const id = c.req.param("id");
   const { content } = await c.req.json<{ content: string }>();
@@ -155,7 +143,6 @@ conversationsRouter.post("/:id/messages", async (c) => {
     return c.json({ error: "Message content is required" }, 400);
   }
 
-  // Verify conversation exists
   const [conv] = await db
     .select()
     .from(conversations)
@@ -163,14 +150,11 @@ conversationsRouter.post("/:id/messages", async (c) => {
 
   if (!conv) return c.json({ error: "Conversation not found" }, 404);
 
-  // Fire-and-forget: start agent loop in background
-  // Title generation is handled by TitleGenerationMiddleware
   const agent = createAgent();
   agent.run({ conversationId: id, userMessage: content }).catch((err) => {
     console.error(`Agent error for conversation ${id}:`, err);
   });
 
-  // Update conversation timestamp
   await db
     .update(conversations)
     .set({ updatedAt: new Date() })
@@ -179,7 +163,7 @@ conversationsRouter.post("/:id/messages", async (c) => {
   return c.json({ status: "started" });
 });
 
-// User approves/rejects a confirm_required event
+// Confirm tool execution
 conversationsRouter.post("/:id/confirm", async (c) => {
   const id = c.req.param("id");
   const { approved } = await c.req.json<{ approved: boolean }>();
@@ -191,13 +175,13 @@ conversationsRouter.post("/:id/confirm", async (c) => {
 
   if (!conv) return c.json({ error: "Conversation not found" }, 404);
 
-  await db.insert(events).values({
-    conversationId: id,
-    type: "confirm_response",
-    data: { approved },
+  // Store confirm response as a user message with metadata
+  const store = new MessageStore(id);
+  await store.addMessage("user", [{ type: "text", text: approved ? "Approved" : "Rejected" }], {
+    confirmResponse: { approved },
   });
 
-  // Re-invoke agent to continue (fire-and-forget, no new userMessage)
+  // Re-invoke agent to continue
   const agent = createAgent();
   agent.run({ conversationId: id }).catch((err) => {
     console.error(`Agent error after confirm for conversation ${id}:`, err);

@@ -29,15 +29,12 @@ export class TokenUsageMiddleware implements AgentMiddleware {
     const hasBalance = await this.quota.checkBalance();
     if (!hasBalance) {
       runtime.shouldStop = true;
-      // Persist error event
-      const row = await runtime.store.writeEvent("error", {
-        content: "Token quota exceeded.",
-      });
-      runtime.emitSSE({
-        id: row.id,
-        type: "error",
-        data: { content: "Token quota exceeded." },
-        seq: row.seq,
+      const msg = await runtime.store.addMessage("assistant", [
+        { type: "error", message: "Token quota exceeded." },
+      ]);
+      runtime.emitStream({
+        messageId: msg.id,
+        part: { type: "error", message: "Token quota exceeded." },
       });
     }
   }

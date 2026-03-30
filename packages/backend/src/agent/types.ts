@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { Sandbox } from "../sandbox/index.js";
-import type { EventStore } from "../services/event-store.js";
-import type { SSEEvent } from "../services/event-bus.js";
+import type { MessageStore } from "../services/message-store.js";
+import type { Message, StreamData } from "@code-artisan/shared";
 
 /**
  * LLM response — currently aliases Anthropic.Message directly.
@@ -49,15 +49,15 @@ export interface AgentRuntime {
   conversationId: string;
 
   // Conversation state
-  messages: Anthropic.MessageParam[];
+  messages: Message[];
   mode: "yolo" | "confirm";
 
   // Middleware shared state
   state: Map<string, unknown>;
 
   // Services
-  store: EventStore;
-  emitSSE: (event: SSEEvent) => void;
+  store: MessageStore;
+  emitStream: (data: StreamData) => void;
 
   // Accumulated usage
   usage: { inputTokens: number; outputTokens: number };
@@ -84,7 +84,7 @@ export interface AgentMiddleware {
   beforeModel?(runtime: AgentRuntime): Promise<void>;
 
   /** After each LLM call (loop detection, token tracking) */
-  afterModel?(runtime: AgentRuntime, response: LLMResponse): Promise<void>;
+  afterModel?(runtime: AgentRuntime, response?: LLMResponse): Promise<void>;
 
   /** After agent finishes (title generation, cleanup) */
   afterAgent?(runtime: AgentRuntime): Promise<void>;

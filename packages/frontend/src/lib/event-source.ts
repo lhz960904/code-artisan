@@ -1,26 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import type { Message, MessagePart } from "@code-artisan/shared";
 
 const API_BASE = "/api";
 
-export interface StreamEvent {
-  id: string;
-  conversation_id?: string;
-  seq?: number;
-  type: string;
-  data: Record<string, unknown>;
-}
-
 export function useConversationStream(conversationId: string | null) {
-  const [events, setEvents] = useState<StreamEvent[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
   const fetchHistory = useCallback(async (convId: string) => {
-    const res = await fetch(`${API_BASE}/conversations/${convId}/events`);
+    const res = await fetch(`${API_BASE}/conversations/${convId}/messages`);
     if (!res.ok) return;
-    const data: StreamEvent[] = await res.json();
-    setEvents(data);
+    const data: Message[] = await res.json();
+    setMessages(data);
     setReady(true);
   }, []);
 
@@ -29,7 +22,7 @@ export function useConversationStream(conversationId: string | null) {
 
     let cancelled = false;
 
-    // 1. Load history from DB
+    // 1. Load history
     fetchHistory(conversationId);
 
     // 2. Connect SSE for live updates
@@ -38,55 +31,75 @@ export function useConversationStream(conversationId: string | null) {
     );
     esRef.current = es;
 
-    const handleEvent = (e: MessageEvent) => {
+    const handleMessage = (e: MessageEvent) => {
       if (cancelled) return;
       try {
-        const event: {
-          id: string;
-          type: string;
-          data: Record<string, unknown>;
-          seq?: number;
-        } = JSON.parse(e.data);
+        const data = JSON.parse(e.data);
 
-        if (event.type === "ai_text_delta") {
-          setStreamingText((event.data as { content: string }).content);
+        // Done signal
+        if (data.type === "done") {
+          setStreamingText(null);
           return;
         }
 
-        // Persisted event — add to events list, clear streaming text
-        setStreamingText(null);
-        setEvents((prev) => {
-          if (prev.some((ev) => ev.id === event.id)) {
-            return prev.map((ev) =>
-              ev.id === event.id ? { ...ev, ...event } : ev,
-            );
-          }
-          return [...prev, event as StreamEvent];
-        });
+        // Text delta (streaming, not persisted)
+        if (data.type === "text-delta") {
+          setStreamingText(data.textDelta);
+          return;
+        }
+
+        // StreamEvent with part
+        if (data.messageId && data.part) {
+          const streamEvent = data as { messageId: string; part: MessagePart };
+          setStreamingText(null);
+
+          setMessages((prev) => {
+            const existing = prev.find((m) => m.id === streamEvent.messageId);
+            if (existing) {
+              // Update existing message — add or update part
+              return prev.map((m) => {
+                if (m.id !== streamEvent.messageId) return m;
+                // Check if this part already exists (tool-call state update)
+                const existingPartIdx = m.parts.findIndex(
+                  (p) =>
+                    p.type === "tool-call" &&
+                    streamEvent.part.type === "tool-call" &&
+                    p.toolCallId === streamEvent.part.toolCallId,
+                );
+                if (existingPartIdx >= 0) {
+                  const newParts = [...m.parts];
+                  newParts[existingPartIdx] = streamEvent.part;
+                  return { ...m, parts: newParts };
+                }
+                return { ...m, parts: [...m.parts, streamEvent.part] };
+              });
+            }
+            // New message — create from first part
+            return [
+              ...prev,
+              {
+                id: streamEvent.messageId,
+                role: inferRole(streamEvent.part),
+                parts: [streamEvent.part],
+                createdAt: new Date().toISOString(),
+              } as Message,
+            ];
+          });
+        }
       } catch {
         // ignore parse errors
       }
     };
 
-    const eventTypes = [
-      "user_message",
-      "ai_text",
-      "ai_text_delta",
-      "tool_call",
-      "tool_result",
-      "confirm_required",
-      "confirm_response",
-      "preview_url",
-      "error",
-      "done",
-    ];
+    // Listen to all SSE event types
+    es.addEventListener("stream", handleMessage);
+    es.addEventListener("text-delta", handleMessage);
+    es.addEventListener("done", handleMessage);
 
-    for (const type of eventTypes) {
-      es.addEventListener(type, handleEvent);
-    }
+    // Also listen to generic message event as fallback
+    es.onmessage = handleMessage;
 
     es.onerror = () => {
-      // EventSource auto-reconnects; re-fetch history on reconnect
       if (!cancelled) {
         fetchHistory(conversationId);
       }
@@ -96,11 +109,26 @@ export function useConversationStream(conversationId: string | null) {
       cancelled = true;
       es.close();
       esRef.current = null;
-      setEvents([]);
+      setMessages([]);
       setStreamingText(null);
       setReady(false);
     };
   }, [conversationId, fetchHistory]);
 
-  return { events, streamingText, ready };
+  return { messages, streamingText, ready };
+}
+
+/** Infer message role from the first part */
+function inferRole(part: MessagePart): Message["role"] {
+  if (part.type === "tool-call" && part.state === "result") return "tool";
+  if (
+    part.type === "text" ||
+    part.type === "thinking" ||
+    part.type === "step-start" ||
+    part.type === "step-end" ||
+    part.type === "error"
+  )
+    return "assistant";
+  if (part.type === "tool-call") return "assistant";
+  return "user";
 }

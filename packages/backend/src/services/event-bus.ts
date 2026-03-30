@@ -1,11 +1,5 @@
 import { EventEmitter } from "events";
-
-export interface SSEEvent {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
-  seq?: number;
-}
+import type { StreamData } from "@code-artisan/shared";
 
 class ConversationEventBus {
   private emitters = new Map<string, EventEmitter>();
@@ -19,26 +13,26 @@ class ConversationEventBus {
     return this.emitters.get(conversationId)!;
   }
 
-  emit(conversationId: string, event: SSEEvent): void {
-    this.getEmitter(conversationId).emit("event", event);
+  emitStream(conversationId: string, data: StreamData): void {
+    this.getEmitter(conversationId).emit("stream", data);
+  }
+
+  emitDone(conversationId: string): void {
+    this.getEmitter(conversationId).emit("stream", { type: "done" });
   }
 
   subscribe(
     conversationId: string,
-    handler: (event: SSEEvent) => void,
+    handler: (data: StreamData | { type: "done" }) => void,
   ): () => void {
     const emitter = this.getEmitter(conversationId);
-    emitter.on("event", handler);
+    emitter.on("stream", handler);
     return () => {
-      emitter.off("event", handler);
-      if (emitter.listenerCount("event") === 0) {
+      emitter.off("stream", handler);
+      if (emitter.listenerCount("stream") === 0) {
         this.emitters.delete(conversationId);
       }
     };
-  }
-
-  emitDone(conversationId: string): void {
-    this.emit(conversationId, { id: "done", type: "done", data: {} });
   }
 }
 

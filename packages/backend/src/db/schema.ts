@@ -11,14 +11,14 @@ export const conversations = pgTable("conversations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const events = pgTable("events", {
+export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   conversationId: uuid("conversation_id")
     .notNull()
     .references(() => conversations.id),
-  seq: serial("seq").notNull(),
-  type: text("type").notNull(),
-  data: jsonb("data").notNull(),
+  role: text("role").notNull(),
+  parts: jsonb("parts").notNull(),
+  metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
