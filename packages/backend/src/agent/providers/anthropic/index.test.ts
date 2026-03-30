@@ -1,5 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { Message } from "@code-artisan/shared";
+
+// Mock env to avoid Zod validation of missing env vars in CI
+vi.mock("../../../env.js", () => ({
+  env: {
+    ANTHROPIC_API_KEY: "test-key",
+    DATABASE_URL: "test",
+    SUPABASE_URL: "test",
+    SUPABASE_PUBLISHABLE_KEY: "test",
+    SUPABASE_SECRET_KEY: "test",
+    E2B_API_KEY: "test",
+  },
+}));
 
 import { toAnthropicMessages } from "./index.js";
 
