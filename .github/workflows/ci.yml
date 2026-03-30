@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check (shared)
+        run: pnpm --filter @code-artisan/shared build
+
+      - name: Type check (backend)
+        working-directory: packages/backend
+        run: npx tsc --noEmit
+
+      - name: Type check (frontend)
+        working-directory: packages/frontend
+        run: npx tsc -b --noEmit
+
+      - name: Unit tests
+        working-directory: packages/backend
+        run: npx vitest run
+
+      - name: Build backend
+        working-directory: packages/backend
+        run: bun run build
+
+      - name: Build frontend
+        working-directory: packages/frontend
+        run: pnpm run build

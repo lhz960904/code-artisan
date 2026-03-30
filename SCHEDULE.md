@@ -74,19 +74,24 @@
 
 ### LLM Provider 抽象 ✅
 - [x] LLMProvider 接口（chat + generateText）
-- [x] ClaudeProvider（消息转换 / 工具格式化 / 响应解析 / extended thinking）
+- [x] AnthropicProvider（消息转换 / 工具格式化 / 响应解析 / extended thinking）
 - [x] AgentRuntime.provider — middleware 通过 runtime 访问 LLM
-- [x] Agent / middleware / types.ts 零 Anthropic 引用（除 providers/claude.ts）
+- [x] Agent / middleware / types.ts 零 Anthropic 引用（除 providers/anthropic/）
 - [x] model / lightModel 可配置
+
+### 测试 + CI ✅
+- [x] 45 个单元测试（toAnthropicMessages 8, Agent loop 8, 4 middlewares 18, BaseTool 7, Registry 4）
+- [x] GitHub Actions CI（type check → unit test → build）
+- [x] Bug 修复：thinking signature、runtime.messages 内存同步、多 tool 消息转换、dangling-tool-call 适配
 
 ---
 
 ## 待完成
 
 ### P0 — 核心功能
-- [ ] 端到端测试验证（重构后全场景跑通）
-- [ ] Supabase 清空重建表（schema 已变）
-- [ ] SSE 首发消息时序修复（navigate 顺序）
+- [x] ~~端到端测试验证（重构后全场景跑通）~~ 已验证
+- [x] ~~Supabase 清空重建表（schema 已变）~~ 已完成
+- [x] ~~SSE 首发消息时序修复（navigate 顺序）~~ 已修复
 
 ### P1 — 体验优化
 - [ ] Thinking 流式支持（streaming thinking deltas）
