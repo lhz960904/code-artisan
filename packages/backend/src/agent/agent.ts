@@ -62,14 +62,29 @@ export class Agent {
         // Pure text response → done
         if (!hasToolCalls(response)) break;
 
-        // Handle tool calls
+        // Handle tool calls (protected — errors become messages for LLM to see)
         const toolCalls = getToolCalls(response);
-        await this.handleToolCalls(runtime, toolCalls);
+        try {
+          await this.handleToolCalls(runtime, toolCalls);
+          await this.runHook("afterToolExecution", runtime);
+        } catch (toolErr) {
+          console.error(`[agent] Tool execution error:`, toolErr);
+          await this.runHook("onError", runtime, toolErr as Error);
+          // Persist error so LLM can see it and retry
+          await this.addMessage(runtime, "assistant", [
+            {
+              type: "error",
+              message: `Tool execution failed: ${String(toolErr)}`,
+            },
+          ]);
+          // Don't break — let LLM see the error and decide next action
+        }
       }
 
       await this.runHook("afterAgent", runtime);
     } catch (err) {
-      console.error(`[agent] Error in conversation ${conversationId}:`, err);
+      console.error(`[agent] Fatal error in conversation ${conversationId}:`, err);
+      await this.runHook("onError", runtime!, err as Error).catch(() => {});
       if (runtime) {
         try {
           await this.addMessage(runtime, "assistant", [{ type: "error", message: String(err) }]);
@@ -87,10 +102,7 @@ export class Agent {
   private async initRuntime(conversationId: string): Promise<AgentRuntime> {
     const store = new MessageStore(conversationId);
 
-    const [conv] = await db
-      .select({ mode: conversations.mode })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
+    const [conv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, conversationId));
 
     const sandbox = await this.getOrCreateSandbox(conversationId, store);
     const messages = await store.getMessages();
@@ -111,10 +123,7 @@ export class Agent {
   private async getOrCreateSandbox(conversationId: string, store: MessageStore) {
     const provider = getSandboxProvider();
 
-    const [conv] = await db
-      .select({ sandboxId: conversations.sandboxId })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
+    const [conv] = await db.select({ sandboxId: conversations.sandboxId }).from(conversations).where(eq(conversations.id, conversationId));
 
     const sandbox = await provider.acquire(conv?.sandboxId ?? undefined);
 
@@ -123,10 +132,7 @@ export class Agent {
       if (snapshots.length > 0) {
         await provider.restoreFiles(sandbox, snapshots);
       }
-      await db
-        .update(conversations)
-        .set({ sandboxId: sandbox.id })
-        .where(eq(conversations.id, conversationId));
+      await db.update(conversations).set({ sandboxId: sandbox.id }).where(eq(conversations.id, conversationId));
     }
 
     return sandbox;
@@ -153,11 +159,7 @@ export class Agent {
 
   // --- Assistant Message ---
 
-  private async persistAssistantMessage(
-    runtime: AgentRuntime,
-    response: LLMResponse,
-    stepIndex: number,
-  ): Promise<void> {
+  private async persistAssistantMessage(runtime: AgentRuntime, response: LLMResponse, stepIndex: number): Promise<void> {
     const textContent = getTextContent(response);
     const thinking = getThinking(response);
 
@@ -193,10 +195,7 @@ export class Agent {
     }
 
     // Re-check mode
-    const [currentConv] = await db
-      .select({ mode: conversations.mode })
-      .from(conversations)
-      .where(eq(conversations.id, runtime.conversationId));
+    const [currentConv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, runtime.conversationId));
     runtime.mode = (currentConv?.mode as "yolo" | "confirm") ?? "yolo";
 
     // Confirm mode: set approval=pending on first tool message, stop
@@ -215,9 +214,7 @@ export class Agent {
     }
 
     // Yolo mode: execute all tools in parallel
-    const results = await Promise.allSettled(
-      toolCalls.map((tc) => this.executeTool(runtime, tc)),
-    );
+    const results = await Promise.allSettled(toolCalls.map((tc) => this.executeTool(runtime, tc)));
 
     // Update each tool message's part (state: call → result)
     for (let i = 0; i < toolCalls.length; i++) {
@@ -244,10 +241,7 @@ export class Agent {
   private async executeTool(runtime: AgentRuntime, tc: ToolCall): Promise<string> {
     const tool = toolRegistry.get(tc.name);
     if (!tool) return `Error: Unknown tool: ${tc.name}`;
-    return tool.call(
-      { sandbox: runtime.sandbox, conversationId: runtime.conversationId },
-      tc.input,
-    );
+    return tool.call({ sandbox: runtime.sandbox, conversationId: runtime.conversationId }, tc.input);
   }
 
   private async handleToolSideEffects(runtime: AgentRuntime, tc: ToolCall): Promise<void> {
@@ -271,27 +265,18 @@ export class Agent {
     if (runtime.messages.length < 2) return;
 
     // Find last user message with confirm_response metadata
-    const lastConfirmMsg = [...runtime.messages]
-      .reverse()
-      .find((m) => m.metadata?.confirmResponse != null);
+    const lastConfirmMsg = [...runtime.messages].reverse().find((m) => m.metadata?.confirmResponse != null);
     if (!lastConfirmMsg) return;
 
-    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } })
-      .confirmResponse.approved;
+    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } }).confirmResponse.approved;
 
     // Find the tool message with pending approval
     const pendingToolMsg = [...runtime.messages]
       .reverse()
-      .find(
-        (m) =>
-          m.role === "tool" &&
-          m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"),
-      );
+      .find((m) => m.role === "tool" && m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"));
     if (!pendingToolMsg) return;
 
-    const pendingPart = pendingToolMsg.parts.find(
-      (p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending",
-    );
+    const pendingPart = pendingToolMsg.parts.find((p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending");
     if (!pendingPart) return;
 
     const tc: ToolCall = {
@@ -332,12 +317,7 @@ export class Agent {
   // --- Helpers ---
 
   /** Add message to store + runtime.messages + emit all parts via SSE */
-  private async addMessage(
-    runtime: AgentRuntime,
-    role: Message["role"],
-    parts: MessagePart[],
-    metadata?: Record<string, unknown>,
-  ): Promise<Message> {
+  private async addMessage(runtime: AgentRuntime, role: Message["role"], parts: MessagePart[], metadata?: Record<string, unknown>): Promise<Message> {
     const row = await runtime.store.addMessage(role, parts, metadata);
     const msg: Message = {
       id: row.id,
@@ -358,13 +338,14 @@ export class Agent {
   }
 
   private async runHook(
-    hook: "beforeAgent" | "beforeModel" | "afterModel" | "afterAgent",
+    hook: keyof Omit<AgentMiddleware, "name">,
     runtime: AgentRuntime,
-    response?: LLMResponse,
+    ...args: unknown[]
   ): Promise<void> {
     for (const mw of this.middlewares) {
-      if (!mw[hook]) continue;
-      await mw[hook]!(runtime, response);
+      const fn = mw[hook];
+      if (!fn) continue;
+      await (fn as Function).call(mw, runtime, ...args);
     }
   }
 }

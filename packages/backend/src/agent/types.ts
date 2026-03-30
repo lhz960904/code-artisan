@@ -86,6 +86,12 @@ export interface AgentMiddleware {
   /** After each LLM call (loop detection, token tracking) */
   afterModel?(runtime: AgentRuntime, response?: LLMResponse): Promise<void>;
 
+  /** After tool execution completes (success or failure) */
+  afterToolExecution?(runtime: AgentRuntime): Promise<void>;
+
+  /** On error during agent loop (logging, metrics, recovery) */
+  onError?(runtime: AgentRuntime, error: Error): Promise<void>;
+
   /** After agent finishes (title generation, cleanup) */
   afterAgent?(runtime: AgentRuntime): Promise<void>;
 }
