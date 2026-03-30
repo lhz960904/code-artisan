@@ -96,7 +96,7 @@
 ### P1 — 体验优化
 - [x] Thinking 流式支持（streaming thinking deltas）
 - [x] 工具输出截断（学 SWE-agent ACI，防 context 溢出）
-- [ ] 历史压缩 middleware（pruning + LLM compaction）
+- [x] 历史压缩 middleware（pruning + LLM compaction）
 - [ ] UI 打磨（loading 状态、空状态、动画）
 
 ### P2 — 功能扩展
