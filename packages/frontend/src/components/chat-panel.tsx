@@ -174,6 +174,16 @@ function MessageRenderer({
   message: Message;
   conversationId: string;
 }) {
+  if (message.metadata?.compacted) {
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <div className="h-px flex-1 bg-[#30363d]" />
+        <span className="text-xs text-[#8b949e]">Conversation compacted</span>
+        <div className="h-px flex-1 bg-[#30363d]" />
+      </div>
+    );
+  }
+
   return (
     <>
       {message.parts.map((part, i) => (
