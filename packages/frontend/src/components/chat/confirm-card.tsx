@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { confirmAction } from "../lib/api";
+import { confirmAction } from "@/lib/api";
 import type { ToolCallPart } from "@code-artisan/shared";
 
 interface ConfirmCardProps {

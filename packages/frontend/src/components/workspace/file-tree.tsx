@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useWorkspace } from "../contexts/workspace-context";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 interface TreeNode {
   name: string;

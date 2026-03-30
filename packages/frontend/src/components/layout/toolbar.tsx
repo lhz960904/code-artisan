@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getConversation, updateConversation, getQuota, type ConversationResponse, type QuotaResponse } from "../lib/api";
-import { useWorkspace } from "../contexts/workspace-context";
+import { getConversation, updateConversation, getQuota, type ConversationResponse, type QuotaResponse } from "@/lib/api";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 interface ToolbarProps {
   conversationId: string;

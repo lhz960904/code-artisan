@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { getFileSnapshots } from "../lib/api";
+import { getFileSnapshots } from "@/lib/api";
 
 interface TerminalEntry {
   command: string;

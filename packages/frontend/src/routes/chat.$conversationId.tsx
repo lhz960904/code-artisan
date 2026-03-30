@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { WorkspaceProvider } from "../contexts/workspace-context";
-import { WorkspaceLayout } from "../components/workspace-layout";
+import { WorkspaceProvider } from "@/contexts/workspace-context";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 
 export const Route = createFileRoute("/chat/$conversationId")({
   component: ChatPage,

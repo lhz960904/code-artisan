@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { useWorkspace } from "../contexts/workspace-context";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 export function TerminalPanel() {
   const termRef = useRef<HTMLDivElement>(null);

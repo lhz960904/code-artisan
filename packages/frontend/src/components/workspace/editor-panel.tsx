@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { useWorkspace } from "../contexts/workspace-context";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 function getLanguage(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();

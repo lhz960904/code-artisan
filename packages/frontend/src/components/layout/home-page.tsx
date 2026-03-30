@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { createConversation, sendMessage } from "../lib/api";
+import { createConversation, sendMessage } from "@/lib/api";
 
 export function HomePage() {
   const [input, setInput] = useState("");

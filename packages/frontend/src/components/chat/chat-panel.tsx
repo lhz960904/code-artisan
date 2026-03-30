@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { sendMessage } from "../lib/api";
-import { useConversationStream } from "../lib/event-source";
-import { ToolCallCard } from "./tool-call-card";
-import { MarkdownRenderer } from "./markdown-renderer";
-import { useWorkspace } from "../contexts/workspace-context";
+import { sendMessage } from "@/lib/api";
+import { useConversationStream } from "@/hooks/use-conversation-stream";
+import { ToolCallCard } from "@/components/chat/tool-call-card";
+import { MarkdownRenderer } from "@/components/common/markdown-renderer";
+import { useWorkspace } from "@/contexts/workspace-context";
 import type { Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
 
 interface ChatPanelProps {

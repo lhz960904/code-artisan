@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet, Link, useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
-import { listConversations, createConversation, deleteConversation, type ConversationResponse } from "../lib/api";
+import { listConversations, createConversation, deleteConversation, type ConversationResponse } from "@/lib/api";
 
 export const Route = createRootRoute({
   component: RootLayout,

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { ChatPanel } from "./chat-panel";
-import { FileTree } from "./file-tree";
-import { EditorPanel } from "./editor-panel";
-import { TerminalPanel } from "./terminal-panel";
-import { PreviewPanel } from "./preview-panel";
-import { Toolbar } from "./toolbar";
-import { useWorkspace } from "../contexts/workspace-context";
+import { ChatPanel } from "@/components/chat/chat-panel";
+import { FileTree } from "@/components/workspace/file-tree";
+import { EditorPanel } from "@/components/workspace/editor-panel";
+import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import { PreviewPanel } from "@/components/workspace/preview-panel";
+import { Toolbar } from "@/components/layout/toolbar";
+import { useWorkspace } from "@/contexts/workspace-context";
 
 type RightTab = "preview" | "code" | "terminal";
 
