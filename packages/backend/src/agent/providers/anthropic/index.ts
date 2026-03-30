@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { env } from "../../env.js";
-import type { LLMProvider, LLMResponse, StreamCallbacks, ToolCall, ToolDefinition } from "../types.js";
+import { env } from "../../../env.js";
+import type { LLMProvider, LLMResponse, StreamCallbacks, ThinkingBlock, ToolCall, ToolDefinition } from "../../types.js";
 import type { Message, MessageRole } from "@code-artisan/shared";
 
-interface ClaudeProviderOptions {
+interface AnthropicProviderOptions {
   apiKey?: string;
   model?: string;
   lightModel?: string;
@@ -12,7 +12,7 @@ interface ClaudeProviderOptions {
   thinkingBudget?: number;
 }
 
-export class ClaudeProvider implements LLMProvider {
+export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
   private lightModel: string;
@@ -20,7 +20,7 @@ export class ClaudeProvider implements LLMProvider {
   private thinking: boolean;
   private thinkingBudget: number;
 
-  constructor(options?: ClaudeProviderOptions) {
+  constructor(options?: AnthropicProviderOptions) {
     this.client = new Anthropic({ apiKey: options?.apiKey ?? env.ANTHROPIC_API_KEY });
     this.model = options?.model ?? "claude-sonnet-4-20250514";
     this.lightModel = options?.lightModel ?? "claude-haiku-4-5-20251001";
@@ -87,9 +87,12 @@ function parseResponse(response: Anthropic.Message): LLMResponse {
     .map((b) => b.text)
     .join("\n");
 
-  const thinkingBlocks = response.content.filter((b) => b.type === "thinking");
-  const thinking =
-    thinkingBlocks.length > 0 ? thinkingBlocks.map((b) => (b as { type: "thinking"; thinking: string }).thinking).join("\n") : undefined;
+  const thinkingBlocks: ThinkingBlock[] = response.content
+    .filter((b) => b.type === "thinking")
+    .map((b) => {
+      const tb = b as { type: "thinking"; thinking: string; signature: string };
+      return { thinking: tb.thinking, signature: tb.signature };
+    });
 
   const toolCalls: ToolCall[] = toolBlocks.map((b) => ({
     id: b.id,
@@ -99,7 +102,7 @@ function parseResponse(response: Anthropic.Message): LLMResponse {
 
   return {
     textContent,
-    thinking,
+    thinkingBlocks,
     toolCalls,
     stopReason: response.stop_reason ?? "end_turn",
     usage: {
@@ -111,10 +114,16 @@ function parseResponse(response: Anthropic.Message): LLMResponse {
   };
 }
 
-function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
+/**
+ * Convert our Message[] to Anthropic MessageParam[].
+ * Uses look-ahead to batch consecutive tool messages with their preceding assistant message.
+ * Anthropic requires: assistant(tool_use) → user(tool_result), strictly paired.
+ */
+export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
   const result: Anthropic.MessageParam[] = [];
 
-  for (const msg of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
     const role = msg.role as MessageRole;
 
     if (role === "user") {
@@ -134,52 +143,55 @@ function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
         if (part.type === "text") {
           content.push({ type: "text", text: part.text });
         }
-        if (part.type === "thinking") {
+        if (part.type === "thinking" && part.signature) {
           content.push({
             type: "thinking",
             thinking: part.thinking,
-            signature: "",
+            signature: part.signature,
           } as Anthropic.ContentBlockParam);
         }
       }
-      if (content.length > 0) {
-        result.push({ role: "assistant", content });
-      }
-    }
 
-    if (role === "tool") {
-      for (const part of msg.parts) {
-        if (part.type !== "tool-call") continue;
-
-        // Append tool_use to previous assistant message
-        const lastMsg = result[result.length - 1];
-        if (lastMsg?.role === "assistant") {
-          if (!Array.isArray(lastMsg.content)) {
-            lastMsg.content = [{ type: "text", text: lastMsg.content as string }];
-          }
-          (lastMsg.content as Anthropic.ContentBlockParam[]).push({
+      // Look ahead: collect ALL consecutive tool messages
+      const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === "tool") {
+        for (const part of messages[j].parts) {
+          if (part.type !== "tool-call") continue;
+          // Append tool_use to assistant content
+          content.push({
             type: "tool_use",
             id: part.toolCallId,
             name: part.toolName,
             input: part.input,
           });
+          // Collect tool_result
+          if (part.state === "result" || part.state === "error") {
+            toolResultBlocks.push({
+              type: "tool_result",
+              tool_use_id: part.toolCallId,
+              content: part.output ?? "",
+            });
+          }
         }
-
-        // Add tool_result as user message
-        if (part.state === "result" || part.state === "error") {
-          result.push({
-            role: "user",
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: part.toolCallId,
-                content: part.output ?? "",
-              },
-            ],
-          });
-        }
+        j++;
       }
+
+      if (content.length > 0) {
+        result.push({ role: "assistant", content });
+      }
+
+      // All tool_results in a single user message
+      if (toolResultBlocks.length > 0) {
+        result.push({ role: "user", content: toolResultBlocks });
+      }
+
+      // Skip processed tool messages
+      i = j - 1;
     }
+
+    // Standalone tool messages (no preceding assistant) — shouldn't happen normally
+    // but handle gracefully by skipping (they'll be orphaned)
   }
 
   return result;
