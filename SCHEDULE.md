@@ -1,119 +1,122 @@
-# 项目排期（3/26 - 5/31）
-
-> 每天晚上9点与小Q做进度 review。
+# CodeArtisan 项目排期（3/26 - 5/31）
 
 ---
 
-## Week 1｜3/26–4/1 · 脚手架
+## Phase 1-2｜3/26–3/28 · 脚手架 + AI Tool Calling ✅
 
-**目标：所有基础设施跑通，写出第一个 E2B hello world**
+- [x] Vite + React + TS + Tailwind + TanStack Router 前端
+- [x] Hono.js 后端 + Supabase DB
+- [x] E2B 沙箱接入，执行命令
+- [x] Claude API 接入，流式消息
+- [x] 4 个工具：read_file / write_file / execute_command / list_files
+- [x] Agent 循环（多轮 tool call）
+- [x] 基础 Chat UI + 流式输出
 
-- [ ] 用 Vite 起前端项目（React + TS + Tailwind + shadcn + TanStack Router）
-- [ ] 用 Hono.js 起后端项目
-- [ ] 配置 Supabase 项目（Auth + DB）
-- [ ] E2B 注册账号 + 跑通第一个 `execute_command("echo hello")`
-- [ ] 前端调后端，后端调 E2B，结果返回前端展示
-- [ ] Claude API 接入，收发第一条消息
+## Phase 3｜3/28 · 编辑器 + 文件树 ✅
 
-**交付验证**：浏览器输入一条指令，能看到 E2B 执行结果。
+- [x] Monaco Editor（语法高亮、多文件 tab）
+- [x] 文件树组件
+- [x] xterm.js 终端 Panel
+- [x] Tab 切换布局（Preview / Code / Terminal）
 
----
+## Phase 4｜3/28 · Confirm Mode + Token Quota ✅
 
-## Week 2｜4/2–4/8 · AI Tool Calling
+- [x] Confirm 执行模式（审批 / 拒绝工具调用）
+- [x] Token 配额追踪
+- [x] start_server 工具（后台进程 + 预览 URL）
 
-**目标：AI 能通过 tool 自主操作沙箱**
+## Phase 5｜3/29 · SSE Streaming + Markdown + Preview ✅
 
-- [ ] 定义 4 个工具：`read_file` / `write_file` / `execute_command` / `list_files`
-- [ ] 实现 Hono 端工具调度器（接收 AI tool call → 调 E2B → 返回结果）
-- [ ] 实现 Agent 循环（多轮 tool call 直到 AI 停止）
-- [ ] 基础 Chat UI（能看到 AI 思考 + 工具调用过程）
-- [ ] 流式输出接入
+- [x] EventBus + SSE 替代 Supabase Realtime
+- [x] react-markdown 渲染 AI 回复
+- [x] iframe 预览面板
 
-**交付验证**：AI 能自主写一个 Python 文件并执行，终端输出结果。
+## Phase 6｜3/29 · Railway 部署 ✅
 
----
-
-## Week 3｜4/9–4/15 · 编辑器 + 文件树
-
-**目标：主体 UI 完成**
-
-- [ ] Monaco Editor 集成（语法高亮、多文件 tab）
-- [ ] 文件树组件（展示 E2B 文件系统，点击打开文件）
-- [ ] 终端 Panel（展示 execute_command 输出，支持 ANSI 颜色）
-- [ ] 布局定型：左侧 Chat + 右侧 Editor + 底部 Terminal
-
-**交付验证**：主界面 UI 完整，可以在编辑器里看到 AI 写的代码。
+- [x] Docker 多阶段构建
+- [x] 单服务部署（Hono serve API + 静态文件）
+- [x] Supabase Session Pooler（IPv4 兼容）
+- [x] 线上可访问：code-artisan-production.up.railway.app
 
 ---
 
-## Week 4｜4/16–4/22 · 认证 + 持久化
+## 架构重构｜3/29-3/30 ✅
 
-**目标：用户体验完整，数据不丢**
+深度调研 DeerFlow / LangChain / Vercel AI SDK / Gemini CLI / Neovate Code / OpenHands / SWE-agent / Bolt.new 等项目，完成核心架构重构：
 
-- [ ] Supabase Auth 登录页（邮箱 + 密码）
-- [ ] 对话历史存 Supabase，刷新页面可恢复
-- [ ] 文件内容关键节点存 Supabase
-- [ ] 沙箱与用户 session 关联
+### Sandbox 重构 ✅
+- [x] Sandbox 抽象接口 + E2BProvider（acquire/get/release）
+- [x] listDir 对齐 DeerFlow（find + 17 个 ignore patterns）
+- [x] Singleton 管理（getSandboxProvider / shutdownSandboxProvider）
 
-**交付验证**：登录后开始对话，刷新页面历史还在。
+### Tools 重构 ✅
+- [x] BaseTool 抽象基类（Zod schema + 模板方法 _call）
+- [x] ToolRegistry（register / get / toToolDefinitions / toPromptSection）
+- [x] 6 个 builtin：bash, ls, read_file, write_file, str_replace, start_server
+- [x] Zod v4 原生 z.toJSONSchema() 转 JSON Schema
+- [x] description 参数强制 LLM chain-of-thought（学 DeerFlow）
 
----
+### Agent 重构 ✅
+- [x] Agent 类 + Middleware pipeline（beforeAgent/beforeModel/afterModel/afterToolExecution/onError/afterAgent）
+- [x] 多 tool_use 并行执行（Promise.allSettled）
+- [x] 4 个内置 middleware：DanglingToolCall / TokenUsage / LoopDetection / TitleGeneration
+- [x] 工具执行错误恢复（try-catch → error message → LLM 重试）
+- [x] runHook 用 keyof Omit 自动类型同步
 
-## Week 5｜4/23–4/29 · 全链路联调
+### Part 类型体系 + Messages 表 ✅
+- [x] 统一 Part 类型（TextPart / ImagePart / DocumentPart / ThinkingPart / ToolCallPart / StepStartPart / StepEndPart / ErrorPart）
+- [x] 四角色：system / user / assistant / tool
+- [x] messages 表替代 events 表（JSONB parts）
+- [x] MessageStore（addMessage / getMessages / updatePart）
+- [x] ToolCallPart 状态机：partial-call → call → result / error
+- [x] SSE StreamEvent / StreamTextDelta 直接用 Part 类型
+- [x] 前端适配新类型体系
 
-**目标：端到端流程顺滑，主要 bug 清零**
-
-- [ ] 完整跑通：用户登录 → 输入需求 → AI 写代码 → 执行 → 看结果 → 继续对话
-- [ ] 错误处理（E2B 超时、API 限流、沙箱崩溃）
-- [ ] Loading 状态、空状态处理
-- [ ] 主要 UI 打磨
-
-**交付验证**：给一个陌生人用，不需要解释就能跑通完整流程。
-
----
-
-## Week 6｜4/30–5/6 · 部署
-
-**目标：线上可访问**
-
-- [ ] 前端部署到 Vercel
-- [ ] Hono 后端部署到 Cloudflare Workers
-- [ ] 环境变量配置（API keys、Supabase URL 等）
-- [ ] 线上联调，确保生产环境正常
-
-**交付验证**：能把 URL 发给朋友直接用。
-
----
-
-## Week 7-8｜5/7–5/20 · 打磨
-
-**目标：从能用到好用**
-
-- [ ] 性能优化（流式输出延迟、首屏加载）
-- [ ] 界面细节（动画、过渡、响应速度）
-- [ ] 用户测试（找 2-3 个人试用，收集反馈）
-- [ ] README 写好（项目介绍 + 架构图 + 本地运行步骤）
+### LLM Provider 抽象 ✅
+- [x] LLMProvider 接口（chat + generateText）
+- [x] ClaudeProvider（消息转换 / 工具格式化 / 响应解析 / extended thinking）
+- [x] AgentRuntime.provider — middleware 通过 runtime 访问 LLM
+- [x] Agent / middleware / types.ts 零 Anthropic 引用（除 providers/claude.ts）
+- [x] model / lightModel 可配置
 
 ---
 
-## Week 9｜5/21–5/31 · 简历材料
+## 待完成
 
-**目标：项目能为求职加分**
+### P0 — 核心功能
+- [ ] 端到端测试验证（重构后全场景跑通）
+- [ ] Supabase 清空重建表（schema 已变）
+- [ ] SSE 首发消息时序修复（navigate 顺序）
 
-- [ ] 录制 Demo 视频（2-3分钟，展示核心功能）
-- [ ] 整理 GitHub 仓库（代码规范、commit 历史、README）
-- [ ] 写简历项目描述（技术亮点 + 数据指标）
-- [ ] 准备面试问题（"讲讲这个项目"、"难点是什么"）
+### P1 — 体验优化
+- [ ] Thinking 流式支持（streaming thinking deltas）
+- [ ] 工具输出截断（学 SWE-agent ACI，防 context 溢出）
+- [ ] 历史压缩 middleware（pruning + LLM compaction）
+- [ ] UI 打磨（loading 状态、空状态、动画）
+
+### P2 — 功能扩展
+- [ ] Auth（Supabase Auth 登录）
+- [ ] MCP 工具支持
+- [ ] 多 LLM Provider（OpenAI / DeepSeek）
+- [ ] 域名绑定（Cloudflare）
+- [ ] Railway 重新部署
+
+### P3 — 求职准备
+- [ ] Demo 视频（2-3分钟）
+- [ ] README + 架构图
+- [ ] 简历项目描述
+- [ ] 面试准备
 
 ---
 
 ## 关键里程碑
 
-| 日期 | 里程碑 |
-|------|--------|
-| 4/1  | E2B hello world 跑通 |
-| 4/8  | AI 能自主写代码并执行 |
-| 4/15 | 主体 UI 完成 |
-| 4/29 | 端到端流程顺滑 |
-| 5/6  | 线上可访问 |
-| 5/31 | 简历材料就绪，开始投递 |
+| 日期 | 里程碑 | 状态 |
+|------|--------|------|
+| 3/28 | AI 能自主写代码并执行 | ✅ |
+| 3/29 | 线上可访问 | ✅ |
+| 3/30 | 核心架构重构完成 | ✅ |
+| 4/7  | 端到端验证 + Auth + UI 打磨 | |
+| 4/14 | MCP 工具 + 多 Provider | |
+| 5/6  | 全功能上线 | |
+| 5/31 | 简历材料就绪 | |
