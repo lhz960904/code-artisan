@@ -4,10 +4,6 @@ import { conversations } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
 import type { AgentMiddleware, AgentRuntime, LLMResponse } from "../types.js";
 
-/**
- * Tracks token usage per LLM call and checks quota.
- * Sets runtime.shouldStop if quota exceeded.
- */
 export class TokenUsageMiddleware implements AgentMiddleware {
   name = "token-usage";
 
@@ -39,8 +35,8 @@ export class TokenUsageMiddleware implements AgentMiddleware {
     }
   }
 
-  async afterModel(_runtime: AgentRuntime, response: LLMResponse): Promise<void> {
-    if (!this.quota) return;
-    await this.quota.addUsage(response.usage.input_tokens, response.usage.output_tokens);
+  async afterModel(_runtime: AgentRuntime, response?: LLMResponse): Promise<void> {
+    if (!this.quota || !response) return;
+    await this.quota.addUsage(response.usage.inputTokens, response.usage.outputTokens);
   }
 }

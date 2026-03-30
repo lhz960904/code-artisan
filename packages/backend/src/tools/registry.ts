@@ -1,4 +1,5 @@
 import type { BaseTool } from "./base.js";
+import type { ToolDefinition } from "../agent/types.js";
 
 class ToolRegistry {
   private tools = new Map<string, BaseTool>();
@@ -11,13 +12,16 @@ class ToolRegistry {
     return this.tools.get(name);
   }
 
-  /** Generate tools array for LLM API (JSON Schema format). */
-  toJsonTools(): Array<{
-    name: string;
-    description: string;
-    input_schema: Record<string, unknown>;
-  }> {
-    return [...this.tools.values()].map((t) => t.toJsonTool());
+  /** Provider-agnostic tool definitions (JSON Schema). */
+  toToolDefinitions(): ToolDefinition[] {
+    return [...this.tools.values()].map((t) => {
+      const jsonTool = t.toJsonTool();
+      return {
+        name: jsonTool.name,
+        description: jsonTool.description,
+        inputSchema: jsonTool.input_schema,
+      };
+    });
   }
 
   /** Generate tool descriptions for system prompt. */

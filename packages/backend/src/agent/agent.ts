@@ -1,5 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { ClaudeService, toAnthropicMessages } from "../services/claude.js";
 import { MessageStore } from "../services/message-store.js";
 import { eventBus } from "../services/event-bus.js";
 import { db } from "../db/index.js";
@@ -7,17 +5,33 @@ import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { getSandboxProvider } from "../sandbox/index.js";
 import { toolRegistry } from "../tools/index.js";
-import type { AgentConfig, AgentMiddleware, AgentRuntime, LLMResponse, ToolCall } from "./types.js";
-import { getToolCalls, getTextContent, getThinking, hasToolCalls } from "./types.js";
+import type {
+  AgentConfig,
+  AgentMiddleware,
+  AgentRuntime,
+  LLMProvider,
+  LLMResponse,
+  ToolCall,
+} from "./types.js";
 import type { Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
 
-export class Agent {
-  private middlewares: AgentMiddleware[];
-  private claude: ClaudeService;
+function buildSystemPrompt(): string {
+  const toolSection = toolRegistry.toPromptSection();
+  return `You are an AI coding agent running in a sandboxed Linux environment. You help users write code, execute commands, and build projects.
 
-  constructor(middlewares: AgentMiddleware[] = []) {
+You have access to these tools:
+${toolSection}
+
+Always use tools to interact with the filesystem. When the user asks you to write code, use write_file to create the file, then bash to run it. For web servers, use start_server to launch them and provide the preview URL. Use str_replace to make targeted edits to existing files instead of rewriting the entire file. Be concise in your text responses.`;
+}
+
+export class Agent {
+  private provider: LLMProvider;
+  private middlewares: AgentMiddleware[];
+
+  constructor(provider: LLMProvider, middlewares: AgentMiddleware[] = []) {
+    this.provider = provider;
     this.middlewares = middlewares;
-    this.claude = new ClaudeService();
   }
 
   // --- Public API ---
@@ -32,12 +46,10 @@ export class Agent {
 
       await this.runHook("beforeAgent", runtime);
 
-      // Write user message
       if (userMessage) {
         await this.addMessage(runtime, "user", [{ type: "text", text: userMessage }]);
       }
 
-      // Handle pending confirm (if resuming after approval/rejection)
       await this.handlePendingConfirm(runtime);
 
       for (let i = 0; i < maxIterations && !runtime.shouldStop; i++) {
@@ -45,39 +57,29 @@ export class Agent {
 
         if (runtime.shouldStop) break;
 
-        // Call LLM (converts messages to Anthropic format internally)
         const response = await this.callModel(runtime);
 
         await this.runHook("afterModel", runtime, response);
 
         if (runtime.shouldStop) break;
 
-        // Accumulate usage
-        runtime.usage.inputTokens += response.usage.input_tokens;
-        runtime.usage.outputTokens += response.usage.output_tokens;
+        runtime.usage.inputTokens += response.usage.inputTokens;
+        runtime.usage.outputTokens += response.usage.outputTokens;
 
-        // Build and persist assistant message (text + thinking + step-end)
         await this.persistAssistantMessage(runtime, response, i);
 
-        // Pure text response → done
-        if (!hasToolCalls(response)) break;
+        if (response.stopReason !== "tool_use") break;
 
-        // Handle tool calls (protected — errors become messages for LLM to see)
-        const toolCalls = getToolCalls(response);
         try {
-          await this.handleToolCalls(runtime, toolCalls);
+          await this.handleToolCalls(runtime, response.toolCalls);
           await this.runHook("afterToolExecution", runtime);
         } catch (toolErr) {
           console.error(`[agent] Tool execution error:`, toolErr);
           await this.runHook("onError", runtime, toolErr as Error);
-          // Persist error so LLM can see it and retry
-          await this.addMessage(runtime, "assistant", [
-            {
-              type: "error",
-              message: `Tool execution failed: ${String(toolErr)}`,
-            },
-          ]);
-          // Don't break — let LLM see the error and decide next action
+          await this.addMessage(runtime, "assistant", [{
+            type: "error",
+            message: `Tool execution failed: ${String(toolErr)}`,
+          }]);
         }
       }
 
@@ -89,7 +91,7 @@ export class Agent {
         try {
           await this.addMessage(runtime, "assistant", [{ type: "error", message: String(err) }]);
         } catch {
-          // If persist fails too, just log
+          // persist failed, just log
         }
       }
     } finally {
@@ -102,7 +104,10 @@ export class Agent {
   private async initRuntime(conversationId: string): Promise<AgentRuntime> {
     const store = new MessageStore(conversationId);
 
-    const [conv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, conversationId));
+    const [conv] = await db
+      .select({ mode: conversations.mode })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
 
     const sandbox = await this.getOrCreateSandbox(conversationId, store);
     const messages = await store.getMessages();
@@ -114,6 +119,7 @@ export class Agent {
       mode: (conv?.mode as "yolo" | "confirm") ?? "yolo",
       state: new Map(),
       store,
+      provider: this.provider,
       emitStream: (data) => eventBus.emitStream(conversationId, data),
       usage: { inputTokens: 0, outputTokens: 0 },
       shouldStop: false,
@@ -123,7 +129,10 @@ export class Agent {
   private async getOrCreateSandbox(conversationId: string, store: MessageStore) {
     const provider = getSandboxProvider();
 
-    const [conv] = await db.select({ sandboxId: conversations.sandboxId }).from(conversations).where(eq(conversations.id, conversationId));
+    const [conv] = await db
+      .select({ sandboxId: conversations.sandboxId })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId));
 
     const sandbox = await provider.acquire(conv?.sandboxId ?? undefined);
 
@@ -132,7 +141,10 @@ export class Agent {
       if (snapshots.length > 0) {
         await provider.restoreFiles(sandbox, snapshots);
       }
-      await db.update(conversations).set({ sandboxId: sandbox.id }).where(eq(conversations.id, conversationId));
+      await db
+        .update(conversations)
+        .set({ sandboxId: sandbox.id })
+        .where(eq(conversations.id, conversationId));
     }
 
     return sandbox;
@@ -143,34 +155,37 @@ export class Agent {
   private async callModel(runtime: AgentRuntime): Promise<LLMResponse> {
     const msgId = `stream_${Date.now()}`;
 
-    // Convert our Message[] to Anthropic format only at the call boundary
-    const anthropicMessages = toAnthropicMessages(runtime.messages);
-
-    const response = await this.claude.chatStream(anthropicMessages, (text) => {
-      runtime.emitStream({
-        messageId: msgId,
-        type: "text-delta",
-        textDelta: text,
-      });
-    });
-
-    return response;
+    return this.provider.chat(
+      runtime.messages,
+      toolRegistry.toToolDefinitions(),
+      buildSystemPrompt(),
+      {
+        onTextDelta: (text) => {
+          runtime.emitStream({
+            messageId: msgId,
+            type: "text-delta",
+            textDelta: text,
+          });
+        },
+      },
+    );
   }
 
   // --- Assistant Message ---
 
-  private async persistAssistantMessage(runtime: AgentRuntime, response: LLMResponse, stepIndex: number): Promise<void> {
-    const textContent = getTextContent(response);
-    const thinking = getThinking(response);
-
+  private async persistAssistantMessage(
+    runtime: AgentRuntime,
+    response: LLMResponse,
+    stepIndex: number,
+  ): Promise<void> {
     const parts: MessagePart[] = [];
-    if (thinking) parts.push({ type: "thinking", thinking });
-    if (textContent) parts.push({ type: "text", text: textContent });
+    if (response.thinking) parts.push({ type: "thinking", thinking: response.thinking });
+    if (response.textContent) parts.push({ type: "text", text: response.textContent });
     parts.push({
       type: "step-end",
       stepIndex,
-      usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
-      finishReason: response.stop_reason ?? "end_turn",
+      usage: response.usage,
+      finishReason: response.stopReason,
       model: response.model,
     });
 
@@ -195,10 +210,13 @@ export class Agent {
     }
 
     // Re-check mode
-    const [currentConv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, runtime.conversationId));
+    const [currentConv] = await db
+      .select({ mode: conversations.mode })
+      .from(conversations)
+      .where(eq(conversations.id, runtime.conversationId));
     runtime.mode = (currentConv?.mode as "yolo" | "confirm") ?? "yolo";
 
-    // Confirm mode: set approval=pending on first tool message, stop
+    // Confirm mode
     if (runtime.mode === "confirm" && toolMsgIds.length > 0) {
       await runtime.store.updatePart(toolMsgIds[0].msgId, 0, { approval: "pending" });
       this.emitPart(runtime, toolMsgIds[0].msgId, {
@@ -213,10 +231,11 @@ export class Agent {
       return;
     }
 
-    // Yolo mode: execute all tools in parallel
-    const results = await Promise.allSettled(toolCalls.map((tc) => this.executeTool(runtime, tc)));
+    // Yolo mode: parallel execution
+    const results = await Promise.allSettled(
+      toolCalls.map((tc) => this.executeTool(runtime, tc)),
+    );
 
-    // Update each tool message's part (state: call → result)
     for (let i = 0; i < toolCalls.length; i++) {
       const tc = toolCalls[i];
       const { msgId } = toolMsgIds[i];
@@ -241,7 +260,10 @@ export class Agent {
   private async executeTool(runtime: AgentRuntime, tc: ToolCall): Promise<string> {
     const tool = toolRegistry.get(tc.name);
     if (!tool) return `Error: Unknown tool: ${tc.name}`;
-    return tool.call({ sandbox: runtime.sandbox, conversationId: runtime.conversationId }, tc.input);
+    return tool.call(
+      { sandbox: runtime.sandbox, conversationId: runtime.conversationId },
+      tc.input,
+    );
   }
 
   private async handleToolSideEffects(runtime: AgentRuntime, tc: ToolCall): Promise<void> {
@@ -264,19 +286,26 @@ export class Agent {
   private async handlePendingConfirm(runtime: AgentRuntime): Promise<void> {
     if (runtime.messages.length < 2) return;
 
-    // Find last user message with confirm_response metadata
-    const lastConfirmMsg = [...runtime.messages].reverse().find((m) => m.metadata?.confirmResponse != null);
+    const lastConfirmMsg = [...runtime.messages]
+      .reverse()
+      .find((m) => m.metadata?.confirmResponse != null);
     if (!lastConfirmMsg) return;
 
-    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } }).confirmResponse.approved;
+    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } })
+      .confirmResponse.approved;
 
-    // Find the tool message with pending approval
     const pendingToolMsg = [...runtime.messages]
       .reverse()
-      .find((m) => m.role === "tool" && m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"));
+      .find(
+        (m) =>
+          m.role === "tool" &&
+          m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"),
+      );
     if (!pendingToolMsg) return;
 
-    const pendingPart = pendingToolMsg.parts.find((p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending");
+    const pendingPart = pendingToolMsg.parts.find(
+      (p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending",
+    );
     if (!pendingPart) return;
 
     const tc: ToolCall = {
@@ -316,8 +345,12 @@ export class Agent {
 
   // --- Helpers ---
 
-  /** Add message to store + runtime.messages + emit all parts via SSE */
-  private async addMessage(runtime: AgentRuntime, role: Message["role"], parts: MessagePart[], metadata?: Record<string, unknown>): Promise<Message> {
+  private async addMessage(
+    runtime: AgentRuntime,
+    role: Message["role"],
+    parts: MessagePart[],
+    metadata?: Record<string, unknown>,
+  ): Promise<Message> {
     const row = await runtime.store.addMessage(role, parts, metadata);
     const msg: Message = {
       id: row.id,
