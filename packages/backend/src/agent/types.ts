@@ -20,10 +20,16 @@ export interface ToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
+/** Thinking block with optional provider-specific signature */
+export interface ThinkingBlock {
+  thinking: string;
+  signature?: string;
+}
+
 /** LLM response (provider-agnostic) */
 export interface LLMResponse {
   textContent: string;
-  thinking?: string;
+  thinkingBlocks: ThinkingBlock[];
   toolCalls: ToolCall[];
   stopReason: string;
   usage: { inputTokens: number; outputTokens: number };

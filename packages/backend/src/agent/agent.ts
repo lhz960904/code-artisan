@@ -179,7 +179,9 @@ export class Agent {
     stepIndex: number,
   ): Promise<void> {
     const parts: MessagePart[] = [];
-    if (response.thinking) parts.push({ type: "thinking", thinking: response.thinking });
+    for (const tb of response.thinkingBlocks) {
+      parts.push({ type: "thinking", thinking: tb.thinking, signature: tb.signature });
+    }
     if (response.textContent) parts.push({ type: "text", text: response.textContent });
     parts.push({
       type: "step-end",
@@ -244,6 +246,15 @@ export class Agent {
       const state = result.status === "fulfilled" ? ("result" as const) : ("error" as const);
 
       await runtime.store.updatePart(msgId, 0, { state, output });
+
+      // Sync in-memory message so next callModel sees updated state
+      const inMemoryMsg = runtime.messages.find((m) => m.id === msgId);
+      if (inMemoryMsg) {
+        const part = inMemoryMsg.parts[0] as ToolCallPart;
+        part.state = state;
+        part.output = output;
+      }
+
       this.emitPart(runtime, msgId, {
         type: "tool-call",
         toolCallId: tc.id,

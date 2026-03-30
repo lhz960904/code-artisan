@@ -23,6 +23,7 @@ export interface DocumentPart {
 export interface ThinkingPart {
   type: "thinking";
   thinking: string;
+  signature?: string;
 }
 
 /**

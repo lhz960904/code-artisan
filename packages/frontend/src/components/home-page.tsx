@@ -14,8 +14,9 @@ export function HomePage() {
     setSending(true);
     try {
       const conv = await createConversation();
-      await sendMessage(conv.id, content);
+      // Navigate first so SSE connects before agent starts emitting events
       navigate({ to: "/chat/$conversationId", params: { conversationId: conv.id } });
+      sendMessage(conv.id, content).catch(console.error);
     } catch (err) {
       console.error("Failed to start conversation:", err);
       setSending(false);
