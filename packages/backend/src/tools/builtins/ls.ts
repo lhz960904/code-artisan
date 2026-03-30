@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { BaseTool, type ToolRuntime } from "../base.js";
+import { BaseTool, truncateOutput, type ToolRuntime } from "../base.js";
 
 const schema = z.object({
   description: z
@@ -24,6 +24,6 @@ export class LsTool extends BaseTool<typeof schema> {
   ): Promise<string> {
     const entries = await runtime.sandbox.listDir(input.path);
     if (entries.length === 0) return "(empty)";
-    return entries.join("\n");
+    return truncateOutput(entries.join("\n"));
   }
 }

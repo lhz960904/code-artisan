@@ -11,6 +11,26 @@ export interface ToolRuntime {
   // Reserved for future Agent refactoring: state, config, etc.
 }
 
+const MAX_OUTPUT_CHARS = 12000;
+const HEAD_RATIO = 0.8;
+const TAIL_RATIO = 0.2;
+
+/**
+ * Truncate tool output to prevent context overflow.
+ * Keeps head + tail with a notice in the middle (SWE-agent ACI pattern).
+ */
+export function truncateOutput(output: string, maxChars = MAX_OUTPUT_CHARS): string {
+  if (output.length <= maxChars) return output;
+
+  const headChars = Math.floor(maxChars * HEAD_RATIO);
+  const tailChars = Math.floor(maxChars * TAIL_RATIO);
+  const head = output.slice(0, headChars);
+  const tail = output.slice(-tailChars);
+  const omitted = output.length - headChars - tailChars;
+
+  return `${head}\n\n[... ${omitted} characters omitted (${output.length} total) ...]\n\n${tail}`;
+}
+
 /**
  * Abstract base class for tools, aligned with LangChain StructuredTool pattern.
  * Subclasses define name, description, Zod schema, and implement _call().

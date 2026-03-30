@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { BaseTool, type ToolRuntime } from "../base.js";
+import { BaseTool, truncateOutput, type ToolRuntime } from "../base.js";
 
 const schema = z.object({
   description: z
@@ -37,6 +37,11 @@ export class ReadFileTool extends BaseTool<typeof schema> {
     if (input.start_line != null && input.end_line != null) {
       const lines = content.split("\n");
       content = lines.slice(input.start_line - 1, input.end_line).join("\n");
+    }
+    if (content.length > 12000) {
+      const totalLines = content.split("\n").length;
+      const truncated = truncateOutput(content);
+      return `${truncated}\n\n[File has ${totalLines} lines. Use start_line and end_line to read specific ranges.]`;
     }
     return content;
   }

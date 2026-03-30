@@ -94,8 +94,8 @@
 - [x] ~~SSE 首发消息时序修复（navigate 顺序）~~ 已修复
 
 ### P1 — 体验优化
-- [ ] Thinking 流式支持（streaming thinking deltas）
-- [ ] 工具输出截断（学 SWE-agent ACI，防 context 溢出）
+- [x] Thinking 流式支持（streaming thinking deltas）
+- [x] 工具输出截断（学 SWE-agent ACI，防 context 溢出）
 - [ ] 历史压缩 middleware（pruning + LLM compaction）
 - [ ] UI 打磨（loading 状态、空状态、动画）
 

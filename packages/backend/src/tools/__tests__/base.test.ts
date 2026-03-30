@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import * as z from "zod";
-import { BaseTool, type ToolRuntime } from "../base.js";
+import { BaseTool, truncateOutput, type ToolRuntime } from "../base.js";
 
 // Concrete test tool
 class EchoTool extends BaseTool<typeof echoSchema> {
@@ -110,5 +110,30 @@ describe("BaseTool", () => {
     const props = Object.keys(jsonTool.input_schema.properties as object);
     expect(props).toContain("path");
     expect(props).toContain("append");
+  });
+
+});
+
+describe("truncateOutput", () => {
+  it("returns original when under limit", () => {
+    const text = "hello world";
+    expect(truncateOutput(text)).toBe(text);
+  });
+
+  it("truncates with head + tail", () => {
+    const text = "A".repeat(5000) + "B".repeat(10000) + "C".repeat(5000);
+    const result = truncateOutput(text);
+    expect(result).toContain("AAAA");
+    expect(result).toContain("CCCC");
+    expect(result).toContain("characters omitted");
+    expect(result).toContain("20000 total");
+    expect(result.length).toBeLessThan(text.length);
+  });
+
+  it("respects custom maxChars", () => {
+    const text = "x".repeat(200);
+    const result = truncateOutput(text, 100);
+    expect(result.length).toBeLessThan(200);
+    expect(result).toContain("omitted");
   });
 });

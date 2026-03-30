@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { BaseTool, type ToolRuntime } from "../base.js";
+import { BaseTool, truncateOutput, type ToolRuntime } from "../base.js";
 
 const schema = z.object({
   description: z
@@ -25,6 +25,6 @@ export class BashTool extends BaseTool<typeof schema> {
     input: z.infer<typeof schema>,
   ): Promise<string> {
     const output = await runtime.sandbox.executeCommand(input.command);
-    return output || "(no output)";
+    return truncateOutput(output || "(no output)");
   }
 }
