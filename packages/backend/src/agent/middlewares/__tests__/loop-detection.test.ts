@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LoopDetectionMiddleware } from "../loop-detection.js";
 import type { AgentRuntime, LLMResponse } from "../../types.js";
+
+let warnSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => { warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {}); });
+afterEach(() => { warnSpy.mockRestore(); });
 
 function makeRuntime(): AgentRuntime {
   return {

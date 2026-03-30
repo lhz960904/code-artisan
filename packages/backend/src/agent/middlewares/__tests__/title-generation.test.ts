@@ -75,6 +75,8 @@ describe("TitleGenerationMiddleware", () => {
   });
 
   it("does not crash on generateText failure", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const mw = new TitleGenerationMiddleware();
     const runtime = makeRuntime([
       msg("user", "test"),
@@ -83,5 +85,7 @@ describe("TitleGenerationMiddleware", () => {
 
     // Should not throw
     await mw.afterAgent(runtime);
+
+    consoleSpy.mockRestore();
   });
 });
