@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { confirmAction } from "@/lib/api";
+import { useConfirmAction } from "@/lib/apis";
 import type { ToolCallPart } from "@code-artisan/shared";
 
 interface ConfirmCardProps {
@@ -8,28 +8,23 @@ interface ConfirmCardProps {
 }
 
 export function ConfirmCard({ part, conversationId }: ConfirmCardProps) {
-  const [loading, setLoading] = useState(false);
   const [responded, setResponded] = useState(false);
+  const confirm = useConfirmAction();
 
   const description = `${part.toolName}(${JSON.stringify(part.input)})`;
 
-  async function handleConfirm(approved: boolean) {
-    setLoading(true);
-    try {
-      await confirmAction(conversationId, approved);
-      setResponded(true);
-    } catch (err) {
-      console.error("Confirm error:", err);
-    } finally {
-      setLoading(false);
-    }
+  function handleConfirm(approved: boolean) {
+    confirm.mutate(
+      { conversationId, approved },
+      { onSuccess: () => setResponded(true) },
+    );
   }
 
   if (responded || part.approval !== "pending") {
     const wasApproved = part.approval === "approved" || responded;
     return (
-      <div className="rounded-lg border border-[#d29922]/30 bg-[#d29922]/10 p-3">
-        <div className={`text-xs font-medium ${wasApproved ? "text-[#3fb950]" : "text-[#f85149]"}`}>
+      <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+        <div className={`text-xs font-medium ${wasApproved ? "text-success" : "text-destructive"}`}>
           {wasApproved ? "Approved" : "Rejected"}
         </div>
       </div>
@@ -37,25 +32,25 @@ export function ConfirmCard({ part, conversationId }: ConfirmCardProps) {
   }
 
   return (
-    <div className="rounded-lg border border-[#d29922]/30 bg-[#d29922]/10 p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#d29922]">
+    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-warning">
         Confirm Action
       </div>
-      <div className="mb-2 font-mono text-xs text-[#e6edf3]">
+      <div className="mb-2 font-mono text-xs text-foreground">
         {description}
       </div>
       <div className="flex gap-2">
         <button
           onClick={() => handleConfirm(true)}
-          disabled={loading}
-          className="rounded-md bg-[#238636] px-3 py-1 text-xs font-medium text-white hover:bg-[#2ea043] disabled:opacity-50"
+          disabled={confirm.isPending}
+          className="rounded-md bg-success px-3 py-1 text-xs font-medium text-success-foreground hover:opacity-90 disabled:opacity-50"
         >
           Approve
         </button>
         <button
           onClick={() => handleConfirm(false)}
-          disabled={loading}
-          className="rounded-md border border-[#f85149] px-3 py-1 text-xs font-medium text-[#f85149] hover:bg-[#f85149]/10 disabled:opacity-50"
+          disabled={confirm.isPending}
+          className="rounded-md border border-destructive px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
         >
           Reject
         </button>

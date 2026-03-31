@@ -1,43 +1,29 @@
 import { createRootRoute, Outlet, Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
-import { listConversations, createConversation, deleteConversation, type ConversationResponse } from "@/lib/api";
+import { Plus, Home, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useConversations, useConversationCreate, useConversationDelete } from "@/lib/apis";
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
 function RootLayout() {
-  const [conversations, setConversations] = useState<ConversationResponse[]>([]);
+  const { data: conversations = [] } = useConversations();
+  const createConv = useConversationCreate();
+  const deleteConv = useConversationDelete();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const refreshConversations = useCallback(() => {
-    listConversations().then(setConversations).catch(console.error);
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    refreshConversations();
-  }, [refreshConversations]);
-
-  // Refresh sidebar when navigating (picks up title changes)
-  useEffect(() => {
-    refreshConversations();
-  }, [location.pathname, refreshConversations]);
-
   async function handleNewChat() {
-    const conv = await createConversation();
-    setConversations((prev) => [conv, ...prev]);
+    const conv = await createConv.mutateAsync();
     navigate({ to: "/chat/$conversationId", params: { conversationId: conv.id } });
   }
 
-  async function handleDelete(e: React.MouseEvent, convId: string) {
+  function handleDelete(e: React.MouseEvent, convId: string) {
     e.preventDefault();
     e.stopPropagation();
-    await deleteConversation(convId);
-    setConversations((prev) => prev.filter((c) => c.id !== convId));
-
-    // If we're viewing the deleted conversation, go home
+    deleteConv.mutate(convId);
     if (location.pathname.includes(convId)) {
       navigate({ to: "/" });
     }
@@ -46,33 +32,31 @@ function RootLayout() {
   const isChat = location.pathname.startsWith("/chat/");
 
   return (
-    <div className="flex h-screen bg-[#0d1117] text-[#e6edf3]">
-      {/* Sidebar — only on home page */}
+    <div className="flex h-screen bg-background text-foreground">
       {!isChat && (
-        <div className="flex w-60 flex-col border-r border-[#30363d] bg-[#161b22]">
-          {/* New Chat Button */}
+        <div className="flex w-60 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
           <div className="p-3">
-            <button
+            <Button
+              variant="outline"
+              className="w-full gap-2"
               onClick={handleNewChat}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-[#30363d] bg-[#21262d] py-2 text-sm text-[#e6edf3] hover:border-[#58a6ff] hover:text-[#58a6ff]"
+              disabled={createConv.isPending}
             >
-              <span>+</span> New Chat
-            </button>
+              <Plus className="h-4 w-4" /> New Chat
+            </Button>
           </div>
 
-          {/* Nav */}
           <div className="px-3 pb-2">
             <Link
               to="/"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              Home
+              <Home className="h-4 w-4" /> Home
             </Link>
           </div>
 
-          {/* Recent Chats */}
-          <div className="flex-1 overflow-y-auto px-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#484f58]">
+          <ScrollArea className="flex-1 px-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Recent
             </div>
             <div className="space-y-0.5">
@@ -81,26 +65,23 @@ function RootLayout() {
                   key={conv.id}
                   to="/chat/$conversationId"
                   params={{ conversationId: conv.id }}
-                  className="group flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3] [&.active]:bg-[#21262d] [&.active]:text-[#e6edf3]"
+                  className="group flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-accent [&.active]:text-accent-foreground"
                 >
-                  <span className="truncate">
-                    {conv.title || "Untitled"}
-                  </span>
+                  <span className="truncate">{conv.title || "Untitled"}</span>
                   <button
                     onClick={(e) => handleDelete(e, conv.id)}
-                    className="ml-1 hidden shrink-0 rounded p-0.5 text-[#484f58] hover:text-[#f85149] group-hover:block"
+                    className="ml-1 hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:block"
                     title="Delete"
                   >
-                    ×
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </Link>
               ))}
             </div>
-          </div>
+          </ScrollArea>
         </div>
       )}
 
-      {/* Main Content */}
       <div className="flex-1">
         <Outlet />
       </div>

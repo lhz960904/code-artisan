@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { sendMessage } from "@/lib/api";
+import { useSendMessage } from "@/lib/apis";
 import { useConversationStream } from "@/hooks/use-conversation-stream";
 import { ToolCallCard } from "@/components/chat/tool-call-card";
 import { MarkdownRenderer } from "@/components/common/markdown-renderer";
@@ -13,7 +13,7 @@ interface ChatPanelProps {
 export function ChatPanel({ conversationId }: ChatPanelProps) {
   const { messages, streamingText, streamingThinking } = useConversationStream(conversationId);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
+  const sendMsg = useSendMessage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const processedRef = useRef(new Set<string>());
   const { updateFile, openFile, appendTerminal, setPreviewUrl, loadSnapshots } =
@@ -82,20 +82,11 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
         (p) => p.type === "tool-call" && p.state === "call" && !p.approval,
       ));
 
-  async function handleSend() {
+  function handleSend() {
     const content = input.trim();
-    if (!content || sending) return;
-
+    if (!content || sendMsg.isPending) return;
     setInput("");
-    setSending(true);
-
-    try {
-      await sendMessage(conversationId, content);
-    } catch (err) {
-      console.error("Failed to send message:", err);
-    } finally {
-      setSending(false);
-    }
+    sendMsg.mutate({ conversationId, content });
   }
 
   return (
@@ -154,7 +145,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
           />
           <button
             type="submit"
-            disabled={sending || isAgentRunning || !input.trim()}
+            disabled={sendMsg.isPending || isAgentRunning || !input.trim()}
             className="rounded-md bg-[#238636] px-4 py-2 text-sm font-medium text-white hover:bg-[#2ea043] disabled:opacity-50"
           >
             Send

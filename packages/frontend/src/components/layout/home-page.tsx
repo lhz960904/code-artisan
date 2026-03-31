@@ -1,35 +1,29 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { createConversation, sendMessage } from "@/lib/api";
+import { useConversationCreate, useSendMessage } from "@/lib/apis";
 
 export function HomePage() {
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const navigate = useNavigate();
+  const createConv = useConversationCreate();
+  const sendMsg = useSendMessage();
 
   async function handleSubmit() {
     const content = input.trim();
-    if (!content || sending) return;
+    if (!content || createConv.isPending) return;
 
-    setSending(true);
-    try {
-      const conv = await createConversation();
-      // Navigate first so SSE connects before agent starts emitting events
-      navigate({ to: "/chat/$conversationId", params: { conversationId: conv.id } });
-      sendMessage(conv.id, content).catch(console.error);
-    } catch (err) {
-      console.error("Failed to start conversation:", err);
-      setSending(false);
-    }
+    const conv = await createConv.mutateAsync();
+    navigate({ to: "/chat/$conversationId", params: { conversationId: conv.id } });
+    sendMsg.mutate({ conversationId: conv.id, content });
   }
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
-      <h1 className="mb-8 text-3xl font-semibold text-[#e6edf3]">
+      <h1 className="mb-8 text-3xl font-semibold text-foreground">
         What do you want to build?
       </h1>
       <div className="w-full max-w-2xl">
-        <div className="rounded-xl border border-[#30363d] bg-[#161b22] p-1">
+        <div className="rounded-xl border border-border bg-card p-1">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -41,18 +35,18 @@ export function HomePage() {
             }}
             placeholder="Describe your project..."
             rows={3}
-            className="w-full resize-none rounded-lg bg-transparent px-4 py-3 text-sm text-[#e6edf3] placeholder:text-[#484f58] outline-none"
+            className="w-full resize-none rounded-lg bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
           <div className="flex items-center justify-between px-3 pb-2">
-            <div className="text-xs text-[#484f58]">
+            <div className="text-xs text-muted-foreground">
               Shift+Enter for new line
             </div>
             <button
               onClick={handleSubmit}
-              disabled={sending || !input.trim()}
-              className="rounded-md bg-[#238636] px-4 py-1.5 text-sm font-medium text-white hover:bg-[#2ea043] disabled:opacity-50"
+              disabled={createConv.isPending || !input.trim()}
+              className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {sending ? "Starting..." : "Start"}
+              {createConv.isPending ? "Starting..." : "Start"}
             </button>
           </div>
         </div>

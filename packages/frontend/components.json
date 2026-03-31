@@ -16,12 +16,5 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "resolvedPaths": {
-    "components": "src/components",
-    "utils": "src/lib/utils.ts",
-    "ui": "src/components/ui",
-    "lib": "src/lib",
-    "hooks": "src/hooks"
-  },
   "iconLibrary": "lucide"
 }

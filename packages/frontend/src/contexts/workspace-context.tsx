@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { getFileSnapshots } from "@/lib/api";
+import { fetchFileSnapshots } from "@/lib/apis";
 
 interface TerminalEntry {
   command: string;
@@ -68,7 +68,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadSnapshots = useCallback(async (conversationId: string) => {
-    const snapshots = await getFileSnapshots(conversationId);
+    const snapshots = await fetchFileSnapshots(conversationId);
     const fileMap = new Map<string, string>();
     for (const s of snapshots) {
       fileMap.set(s.path, s.content);
