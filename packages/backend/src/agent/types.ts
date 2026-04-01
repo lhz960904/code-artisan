@@ -37,18 +37,10 @@ export interface LLMResponse {
   messageId?: string;
 }
 
-/** streaming callbacks */
-export interface StreamCallbacks {
-  onTextDelta?: (text: string) => void;
-  onThinkingDelta?: (text: string) => void;
-  onToolCallStart?: (toolCall: ToolCall) => void;
-  onToolCallDelta?: (toolCallId: string, argsDelta: string) => void;
-}
-
 /** LLM Provider interface */
 export interface LLMProvider {
-  /** streaming chat */
-  chat(messages: Message[], tools: ToolDefinition[], systemPrompt: string, callbacks: StreamCallbacks): Promise<LLMResponse>;
+  /** streaming chat — provider emits typed StreamData events directly */
+  chat(messages: Message[], tools: ToolDefinition[], systemPrompt: string, emitStream: (data: StreamData) => void, messageId: string): Promise<LLMResponse>;
 
   /** simple text generation (lightweight tasks like title generation) */
   generateText(prompt: string): Promise<string>;

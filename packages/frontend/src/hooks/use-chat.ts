@@ -85,18 +85,9 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
 
           case 'part': {
             const { messageId, role, part } = event;
-            setStatus("streaming");
-            setMessages((prev) => {
-              const base = prev.filter((m) => !m.id.startsWith("opt-"));
-              const existing = base.find((m) => m.id === messageId);
-              if (existing) {
-                return base.map((m) => m.id !== messageId ? m : updateMessagePart(m, part));
-              }
-              return [
-                ...base,
-                { id: messageId, role: role ?? "assistant", parts: [part], createdAt: new Date().toISOString() } as Message,
-              ];
-            });
+            setMessages((prev) => upsertMessage(prev, messageId, role ?? "assistant",
+              (parts) => updateMessagePart({ id: messageId, role: role ?? "assistant", parts, createdAt: "" } as Message, part).parts
+            ));
             break;
           }
 
@@ -106,6 +97,99 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
             setError(err);
             sendInFlightRef.current = false;
             optionsRef.current.onError?.(err);
+            break;
+          }
+
+          // ── 三段式文本 ──────────────────────────────
+          case 'text-start': {
+            setStatus("streaming");
+            setMessages((prev) => upsertMessage(prev, event.messageId, "assistant",
+              (parts) => [...parts, { type: "text" as const, text: "", status: "streaming" as const }]
+            ));
+            break;
+          }
+          case 'text-delta': {
+            const { messageId, delta } = event;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== messageId) return m;
+              const parts = [...m.parts];
+              const idx = parts.findLastIndex((p) => p.type === "text" && "status" in p && p.status === "streaming");
+              if (idx < 0) return m;
+              const cur = parts[idx] as { type: "text"; text: string; status: string };
+              parts[idx] = { ...cur, text: cur.text + delta };
+              return { ...m, parts };
+            }));
+            break;
+          }
+          case 'text-end': {
+            const { messageId } = event;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== messageId) return m;
+              return { ...m, parts: m.parts.map((p) =>
+                p.type === "text" && "status" in p && p.status === "streaming"
+                  ? { ...p, status: "done" as const } : p
+              )};
+            }));
+            break;
+          }
+
+          // ── 三段式思考链 ─────────────────────────────
+          case 'reasoning-start': {
+            setStatus("streaming");
+            setMessages((prev) => upsertMessage(prev, event.messageId, "assistant",
+              (parts) => [...parts, { type: "thinking" as const, thinking: "", status: "streaming" as const }]
+            ));
+            break;
+          }
+          case 'reasoning-delta': {
+            const { messageId, delta } = event;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== messageId) return m;
+              const parts = [...m.parts];
+              const idx = parts.findLastIndex((p) => p.type === "thinking" && "status" in p && p.status === "streaming");
+              if (idx < 0) return m;
+              const cur = parts[idx] as { type: "thinking"; thinking: string; status: string };
+              parts[idx] = { ...cur, thinking: cur.thinking + delta };
+              return { ...m, parts };
+            }));
+            break;
+          }
+          case 'reasoning-end': {
+            const { messageId } = event;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== messageId) return m;
+              return { ...m, parts: m.parts.map((p) =>
+                p.type === "thinking" && "status" in p && p.status === "streaming"
+                  ? { ...p, status: "done" as const } : p
+              )};
+            }));
+            break;
+          }
+
+          // ── Tool 参数流式 ─────────────────────────────
+          case 'tool-input-start': {
+            const { messageId, toolCallId, toolName } = event;
+            setMessages((prev) => upsertMessage(prev, messageId, "assistant",
+              (parts) => [...parts, {
+                type: "tool-call" as const, toolCallId, toolName,
+                input: {} as Record<string, unknown>, state: "partial-call" as const,
+              }]
+            ));
+            break;
+          }
+          case 'tool-input-delta':
+            // delta accumulation is handled display-side; input is finalized at tool-input-end
+            break;
+          case 'tool-input-end': {
+            const { messageId, toolCallId, input } = event;
+            setMessages((prev) => prev.map((m) => {
+              if (m.id !== messageId) return m;
+              return { ...m, parts: m.parts.map((p) =>
+                p.type === "tool-call" && p.toolCallId === toolCallId
+                  ? { ...p, input: input as Record<string, unknown>, state: "call" as const }
+                  : p
+              )};
+            }));
             break;
           }
 
@@ -207,47 +291,14 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
 // Helpers
 // ============================================================
 
-/** Update or append a part within a message */
+/**
+ * Update or append a non-streaming part within a message.
+ * Streaming text/thinking are handled via three-phase events (text-start/delta/end etc.)
+ * so this only handles: tool-call state updates, user text parts, error parts, step-end parts.
+ */
 function updateMessagePart(msg: Message, part: MessagePart): Message {
-  let parts = [...msg.parts];
+  const parts = [...msg.parts];
 
-  // When text starts streaming, transition any streaming thinking to done
-  if (part.type === "text") {
-    parts = parts.map((p) =>
-      p.type === "thinking" && "status" in p && p.status === "streaming"
-        ? { ...p, status: "done" as const }
-        : p,
-    );
-  }
-
-  // Streaming text/thinking: find existing streaming part of same type → replace
-  if (
-    (part.type === "text" && part.status === "streaming") ||
-    (part.type === "thinking" && part.status === "streaming")
-  ) {
-    const idx = parts.findIndex(
-      (p) => p.type === part.type && "status" in p && p.status === "streaming",
-    );
-    if (idx >= 0) {
-      parts[idx] = part;
-      return { ...msg, parts };
-    }
-    return { ...msg, parts: [...parts, part] };
-  }
-
-  // Persisted text/thinking (no status): replace streaming part of same type
-  if (part.type === "text" || part.type === "thinking") {
-    const streamingIdx = parts.findIndex(
-      (p) => p.type === part.type && "status" in p && p.status === "streaming",
-    );
-    if (streamingIdx >= 0) {
-      parts[streamingIdx] = part;
-      return { ...msg, parts };
-    }
-    return { ...msg, parts: [...parts, part] };
-  }
-
-  // Tool call: update by toolCallId
   if (part.type === "tool-call") {
     const idx = parts.findIndex(
       (p) => p.type === "tool-call" && p.toolCallId === part.toolCallId,
@@ -258,7 +309,24 @@ function updateMessagePart(msg: Message, part: MessagePart): Message {
     }
   }
 
-  // Default: append
   return { ...msg, parts: [...parts, part] };
+}
+
+/**
+ * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
+ * Strips optimistic messages on first real event.
+ */
+function upsertMessage(
+  prev: Message[],
+  messageId: string,
+  role: Message["role"],
+  update: (parts: MessagePart[]) => MessagePart[],
+): Message[] {
+  const base = prev.filter((m) => !m.id.startsWith("opt-"));
+  const existing = base.find((m) => m.id === messageId);
+  if (existing) {
+    return base.map((m) => m.id !== messageId ? m : { ...m, parts: update(m.parts) });
+  }
+  return [...base, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
 }
 

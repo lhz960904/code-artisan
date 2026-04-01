@@ -162,27 +162,12 @@ export class Agent {
 
   private async callModel(runtime: AgentRuntime): Promise<LLMResponse> {
     const msgId = `stream_${Date.now()}`;
-
     return this.provider.chat(
       runtime.messages,
       toolRegistry.toToolDefinitions(),
       buildSystemPrompt(),
-      {
-        onTextDelta: (text) => {
-          runtime.emitStream({
-            type: 'part',
-            messageId: msgId,
-            part: { type: "text", text, status: "streaming" },
-          });
-        },
-        onThinkingDelta: (thinking) => {
-          runtime.emitStream({
-            type: 'part',
-            messageId: msgId,
-            part: { type: "thinking", thinking, status: "streaming" },
-          });
-        },
-      },
+      runtime.emitStream,
+      msgId,
     );
   }
 

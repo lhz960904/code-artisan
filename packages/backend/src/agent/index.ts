@@ -7,7 +7,6 @@ export type {
   LLMResponse,
   ToolCall,
   ToolDefinition,
-  StreamCallbacks,
 } from "./types.js";
 export { AnthropicProvider } from "./providers/anthropic/index.js";
 

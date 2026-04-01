@@ -83,12 +83,27 @@ export interface Message {
 export type FinishReason = 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'error' | 'abort';
 
 export type StreamData =
-  // ── 消息内容 ───────────────────────────────────
+  // ── 非流式消息内容（tool状态、user消息、error part）──
   | { type: 'part'; messageId: string; role?: MessageRole; part: MessagePart }
 
+  // ── 三段式文本 ─────────────────────────────────
+  | { type: 'text-start';     messageId: string; blockId: string }
+  | { type: 'text-delta';     messageId: string; blockId: string; delta: string }
+  | { type: 'text-end';       messageId: string; blockId: string }
+
+  // ── 三段式思考链 ───────────────────────────────
+  | { type: 'reasoning-start'; messageId: string; blockId: string }
+  | { type: 'reasoning-delta'; messageId: string; blockId: string; delta: string }
+  | { type: 'reasoning-end';   messageId: string; blockId: string }
+
+  // ── Tool 参数流式 ──────────────────────────────
+  | { type: 'tool-input-start'; messageId: string; toolCallId: string; toolName: string }
+  | { type: 'tool-input-delta'; messageId: string; toolCallId: string; delta: string }
+  | { type: 'tool-input-end';   messageId: string; toolCallId: string; input: unknown }
+
   // ── 生命周期 ───────────────────────────────────
-  | { type: 'step-start'; stepIndex: number }
-  | { type: 'step-finish'; stepIndex: number; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
+  | { type: 'step-start';   stepIndex: number }
+  | { type: 'step-finish';  stepIndex: number; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
   | { type: 'stream-finish' }
 
   // ── 错误与控制 ─────────────────────────────────
