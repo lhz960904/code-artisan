@@ -1,131 +1,137 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../../../env.js";
-import type { LLMProvider, LLMResponse, ProviderStream, ThinkingBlock, ToolCall, ToolDefinition } from "../../types.js";
-import type { Message, MessageRole, StreamData } from "@code-artisan/shared";
+import type { LLMProvider, ToolDefinition, MessageStreamParams, GenerateTextParams } from "../../types.js";
+import type { Message, MessageStreamEvent, FinishReason } from "@code-artisan/shared";
 
 interface AnthropicProviderOptions {
   apiKey?: string;
-  model?: string;
-  lightModel?: string;
+  client?: unknown;
   maxTokens?: number;
   thinking?: boolean;
   thinkingBudget?: number;
 }
 
+interface BlockState {
+  type: string;
+  id: string;
+  toolName: string;
+  signature: string;
+}
+
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
-  private model: string;
-  private lightModel: string;
   private maxTokens: number;
   private thinking: boolean;
   private thinkingBudget: number;
 
   constructor(options?: AnthropicProviderOptions) {
-    this.client = new Anthropic({ apiKey: options?.apiKey ?? env.ANTHROPIC_API_KEY });
-    this.model = options?.model ?? "claude-sonnet-4-20250514";
-    this.lightModel = options?.lightModel ?? "claude-haiku-4-5-20251001";
+    this.client = (options?.client as Anthropic) ?? new Anthropic({ apiKey: options?.apiKey ?? env.ANTHROPIC_API_KEY });
     this.maxTokens = options?.maxTokens ?? 16384;
     this.thinking = options?.thinking ?? true;
     this.thinkingBudget = options?.thinkingBudget ?? 10000;
   }
 
-  stream(messages: Message[], tools: ToolDefinition[], systemPrompt: string, messageId: string): ProviderStream {
-    const params: Anthropic.Messages.MessageStreamParams = {
-      model: this.model,
+  async *stream(params: MessageStreamParams): AsyncGenerator<MessageStreamEvent> {
+    const anthropicParams: Anthropic.Messages.MessageStreamParams = {
+      model: params.model,
       max_tokens: this.maxTokens,
-      system: systemPrompt,
-      tools: toAnthropicTools(tools),
-      messages: toAnthropicMessages(messages),
+      system: params.system,
+      tools: toAnthropicTools(params.tools),
+      messages: toAnthropicMessages(params.messages),
     };
     if (this.thinking) {
-      params.thinking = { type: "enabled", budget_tokens: this.thinkingBudget };
+      anthropicParams.thinking = { type: "enabled", budget_tokens: this.thinkingBudget };
     }
 
-    const anthropicStream = this.client.messages.stream(params);
+    const stream = this.client.messages.stream(anthropicParams);
+    let inputTokens = 0
+    let lastToolCallId = ''
+    let lastToolName = ''
+    let lastThinkingSignature = ''
+    let lastEventType: "text" | "thinking" | "tool_use" | undefined = undefined
+    let lastText = ''
+    let lastThinking = ''
+    let lastToolInput = ''
 
-    // Queue-based bridge: event emitter → async iterable
-    const buf: StreamData[] = [];
-    let finished = false;
-    let wake: (() => void) | null = null;
-    const push = (data: StreamData) => { buf.push(data); wake?.(); wake = null; };
+    try {
+      for await (const event of stream) {
+        if (event.type === "message_start") {
+          inputTokens = event.message?.usage?.input_tokens ?? 0;
+          yield { type: "step-start" };
+        }
+        if (event.type === "content_block_start") {
+          const index = event.index;
+          const id = index.toString();
+          const contentBlock = event.content_block;
+          if (contentBlock.type === "text") {
+            lastEventType = "text";
+            yield { type: "text-start", id };
+          } else if (contentBlock.type === "thinking") {
+            lastEventType = "thinking";
+            yield { type: "thinking-start", id };
+          } else if (contentBlock.type === "tool_use") {
+            lastEventType = "tool_use";
+            lastToolCallId = contentBlock.id;
+            lastToolName = contentBlock.name;
+            yield { type: "tool-input-start", toolCallId: contentBlock.id, toolName: contentBlock.name };
+          }
+        }
 
-    // Per-block metadata needed for content_block_stop
-    const blockTypes = new Map<number, string>();
-    const blockIds   = new Map<number, string>(); // index → blockId or toolCallId
+        if (event.type === "content_block_delta") {
+          const index = event.index;
+          const id = index.toString();
+          const delta = event.delta;
+          if (delta.type === "text_delta") {
+            lastText += delta.text;
+            yield { type: "text-delta", id, delta: delta.text };
+          } else if (delta.type === "thinking_delta") {
+            lastThinking += delta.thinking;
+            yield { type: "thinking-delta", id, delta: delta.thinking };
+          } else if (delta.type === "input_json_delta") {
+            lastToolInput += delta.partial_json;
+            yield { type: "tool-input-delta", toolCallId: lastToolCallId, toolName: lastToolName, delta: delta.partial_json };
+          } else if (delta.type === "signature_delta") {
+            lastThinkingSignature = delta.signature;
+          }
+        }
+        if (event.type === "content_block_stop") {
+          const index = event.index;
+          const id = index.toString();
+          if (lastEventType === "text") {
+            yield { type: "text-end", id, text: lastText };
+          } else if (lastEventType === "thinking") {
+            yield { type: "thinking-end", id, signature: lastThinkingSignature, text: lastThinking };
+          } else if (lastEventType === "tool_use") {
+            yield { type: "tool-input-end", toolCallId: lastToolCallId, toolName: lastToolName, text: lastToolInput };
+          }
+          lastEventType = undefined;
+          lastToolCallId = '';
+          lastToolName = '';
+          lastThinkingSignature = '';
+        }
 
-    anthropicStream.on("streamEvent", (event) => {
-      if (event.type === "content_block_start") {
-        const { index, content_block } = event;
-        blockTypes.set(index, content_block.type);
-        if (content_block.type === "text") {
-          const blockId = `b${index}`;
-          blockIds.set(index, blockId);
-          push({ type: "text-start", messageId, blockId });
-        } else if (content_block.type === "thinking") {
-          const blockId = `b${index}`;
-          blockIds.set(index, blockId);
-          push({ type: "reasoning-start", messageId, blockId });
-        } else if (content_block.type === "tool_use") {
-          blockIds.set(index, content_block.id);
-          push({ type: "tool-input-start", messageId, toolCallId: content_block.id, toolName: content_block.name });
+        if (event.type === "message_delta") {
+          const delta = event.delta 
+          yield {
+            type: "step-finish",
+            finishReason: mapStopReason(delta?.stop_reason),
+            usage: { inputTokens, outputTokens: event.usage.output_tokens ?? 0 },
+          };
         }
       }
-
-      if (event.type === "content_block_delta") {
-        const { index, delta } = event;
-        const id = blockIds.get(index);
-        if (!id) return;
-        if (delta.type === "text_delta") {
-          push({ type: "text-delta", messageId, blockId: id, delta: delta.text });
-        } else if (delta.type === "thinking_delta") {
-          push({ type: "reasoning-delta", messageId, blockId: id, delta: delta.thinking });
-        } else if (delta.type === "input_json_delta") {
-          push({ type: "tool-input-delta", messageId, toolCallId: id, delta: delta.partial_json });
-        }
-      }
-
-      if (event.type === "content_block_stop") {
-        const { index } = event;
-        const id = blockIds.get(index);
-        const blockType = blockTypes.get(index);
-        if (!id || !blockType) return;
-        if (blockType === "text") push({ type: "text-end", messageId, blockId: id });
-        else if (blockType === "thinking") push({ type: "reasoning-end", messageId, blockId: id });
-        // tool_use: tool-input-end emitted after finalMessage (needs complete input)
-      }
-    });
-
-    // Resolves after pushing tool-input-end events + marking stream as finished
-    const response = anthropicStream.finalMessage().then((raw) => {
-      for (const block of raw.content) {
-        if (block.type === "tool_use") {
-          push({ type: "tool-input-end", messageId, toolCallId: block.id, input: block.input });
-        }
-      }
-      finished = true;
-      wake?.(); wake = null;
-      return parseResponse(raw);
-    });
-
-    response.catch(() => { finished = true; wake?.(); wake = null; });
-
-    async function* eventGen(): AsyncGenerator<StreamData> {
-      while (true) {
-        while (buf.length) yield buf.shift()!;
-        if (finished) break;
-        await new Promise<void>((r) => { wake = r; });
-      }
-      while (buf.length) yield buf.shift()!; // drain tail
+    } catch (err) {
+      yield { type: "error", error: err instanceof Error ? err.message : String(err) };
     }
 
-    return { events: eventGen(), response };
+    yield { type: "stream-finish" };
   }
 
-  async generateText(prompt: string): Promise<string> {
+  async generateText(params: GenerateTextParams): Promise<string> {
     const response = await this.client.messages.create({
-      model: this.lightModel,
+      model: params.model,
       max_tokens: 100,
-      messages: [{ role: "user", content: prompt }],
+      system: params.system,
+      messages: toAnthropicMessages(params.messages),
     });
 
     return response.content
@@ -140,39 +146,14 @@ export class AnthropicProvider implements LLMProvider {
 // Internal: Anthropic-specific conversions
 // ============================================================
 
-function parseResponse(response: Anthropic.Message): LLMResponse {
-  const toolBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-
-  const textContent = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
-
-  const thinkingBlocks: ThinkingBlock[] = response.content
-    .filter((b) => b.type === "thinking")
-    .map((b) => {
-      const tb = b as { type: "thinking"; thinking: string; signature: string };
-      return { thinking: tb.thinking, signature: tb.signature };
-    });
-
-  const toolCalls: ToolCall[] = toolBlocks.map((b) => ({
-    id: b.id,
-    name: b.name,
-    input: b.input as Record<string, unknown>,
-  }));
-
-  return {
-    textContent,
-    thinkingBlocks,
-    toolCalls,
-    stopReason: response.stop_reason ?? "end_turn",
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
-    model: response.model,
-    messageId: response.id,
-  };
+function mapStopReason(stopReason: string | null | undefined): FinishReason {
+  switch (stopReason) {
+    case "end_turn": return "stop";
+    case "stop_sequence": return "stop";
+    case "tool_use": return "tool_calls";
+    case "max_tokens": return "max_tokens";
+    default: return stopReason as FinishReason;
+  }
 }
 
 /**
@@ -185,9 +166,8 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    const role = msg.role as MessageRole;
 
-    if (role === "user") {
+    if (msg.role === "user") {
       if (msg.metadata?.confirmResponse) continue;
       const text = msg.parts
         .filter((p) => p.type === "text")
@@ -198,7 +178,7 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
       }
     }
 
-    if (role === "assistant") {
+    if (msg.role === "assistant") {
       const content: Anthropic.ContentBlockParam[] = [];
       for (const part of msg.parts) {
         if (part.type === "text") {
@@ -213,20 +193,17 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
         }
       }
 
-      // Look ahead: collect ALL consecutive tool messages
       const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
       let j = i + 1;
       while (j < messages.length && messages[j].role === "tool") {
         for (const part of messages[j].parts) {
           if (part.type !== "tool-call") continue;
-          // Append tool_use to assistant content
           content.push({
             type: "tool_use",
             id: part.toolCallId,
             name: part.toolName,
             input: part.input,
           });
-          // Collect tool_result
           if (part.state === "result" || part.state === "error") {
             toolResultBlocks.push({
               type: "tool_result",
@@ -242,26 +219,21 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
         result.push({ role: "assistant", content });
       }
 
-      // All tool_results in a single user message
       if (toolResultBlocks.length > 0) {
         result.push({ role: "user", content: toolResultBlocks });
       }
 
-      // Skip processed tool messages
       i = j - 1;
     }
-
-    // Standalone tool messages (no preceding assistant) — shouldn't happen normally
-    // but handle gracefully by skipping (they'll be orphaned)
   }
 
   return result;
 }
 
-function toAnthropicTools(tools: ToolDefinition[]): Anthropic.Tool[] {
-  return tools.map((t) => ({
+function toAnthropicTools(tools?: ToolDefinition[]): Anthropic.Tool[] {
+  return tools?.map((t) => ({
     name: t.name,
-    description: t.description,
-    input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-  }));
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+    })) ?? [];
 }

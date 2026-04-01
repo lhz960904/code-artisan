@@ -4,6 +4,7 @@ import type { Message, MessagePart } from "@code-artisan/shared";
 const DEFAULT_TOKEN_THRESHOLD = 150_000;
 const SUMMARY_OUTPUT_LIMIT = 500;
 const SERIALIZE_LIMIT = 80_000;
+const LIGHT_MODEL = "claude-haiku-4-5-20251001";
 
 /**
  * L2: AutoCompact — when estimated tokens exceed threshold, generate LLM summary
@@ -18,20 +19,26 @@ export class AutoCompactMiddleware implements AgentMiddleware {
   }
 
   async beforeModel(runtime: AgentRuntime): Promise<void> {
-    // Step 1: Filter to messages after latest compaction marker
     this.filterFromCompactionPoint(runtime);
 
-    // Step 2: Estimate tokens
     const estimated = estimateTokens(runtime.messages);
     if (estimated < this.tokenThreshold) return;
 
     console.log(`[auto-compact] Estimated ${estimated} tokens (threshold: ${this.tokenThreshold}), compacting...`);
 
-    // Step 3: Generate summary
     const text = serializeForSummary(runtime.messages);
-    const summary = await runtime.provider.generateText(buildCompactPrompt(text));
+    const summary = await runtime.provider.generateText({
+      model: LIGHT_MODEL,
+      system: "You are a conversation summarizer for coding agent sessions.",
+      messages: [{
+        id: "compact-prompt",
+        role: "user",
+        parts: [{ type: "text", text: buildCompactPrompt(text) }],
+        createdAt: new Date().toISOString(),
+      }],
+      tools: [],
+    });
 
-    // Step 4: Persist compaction marker + ack to DB
     const compactMsg = await runtime.store.addMessage("user", [{ type: "text", text: `[Conversation Summary]\n\n${summary}` }], {
       compacted: true,
       originalMessageCount: runtime.messages.length,
@@ -40,7 +47,6 @@ export class AutoCompactMiddleware implements AgentMiddleware {
 
     const ackMsg = await runtime.store.addMessage("assistant", [{ type: "text", text: "Understood. Continuing with context from the summary." }]);
 
-    // Step 5: Replace in-memory messages
     runtime.messages.length = 0;
     runtime.messages.push(
       {
@@ -60,7 +66,6 @@ export class AutoCompactMiddleware implements AgentMiddleware {
   }
 
   private filterFromCompactionPoint(runtime: AgentRuntime): void {
-    // Find last compaction marker
     let lastCompactIdx = -1;
     for (let i = runtime.messages.length - 1; i >= 0; i--) {
       if (runtime.messages[i].metadata?.compacted) {
@@ -99,7 +104,6 @@ function serializeForSummary(messages: Message[]): string {
       } else if (part.type === "error") {
         lines.push(`[ERROR] ${part.message}`);
       }
-      // Skip thinking, step-start, step-end, image, document
     }
   }
 

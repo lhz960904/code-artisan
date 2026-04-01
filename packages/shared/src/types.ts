@@ -80,34 +80,34 @@ export interface Message {
 // SSE Stream - discriminated union of all event types
 // ============================================================
 
-export type FinishReason = 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'error' | 'abort';
+export type FinishReason = 'stop' | 'tool_calls' | 'max_tokens' | 'error' | 'abort';
 
-export type StreamData =
-  // ── 非流式消息内容（tool状态、user消息、error part）──
-  | { type: 'part'; messageId: string; role?: MessageRole; part: MessagePart }
+export type MessageStreamEvent =
+  // ── Agent 层：非流式消息内容（tool 状态、user 消息、error part）──
+  | { type: 'part'; role?: MessageRole; part: MessagePart }
 
-  // ── 三段式文本 ─────────────────────────────────
-  | { type: 'text-start';     messageId: string; blockId: string }
-  | { type: 'text-delta';     messageId: string; blockId: string; delta: string }
-  | { type: 'text-end';       messageId: string; blockId: string }
+  // ── Provider 层：三段式文本 ──────────────────────
+  | { type: 'text-start'; id: string }
+  | { type: 'text-delta'; id: string; delta: string }
+  | { type: 'text-end'; id: string, text: string }
 
-  // ── 三段式思考链 ───────────────────────────────
-  | { type: 'reasoning-start'; messageId: string; blockId: string }
-  | { type: 'reasoning-delta'; messageId: string; blockId: string; delta: string }
-  | { type: 'reasoning-end';   messageId: string; blockId: string }
+  // ── Provider 层：三段式思考链 ────────────────────
+  | { type: 'thinking-start'; id: string }
+  | { type: 'thinking-delta'; id: string; delta: string }
+  | { type: 'thinking-end';  id: string, signature: string, text: string }
 
-  // ── Tool 参数流式 ──────────────────────────────
-  | { type: 'tool-input-start'; messageId: string; toolCallId: string; toolName: string }
-  | { type: 'tool-input-delta'; messageId: string; toolCallId: string; delta: string }
-  | { type: 'tool-input-end';   messageId: string; toolCallId: string; input: unknown }
+  // ── Provider 层：Tool 参数流式 ───────────────────
+  | { type: 'tool-input-start'; toolCallId: string; toolName: string }
+  | { type: 'tool-input-delta'; toolCallId: string; toolName: string, delta: string }
+  | { type: 'tool-input-end'; toolCallId: string; toolName: string, text: string }
 
   // ── 生命周期 ───────────────────────────────────
-  | { type: 'step-start';   stepIndex: number }
-  | { type: 'step-finish';  stepIndex: number; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
+  | { type: 'step-start'; }
+  | { type: 'step-finish'; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
   | { type: 'stream-finish' }
 
   // ── 错误与控制 ─────────────────────────────────
-  | { type: 'error'; error: string; code?: string }
+  | { type: 'error'; error: string; }
   | { type: 'abort' }
   | { type: 'ping' };
 

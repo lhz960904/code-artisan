@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Agent } from "../agent.js";
 import type { LLMProvider, LLMResponse, AgentMiddleware } from "../types.js";
-import type { Message, MessagePart } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent, FinishReason } from "@code-artisan/shared";
 
 // --- Mocks ---
 
-// Mock DB
 const mockDbSelect = vi.fn();
 const mockDbUpdate = vi.fn();
 vi.mock("../../db/index.js", () => ({
@@ -27,7 +26,6 @@ vi.mock("../../db/schema.js", () => ({
 }));
 vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
 
-// Mock MessageStore
 const storedMessages: Message[] = [];
 const mockAddMessage = vi.fn().mockImplementation(async (role: string, parts: MessagePart[]) => {
   const msg: Message = {
@@ -54,7 +52,6 @@ vi.mock("../../services/message-store.js", () => {
   };
 });
 
-// Mock EventBus
 vi.mock("../../services/event-bus.js", () => ({
   eventBus: {
     emitStream: vi.fn(),
@@ -62,7 +59,6 @@ vi.mock("../../services/event-bus.js", () => ({
   },
 }));
 
-// Mock Sandbox
 vi.mock("../../sandbox/index.js", () => ({
   getSandboxProvider: vi.fn().mockReturnValue({
     acquire: vi.fn().mockResolvedValue({
@@ -73,7 +69,6 @@ vi.mock("../../sandbox/index.js", () => ({
   }),
 }));
 
-// Mock ToolRegistry
 vi.mock("../../tools/index.js", () => ({
   toolRegistry: {
     get: vi.fn().mockReturnValue({
@@ -89,22 +84,28 @@ vi.mock("../../tools/index.js", () => ({
 function makeProvider(responses: LLMResponse[]): LLMProvider {
   let callIndex = 0;
   return {
-    stream: vi.fn().mockImplementation((_msgs: unknown, _tools: unknown, _prompt: unknown, messageId: string) => {
+    stream: vi.fn().mockImplementation(() => {
       const response = responses[callIndex++];
-
-      async function* eventGen() {
+      async function* gen(): AsyncGenerator<MessageStreamEvent> {
+        yield { type: "step-start" };
         if (response.textContent) {
-          yield { type: "text-start" as const, messageId, blockId: "b0" };
-          yield { type: "text-delta" as const, messageId, blockId: "b0", delta: response.textContent };
-          yield { type: "text-end" as const, messageId, blockId: "b0" };
+          yield { type: "text-start", id: "0" };
+          yield { type: "text-delta", id: "0", delta: response.textContent };
+          yield { type: "text-end", id: "0", text: response.textContent };
+        }
+        for (const tb of response.thinkingBlocks) {
+          yield { type: "thinking-start", id: "0" };
+          yield { type: "thinking-end", id: "0", text: tb.thinking, signature: tb.signature ?? "" };
         }
         for (const tc of response.toolCalls) {
-          yield { type: "tool-input-start" as const, messageId, toolCallId: tc.id, toolName: tc.name };
-          yield { type: "tool-input-end" as const, messageId, toolCallId: tc.id, input: tc.input };
+          yield { type: "tool-input-start", toolCallId: tc.id, toolName: tc.name };
+          yield { type: "tool-input-end", toolCallId: tc.id, toolName: tc.name, text: JSON.stringify(tc.input) };
         }
+        const fr: FinishReason = response.stopReason === "tool_use" ? "tool_calls" : "stop";
+        yield { type: "step-finish", finishReason: fr, usage: response.usage };
+        yield { type: "stream-finish" };
       }
-
-      return { events: eventGen(), response: Promise.resolve(response) };
+      return gen();
     }),
     generateText: vi.fn().mockResolvedValue("Generated Title"),
   };
@@ -148,17 +149,14 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "hi" });
 
-    // Should store: user msg + assistant msg
     expect(mockAddMessage).toHaveBeenCalledTimes(2);
     expect(mockAddMessage.mock.calls[0][0]).toBe("user");
     expect(mockAddMessage.mock.calls[1][0]).toBe("assistant");
 
-    // Assistant msg should have text + step-end parts
     const assistantParts = mockAddMessage.mock.calls[1][1] as MessagePart[];
     expect(assistantParts.some((p) => p.type === "text")).toBe(true);
     expect(assistantParts.some((p) => p.type === "step-end")).toBe(true);
 
-    // Provider called once
     expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 
@@ -171,22 +169,18 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "run echo" });
 
-    // user msg + assistant msg (text+step-end) + tool msg (call→result) + assistant msg (final)
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "assistant"]);
 
-    // Tool message created (state starts as "call", then updated in-place to "result")
     const toolParts = mockAddMessage.mock.calls[2][1] as MessagePart[];
     expect(toolParts[0]).toMatchObject({ type: "tool-call", toolName: "bash" });
 
-    // Tool state updated via updatePart
     expect(mockUpdatePart).toHaveBeenCalledWith(
       expect.any(String),
       0,
       expect.objectContaining({ state: "result", output: "tool output" }),
     );
 
-    // Provider called twice (tool response + final text)
     expect(provider.stream).toHaveBeenCalledTimes(2);
   });
 
@@ -202,11 +196,9 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "write and run" });
 
-    // user + assistant + tool1 + tool2 + assistant(final)
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "tool", "assistant"]);
 
-    // Both tools should be updated
     expect(mockUpdatePart).toHaveBeenCalledTimes(2);
   });
 
@@ -220,17 +212,14 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "write and run python" });
 
-    // Provider called 3 times
     expect(provider.stream).toHaveBeenCalledTimes(3);
 
-    // Final message should be text
     const lastCall = mockAddMessage.mock.calls[mockAddMessage.mock.calls.length - 1];
     expect(lastCall[0]).toBe("assistant");
     expect((lastCall[1] as MessagePart[]).some((p) => p.type === "text" && p.text === "Output is 1.")).toBe(true);
   });
 
   it("respects maxIterations", async () => {
-    // Provider always returns tool calls — should stop at maxIterations
     const infiniteTools = Array(20).fill(
       toolResponse([{ name: "bash", input: { command: "loop" } }]),
     );
@@ -239,7 +228,6 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "loop", maxIterations: 3 });
 
-    // Should call provider exactly 3 times then stop
     expect(provider.stream).toHaveBeenCalledTimes(3);
   });
 
@@ -259,12 +247,10 @@ describe("Agent", () => {
     const agent = new Agent(provider, [stopMiddleware]);
     await agent.run({ conversationId: "conv-1", userMessage: "test" });
 
-    // Provider called once, then stopped by middleware
     expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 
   it("recovers from tool execution error via Promise.allSettled", async () => {
-    // Make tool throw
     const { toolRegistry } = await import("../../tools/index.js");
     (toolRegistry.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       call: vi.fn().mockRejectedValue(new Error("sandbox crashed")),
@@ -278,19 +264,16 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "do something" });
 
-    // Promise.allSettled catches rejection → tool state updated to "error"
     expect(mockUpdatePart).toHaveBeenCalledWith(
       expect.any(String),
       0,
       expect.objectContaining({ state: "error", output: expect.stringContaining("sandbox crashed") }),
     );
 
-    // Agent continues — provider called twice (error tool result → LLM sees it → text response)
     expect(provider.stream).toHaveBeenCalledTimes(2);
   });
 
   it("handles confirm mode — stops with pending approval", async () => {
-    // Return confirm mode from DB
     mockDbSelect.mockResolvedValue([{ mode: "confirm", sandboxId: null, userId: "user-1" }]);
 
     const provider = makeProvider([
@@ -300,18 +283,15 @@ describe("Agent", () => {
 
     await agent.run({ conversationId: "conv-1", userMessage: "delete everything" });
 
-    // Tool message created with state=call
     const toolCall = mockAddMessage.mock.calls.find((c) => c[0] === "tool");
     expect(toolCall).toBeDefined();
 
-    // Should update with approval=pending
     expect(mockUpdatePart).toHaveBeenCalledWith(
       expect.any(String),
       0,
       expect.objectContaining({ approval: "pending" }),
     );
 
-    // Provider called only once (stopped after tool call)
     expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 });

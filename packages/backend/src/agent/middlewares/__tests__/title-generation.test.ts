@@ -58,9 +58,8 @@ describe("TitleGenerationMiddleware", () => {
 
     await mw.afterAgent(runtime);
 
-    expect(runtime.provider.generateText).toHaveBeenCalledWith(
-      expect.stringContaining("todo app"),
-    );
+    const params = (runtime.provider.generateText as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(params.messages[0].parts[0].text).toContain("todo app");
   });
 
   it("skips if no user message", async () => {

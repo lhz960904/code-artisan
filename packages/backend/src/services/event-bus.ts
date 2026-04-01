@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import type { StreamData } from "@code-artisan/shared";
+import type { MessageStreamEvent } from "@code-artisan/shared";
 
 class ConversationEventBus {
   private emitters = new Map<string, EventEmitter>();
@@ -13,13 +13,13 @@ class ConversationEventBus {
     return this.emitters.get(conversationId)!;
   }
 
-  emitStream(conversationId: string, data: StreamData): void {
+  emitStream(conversationId: string, data: MessageStreamEvent): void {
     this.getEmitter(conversationId).emit("stream", data);
   }
 
   subscribe(
     conversationId: string,
-    handler: (data: StreamData) => void,
+    handler: (data: MessageStreamEvent) => void,
   ): () => void {
     const emitter = this.getEmitter(conversationId);
     emitter.on("stream", handler);

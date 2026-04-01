@@ -30,7 +30,6 @@ export class TokenUsageMiddleware implements AgentMiddleware {
       ]);
       runtime.emitStream({
         type: 'part',
-        messageId: msg.id,
         part: { type: "error", message: "Token quota exceeded." },
       });
     }

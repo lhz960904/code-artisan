@@ -11,9 +11,12 @@ import type {
   AgentRuntime,
   LLMProvider,
   LLMResponse,
+  ThinkingBlock,
   ToolCall,
 } from "./types.js";
-import type { FinishReason, Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent, ToolCallPart } from "@code-artisan/shared";
+
+const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
 function buildSystemPrompt(): string {
   const toolSection = toolRegistry.toPromptSection();
@@ -49,14 +52,12 @@ export class Agent {
       if (userMessage) {
         const userPart = { type: "text" as const, text: userMessage };
         const msg = await this.addMessage(runtime, "user", [userPart]);
-        this.emitPart(runtime, msg.id, "user", userPart);
+        this.emitPart(runtime, "user", userPart);
       }
 
       await this.handlePendingConfirm(runtime);
 
       for (let i = 0; i < maxIterations && !runtime.shouldStop; i++) {
-        runtime.emitStream({ type: 'step-start', stepIndex: i });
-
         await this.runHook("beforeModel", runtime);
 
         if (runtime.shouldStop) break;
@@ -72,10 +73,7 @@ export class Agent {
 
         await this.persistAssistantMessage(runtime, response, i);
 
-        const finishReason: FinishReason = response.stopReason === "tool_use" ? "tool_calls" : (response.stopReason as FinishReason) ?? "stop";
-        runtime.emitStream({ type: 'step-finish', stepIndex: i, finishReason, usage: response.usage });
-
-        if (response.stopReason !== "tool_use") break;
+        if (response.stopReason !== "tool_calls") break;
 
         try {
           await this.handleToolCalls(runtime, response.toolCalls);
@@ -84,8 +82,8 @@ export class Agent {
           console.error(`[agent] Tool execution error:`, toolErr);
           await this.runHook("onError", runtime, toolErr as Error);
           const errPart = { type: "error" as const, message: `Tool execution failed: ${String(toolErr)}` };
-          const errMsg = await this.addMessage(runtime, "assistant", [errPart]);
-          this.emitPart(runtime, errMsg.id, "assistant", errPart);
+          await this.addMessage(runtime, "assistant", [errPart]);
+          this.emitPart(runtime, "assistant", errPart);
         }
       }
 
@@ -96,8 +94,8 @@ export class Agent {
       if (runtime) {
         try {
           const errPart = { type: "error" as const, message: String(err) };
-          const errMsg = await this.addMessage(runtime, "assistant", [errPart]);
-          this.emitPart(runtime, errMsg.id, "assistant", errPart);
+          await this.addMessage(runtime, "assistant", [errPart]);
+          this.emitPart(runtime, "assistant", errPart);
         } catch {
           // persist failed, just log
         }
@@ -161,17 +159,41 @@ export class Agent {
   // --- LLM Call ---
 
   private async callModel(runtime: AgentRuntime): Promise<LLMResponse> {
-    const msgId = `stream_${Date.now()}`;
-    const { events, response } = this.provider.stream(
-      runtime.messages,
-      toolRegistry.toToolDefinitions(),
-      buildSystemPrompt(),
-      msgId,
-    );
-    for await (const event of events) {
-      runtime.emitStream(event);
+    const stream = this.provider.stream({
+      model: DEFAULT_MODEL,
+      system: buildSystemPrompt(),
+      messages: runtime.messages,
+      tools: toolRegistry.toToolDefinitions(),
+    });
+
+    let textContent = "";
+    const thinkingBlocks: ThinkingBlock[] = [];
+    const toolCalls: ToolCall[] = [];
+    let stopReason = "stop";
+    let usage = { inputTokens: 0, outputTokens: 0 };
+
+    for await (const event of stream) {
+      if (event.type !== "stream-finish") {
+        runtime.emitStream(event);
+      }
+      switch (event.type) {
+        case "thinking-end":
+          thinkingBlocks.push({ thinking: event.text, signature: event.signature });
+          break;
+        case "text-end":
+          textContent = event.text;
+          break;
+        case "tool-input-end":
+          toolCalls.push({ id: event.toolCallId, name: event.toolName, input: JSON.parse(event.text || "{}") });
+          break;
+        case "step-finish":
+          stopReason = event.finishReason;
+          usage = event.usage;
+          break;
+      }
     }
-    return response;
+
+    return { textContent, thinkingBlocks, toolCalls, stopReason, usage, model: DEFAULT_MODEL };
   }
 
   // --- Assistant Message ---
@@ -200,7 +222,6 @@ export class Agent {
   // --- Tool Execution ---
 
   private async handleToolCalls(runtime: AgentRuntime, toolCalls: ToolCall[]): Promise<void> {
-    // Create tool messages (one per tool call, state="call")
     const toolMsgIds: Array<{ msgId: string; tc: ToolCall }> = [];
     for (const tc of toolCalls) {
       const toolPart: ToolCallPart = {
@@ -211,21 +232,19 @@ export class Agent {
         state: "call",
       };
       const toolMsg = await this.addMessage(runtime, "tool", [toolPart]);
-      this.emitPart(runtime, toolMsg.id, "tool", toolPart);
+      this.emitPart(runtime, "tool", toolPart);
       toolMsgIds.push({ msgId: toolMsg.id, tc });
     }
 
-    // Re-check mode
     const [currentConv] = await db
       .select({ mode: conversations.mode })
       .from(conversations)
       .where(eq(conversations.id, runtime.conversationId));
     runtime.mode = (currentConv?.mode as "yolo" | "confirm") ?? "yolo";
 
-    // Confirm mode
     if (runtime.mode === "confirm" && toolMsgIds.length > 0) {
       await runtime.store.updatePart(toolMsgIds[0].msgId, 0, { approval: "pending" });
-      this.emitPart(runtime, toolMsgIds[0].msgId, "tool", {
+      this.emitPart(runtime, "tool", {
         type: "tool-call",
         toolCallId: toolMsgIds[0].tc.id,
         toolName: toolMsgIds[0].tc.name,
@@ -237,7 +256,6 @@ export class Agent {
       return;
     }
 
-    // Yolo mode: parallel execution
     const results = await Promise.allSettled(
       toolCalls.map((tc) => this.executeTool(runtime, tc)),
     );
@@ -251,7 +269,6 @@ export class Agent {
 
       await runtime.store.updatePart(msgId, 0, { state, output });
 
-      // Sync in-memory message so next callModel sees updated state
       const inMemoryMsg = runtime.messages.find((m) => m.id === msgId);
       if (inMemoryMsg) {
         const part = inMemoryMsg.parts[0] as ToolCallPart;
@@ -259,7 +276,7 @@ export class Agent {
         part.output = output;
       }
 
-      this.emitPart(runtime, msgId, "tool", {
+      this.emitPart(runtime, "tool", {
         type: "tool-call",
         toolCallId: tc.id,
         toolName: tc.name,
@@ -290,11 +307,11 @@ export class Agent {
       const port = Number(tc.input.port) || 3000;
       const url = runtime.sandbox.getHostUrl(port);
       const previewPart = { type: "text" as const, text: `Preview URL: ${url}` };
-      const previewMsg = await this.addMessage(runtime, "assistant", [previewPart], {
+      await this.addMessage(runtime, "assistant", [previewPart], {
         previewUrl: url,
         port,
       });
-      this.emitPart(runtime, previewMsg.id, "assistant", previewPart);
+      this.emitPart(runtime, "assistant", previewPart);
     }
   }
 
@@ -338,7 +355,7 @@ export class Agent {
         output,
         approval: "approved",
       });
-      this.emitPart(runtime, pendingToolMsg.id, "tool", {
+      this.emitPart(runtime, "tool", {
         ...pendingPart,
         state: "result",
         output,
@@ -351,7 +368,7 @@ export class Agent {
         output: "User rejected this tool call.",
         approval: "rejected",
       });
-      this.emitPart(runtime, pendingToolMsg.id, "tool", {
+      this.emitPart(runtime, "tool", {
         ...pendingPart,
         state: "error",
         output: "User rejected this tool call.",
@@ -362,7 +379,6 @@ export class Agent {
 
   // --- Helpers ---
 
-  /** Persist message to DB + update runtime.messages. Does NOT emit SSE events. */
   private async addMessage(
     runtime: AgentRuntime,
     role: Message["role"],
@@ -381,8 +397,8 @@ export class Agent {
     return msg;
   }
 
-  private emitPart(runtime: AgentRuntime, messageId: string, role: Message["role"], part: MessagePart): void {
-    runtime.emitStream({ type: 'part', messageId, role, part });
+  private emitPart(runtime: AgentRuntime, role: Message["role"], part: MessagePart): void {
+    runtime.emitStream({ type: 'part', role, part });
   }
 
   private async runHook(

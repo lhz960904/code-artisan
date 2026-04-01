@@ -1,6 +1,6 @@
 import type { Sandbox } from "../sandbox/index.js";
 import type { MessageStore } from "../services/message-store.js";
-import type { Message, StreamData } from "@code-artisan/shared";
+import type { Message, MessageStreamEvent } from "@code-artisan/shared";
 
 // ============================================================
 // LLM Provider interface
@@ -37,21 +37,22 @@ export interface LLMResponse {
   messageId?: string;
 }
 
-/** Return type of LLMProvider.stream() */
-export interface ProviderStream {
-  /** Async iterable of typed stream events; exhausted when LLM call completes */
-  events: AsyncIterable<StreamData>;
-  /** Resolves with the full LLM response once the stream is exhausted */
-  response: Promise<LLMResponse>;
+export interface GenerateTextParams {
+  model: string;
+  system: string;
+  messages: Message[];
+}
+
+export interface MessageStreamParams extends GenerateTextParams {
+  tools?: ToolDefinition[];
 }
 
 /** LLM Provider interface */
 export interface LLMProvider {
   /** Streaming chat — returns an async iterable of typed events + a response promise */
-  stream(messages: Message[], tools: ToolDefinition[], systemPrompt: string, messageId: string): ProviderStream;
-
+  stream(params: MessageStreamParams): AsyncIterable<MessageStreamEvent>;
   /** Simple text generation (lightweight tasks like title generation) */
-  generateText(prompt: string): Promise<string>;
+  generateText(params: GenerateTextParams): Promise<string>;
 }
 
 // ============================================================
@@ -67,7 +68,7 @@ export interface AgentRuntime {
   state: Map<string, unknown>;
   store: MessageStore;
   provider: LLMProvider;
-  emitStream: (data: StreamData) => void;
+  emitStream: (data: MessageStreamEvent) => void;
   usage: { inputTokens: number; outputTokens: number };
   shouldStop: boolean;
 }

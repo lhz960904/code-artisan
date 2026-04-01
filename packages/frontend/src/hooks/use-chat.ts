@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Message, MessagePart, StreamData } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent, TextPart, ThinkingPart } from "@code-artisan/shared";
 
 // ============================================================
 // Types
@@ -44,13 +44,13 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  const streamMsgIdRef = useRef(`stream_${Date.now()}`);
+
   // Sync when initialMessages loaded/changed externally (e.g. TanStack Query resolves)
   useEffect(() => {
     if (options.initialMessages && options.initialMessages.length > 0) {
       setMessages((prev) => {
-        // Don't overwrite if we have optimistic or SSE-delivered messages
         if (prev.some((m) => m.id.startsWith("opt-") || m.id.startsWith("stream_"))) return prev;
-        // Don't overwrite if we already have more messages (from SSE)
         if (prev.length > options.initialMessages!.length) return prev;
         return options.initialMessages!;
       });
@@ -66,9 +66,9 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
   // -- SSE event handler --
   const createSSEHandler = useCallback(
     () => (e: MessageEvent) => {
-      if (!e.data) return; // heartbeat ping (empty data)
+      if (!e.data) return;
       try {
-        const event = JSON.parse(e.data) as StreamData;
+        const event = JSON.parse(e.data) as MessageStreamEvent;
 
         switch (event.type) {
           case 'stream-finish': {
@@ -84,10 +84,30 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
           }
 
           case 'part': {
-            const { messageId, role, part } = event;
-            setMessages((prev) => upsertMessage(prev, messageId, role ?? "assistant",
-              (parts) => updateMessagePart({ id: messageId, role: role ?? "assistant", parts, createdAt: "" } as Message, part).parts
-            ));
+            const { role = "assistant", part } = event;
+            setMessages((prev) => {
+              const base = prev.filter((m) => !m.id.startsWith("opt-"));
+              if (part.type === "tool-call") {
+                const idx = base.findIndex((m) =>
+                  m.parts.some((p) => p.type === "tool-call" && p.toolCallId === part.toolCallId),
+                );
+                if (idx >= 0) {
+                  return base.map((m, i) => i !== idx ? m : {
+                    ...m,
+                    parts: m.parts.map((p) =>
+                      p.type === "tool-call" && p.toolCallId === part.toolCallId ? part : p
+                    ),
+                  });
+                }
+              }
+              const last = [...base].reverse().find((m) => m.role === role);
+              if (last) {
+                return base.map((m) => m.id !== last.id ? m : { ...m, parts: [...m.parts, part] });
+              }
+              return [...base, {
+                id: `part_${Date.now()}`, role, parts: [part], createdAt: new Date().toISOString(),
+              } as Message];
+            });
             break;
           }
 
@@ -100,33 +120,40 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
             break;
           }
 
+          // ── step lifecycle ──────────────────────────────
+          case 'step-start': {
+            streamMsgIdRef.current = `stream_${Date.now()}`;
+            break;
+          }
+
           // ── 三段式文本 ──────────────────────────────
           case 'text-start': {
             setStatus("streaming");
-            setMessages((prev) => upsertMessage(prev, event.messageId, "assistant",
+            const msgId = streamMsgIdRef.current;
+            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
               (parts) => [...parts, { type: "text" as const, text: "", status: "streaming" as const }]
             ));
             break;
           }
           case 'text-delta': {
-            const { messageId, delta } = event;
+            const msgId = streamMsgIdRef.current;
             setMessages((prev) => prev.map((m) => {
-              if (m.id !== messageId) return m;
+              if (m.id !== msgId) return m;
               const parts = [...m.parts];
-              const idx = parts.findLastIndex((p) => p.type === "text" && "status" in p && p.status === "streaming");
+              const idx = parts.findLastIndex((p) => p.type === "text" && p.status === "streaming");
               if (idx < 0) return m;
-              const cur = parts[idx] as { type: "text"; text: string; status: string };
-              parts[idx] = { ...cur, text: cur.text + delta };
+              const cur = parts[idx] as TextPart;
+              parts[idx] = { ...cur, text: cur.text + event.delta };
               return { ...m, parts };
             }));
             break;
           }
           case 'text-end': {
-            const { messageId } = event;
+            const msgId = streamMsgIdRef.current;
             setMessages((prev) => prev.map((m) => {
-              if (m.id !== messageId) return m;
+              if (m.id !== msgId) return m;
               return { ...m, parts: m.parts.map((p) =>
-                p.type === "text" && "status" in p && p.status === "streaming"
+                p.type === "text" && p.status === "streaming"
                   ? { ...p, status: "done" as const } : p
               )};
             }));
@@ -134,33 +161,34 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
           }
 
           // ── 三段式思考链 ─────────────────────────────
-          case 'reasoning-start': {
+          case 'thinking-start': {
             setStatus("streaming");
-            setMessages((prev) => upsertMessage(prev, event.messageId, "assistant",
+            const msgId = streamMsgIdRef.current;
+            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
               (parts) => [...parts, { type: "thinking" as const, thinking: "", status: "streaming" as const }]
             ));
             break;
           }
-          case 'reasoning-delta': {
-            const { messageId, delta } = event;
+          case 'thinking-delta': {
+            const msgId = streamMsgIdRef.current;
             setMessages((prev) => prev.map((m) => {
-              if (m.id !== messageId) return m;
+              if (m.id !== msgId) return m;
               const parts = [...m.parts];
-              const idx = parts.findLastIndex((p) => p.type === "thinking" && "status" in p && p.status === "streaming");
+              const idx = parts.findLastIndex((p) => p.type === "thinking" && p.status === "streaming");
               if (idx < 0) return m;
-              const cur = parts[idx] as { type: "thinking"; thinking: string; status: string };
-              parts[idx] = { ...cur, thinking: cur.thinking + delta };
+              const cur = parts[idx] as ThinkingPart;
+              parts[idx] = { ...cur, thinking: cur.thinking + event.delta };
               return { ...m, parts };
             }));
             break;
           }
-          case 'reasoning-end': {
-            const { messageId } = event;
+          case 'thinking-end': {
+            const msgId = streamMsgIdRef.current;
             setMessages((prev) => prev.map((m) => {
-              if (m.id !== messageId) return m;
+              if (m.id !== msgId) return m;
               return { ...m, parts: m.parts.map((p) =>
-                p.type === "thinking" && "status" in p && p.status === "streaming"
-                  ? { ...p, status: "done" as const } : p
+                p.type === "thinking" && p.status === "streaming"
+                  ? { ...p, signature: event.signature, status: "done" as const } : p
               )};
             }));
             break;
@@ -168,32 +196,33 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
 
           // ── Tool 参数流式 ─────────────────────────────
           case 'tool-input-start': {
-            const { messageId, toolCallId, toolName } = event;
-            setMessages((prev) => upsertMessage(prev, messageId, "assistant",
+            const msgId = streamMsgIdRef.current;
+            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
               (parts) => [...parts, {
-                type: "tool-call" as const, toolCallId, toolName,
-                input: {} as Record<string, unknown>, state: "partial-call" as const,
+                type: "tool-call" as const,
+                toolCallId: event.toolCallId,
+                toolName: event.toolName,
+                input: {} as Record<string, unknown>,
+                state: "partial-call" as const,
               }]
             ));
             break;
           }
           case 'tool-input-delta':
-            // delta accumulation is handled display-side; input is finalized at tool-input-end
             break;
           case 'tool-input-end': {
-            const { messageId, toolCallId, input } = event;
+            const msgId = streamMsgIdRef.current;
             setMessages((prev) => prev.map((m) => {
-              if (m.id !== messageId) return m;
+              if (m.id !== msgId) return m;
               return { ...m, parts: m.parts.map((p) =>
-                p.type === "tool-call" && p.toolCallId === toolCallId
-                  ? { ...p, input: input as Record<string, unknown>, state: "call" as const }
+                p.type === "tool-call" && p.toolCallId === event.toolCallId
+                  ? { ...p, state: "call" as const }
                   : p
               )};
             }));
             break;
           }
 
-          case 'step-start':
           case 'step-finish':
           case 'abort':
           case 'ping':
@@ -259,9 +288,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
       setError(null);
 
       try {
-        // POST first — sets agentRunning=true on server
         await optionsRef.current.sendMessage(conversationId, content);
-        // Then connect SSE — server sees agentRunning=true, keeps connection open
         connectSSE();
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -292,27 +319,6 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
 // ============================================================
 
 /**
- * Update or append a non-streaming part within a message.
- * Streaming text/thinking are handled via three-phase events (text-start/delta/end etc.)
- * so this only handles: tool-call state updates, user text parts, error parts, step-end parts.
- */
-function updateMessagePart(msg: Message, part: MessagePart): Message {
-  const parts = [...msg.parts];
-
-  if (part.type === "tool-call") {
-    const idx = parts.findIndex(
-      (p) => p.type === "tool-call" && p.toolCallId === part.toolCallId,
-    );
-    if (idx >= 0) {
-      parts[idx] = part;
-      return { ...msg, parts };
-    }
-  }
-
-  return { ...msg, parts: [...parts, part] };
-}
-
-/**
  * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
  * Strips optimistic messages on first real event.
  */
@@ -329,4 +335,3 @@ function upsertMessage(
   }
   return [...base, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
 }
-

@@ -3,6 +3,8 @@ import { conversations } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
 import type { AgentMiddleware, AgentRuntime } from "../types.js";
 
+const LIGHT_MODEL = "claude-haiku-4-5-20251001";
+
 export class TitleGenerationMiddleware implements AgentMiddleware {
   name = "title-generation";
 
@@ -24,9 +26,16 @@ export class TitleGenerationMiddleware implements AgentMiddleware {
     if (!userText) return;
 
     try {
-      const title = await runtime.provider.generateText(
-        `Generate a very short title (max 6 words, no quotes) for a coding conversation that starts with this message:\n\n${userText}`,
-      );
+      const title = await runtime.provider.generateText({
+        model: LIGHT_MODEL,
+        system: "Generate a very short title (max 6 words, no quotes) for a coding conversation.",
+        messages: [{
+          id: "title-prompt",
+          role: "user",
+          parts: [{ type: "text", text: userText }],
+          createdAt: new Date().toISOString(),
+        }],
+      });
 
       if (title) {
         await db
