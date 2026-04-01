@@ -58,7 +58,7 @@ vi.mock("../../services/message-store.js", () => {
 vi.mock("../../services/event-bus.js", () => ({
   eventBus: {
     emitStream: vi.fn(),
-    emitDone: vi.fn(),
+    subscribe: vi.fn(),
   },
 }));
 
@@ -89,12 +89,22 @@ vi.mock("../../tools/index.js", () => ({
 function makeProvider(responses: LLMResponse[]): LLMProvider {
   let callIndex = 0;
   return {
-    chat: vi.fn().mockImplementation(async (_msgs, _tools, _prompt, callbacks) => {
+    stream: vi.fn().mockImplementation((_msgs: unknown, _tools: unknown, _prompt: unknown, messageId: string) => {
       const response = responses[callIndex++];
-      if (response.textContent) {
-        callbacks.onTextDelta?.(response.textContent);
+
+      async function* eventGen() {
+        if (response.textContent) {
+          yield { type: "text-start" as const, messageId, blockId: "b0" };
+          yield { type: "text-delta" as const, messageId, blockId: "b0", delta: response.textContent };
+          yield { type: "text-end" as const, messageId, blockId: "b0" };
+        }
+        for (const tc of response.toolCalls) {
+          yield { type: "tool-input-start" as const, messageId, toolCallId: tc.id, toolName: tc.name };
+          yield { type: "tool-input-end" as const, messageId, toolCallId: tc.id, input: tc.input };
+        }
       }
-      return response;
+
+      return { events: eventGen(), response: Promise.resolve(response) };
     }),
     generateText: vi.fn().mockResolvedValue("Generated Title"),
   };
@@ -149,7 +159,7 @@ describe("Agent", () => {
     expect(assistantParts.some((p) => p.type === "step-end")).toBe(true);
 
     // Provider called once
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 
   it("handles single tool call", async () => {
@@ -177,7 +187,7 @@ describe("Agent", () => {
     );
 
     // Provider called twice (tool response + final text)
-    expect(provider.chat).toHaveBeenCalledTimes(2);
+    expect(provider.stream).toHaveBeenCalledTimes(2);
   });
 
   it("handles multiple parallel tool calls", async () => {
@@ -211,7 +221,7 @@ describe("Agent", () => {
     await agent.run({ conversationId: "conv-1", userMessage: "write and run python" });
 
     // Provider called 3 times
-    expect(provider.chat).toHaveBeenCalledTimes(3);
+    expect(provider.stream).toHaveBeenCalledTimes(3);
 
     // Final message should be text
     const lastCall = mockAddMessage.mock.calls[mockAddMessage.mock.calls.length - 1];
@@ -230,7 +240,7 @@ describe("Agent", () => {
     await agent.run({ conversationId: "conv-1", userMessage: "loop", maxIterations: 3 });
 
     // Should call provider exactly 3 times then stop
-    expect(provider.chat).toHaveBeenCalledTimes(3);
+    expect(provider.stream).toHaveBeenCalledTimes(3);
   });
 
   it("stops when middleware sets shouldStop", async () => {
@@ -250,7 +260,7 @@ describe("Agent", () => {
     await agent.run({ conversationId: "conv-1", userMessage: "test" });
 
     // Provider called once, then stopped by middleware
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 
   it("recovers from tool execution error via Promise.allSettled", async () => {
@@ -276,7 +286,7 @@ describe("Agent", () => {
     );
 
     // Agent continues — provider called twice (error tool result → LLM sees it → text response)
-    expect(provider.chat).toHaveBeenCalledTimes(2);
+    expect(provider.stream).toHaveBeenCalledTimes(2);
   });
 
   it("handles confirm mode — stops with pending approval", async () => {
@@ -302,6 +312,6 @@ describe("Agent", () => {
     );
 
     // Provider called only once (stopped after tool call)
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 });

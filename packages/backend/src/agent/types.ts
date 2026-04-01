@@ -37,12 +37,20 @@ export interface LLMResponse {
   messageId?: string;
 }
 
+/** Return type of LLMProvider.stream() */
+export interface ProviderStream {
+  /** Async iterable of typed stream events; exhausted when LLM call completes */
+  events: AsyncIterable<StreamData>;
+  /** Resolves with the full LLM response once the stream is exhausted */
+  response: Promise<LLMResponse>;
+}
+
 /** LLM Provider interface */
 export interface LLMProvider {
-  /** streaming chat — provider emits typed StreamData events directly */
-  chat(messages: Message[], tools: ToolDefinition[], systemPrompt: string, emitStream: (data: StreamData) => void, messageId: string): Promise<LLMResponse>;
+  /** Streaming chat — returns an async iterable of typed events + a response promise */
+  stream(messages: Message[], tools: ToolDefinition[], systemPrompt: string, messageId: string): ProviderStream;
 
-  /** simple text generation (lightweight tasks like title generation) */
+  /** Simple text generation (lightweight tasks like title generation) */
   generateText(prompt: string): Promise<string>;
 }
 

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../../../env.js";
-import type { LLMProvider, LLMResponse, ThinkingBlock, ToolCall, ToolDefinition } from "../../types.js";
+import type { LLMProvider, LLMResponse, ProviderStream, ThinkingBlock, ToolCall, ToolDefinition } from "../../types.js";
 import type { Message, MessageRole, StreamData } from "@code-artisan/shared";
 
 interface AnthropicProviderOptions {
@@ -29,44 +29,45 @@ export class AnthropicProvider implements LLMProvider {
     this.thinkingBudget = options?.thinkingBudget ?? 10000;
   }
 
-  async chat(messages: Message[], tools: ToolDefinition[], systemPrompt: string, emitStream: (data: StreamData) => void, messageId: string): Promise<LLMResponse> {
-    const anthropicMessages = toAnthropicMessages(messages);
-    const anthropicTools = toAnthropicTools(tools);
-
+  stream(messages: Message[], tools: ToolDefinition[], systemPrompt: string, messageId: string): ProviderStream {
     const params: Anthropic.Messages.MessageStreamParams = {
       model: this.model,
       max_tokens: this.maxTokens,
       system: systemPrompt,
-      tools: anthropicTools,
-      messages: anthropicMessages,
+      tools: toAnthropicTools(tools),
+      messages: toAnthropicMessages(messages),
     };
-
     if (this.thinking) {
       params.thinking = { type: "enabled", budget_tokens: this.thinkingBudget };
     }
 
-    const stream = this.client.messages.stream(params);
+    const anthropicStream = this.client.messages.stream(params);
 
-    // blockTypes/blockIds track per-index metadata for content_block_stop
+    // Queue-based bridge: event emitter → async iterable
+    const buf: StreamData[] = [];
+    let finished = false;
+    let wake: (() => void) | null = null;
+    const push = (data: StreamData) => { buf.push(data); wake?.(); wake = null; };
+
+    // Per-block metadata needed for content_block_stop
     const blockTypes = new Map<number, string>();
-    const blockIds   = new Map<number, string>(); // index → blockId (text/thinking) or toolCallId (tool_use)
+    const blockIds   = new Map<number, string>(); // index → blockId or toolCallId
 
-    stream.on("streamEvent", (event) => {
+    anthropicStream.on("streamEvent", (event) => {
       if (event.type === "content_block_start") {
         const { index, content_block } = event;
         blockTypes.set(index, content_block.type);
-
         if (content_block.type === "text") {
           const blockId = `b${index}`;
           blockIds.set(index, blockId);
-          emitStream({ type: "text-start", messageId, blockId });
+          push({ type: "text-start", messageId, blockId });
         } else if (content_block.type === "thinking") {
           const blockId = `b${index}`;
           blockIds.set(index, blockId);
-          emitStream({ type: "reasoning-start", messageId, blockId });
+          push({ type: "reasoning-start", messageId, blockId });
         } else if (content_block.type === "tool_use") {
           blockIds.set(index, content_block.id);
-          emitStream({ type: "tool-input-start", messageId, toolCallId: content_block.id, toolName: content_block.name });
+          push({ type: "tool-input-start", messageId, toolCallId: content_block.id, toolName: content_block.name });
         }
       }
 
@@ -74,13 +75,12 @@ export class AnthropicProvider implements LLMProvider {
         const { index, delta } = event;
         const id = blockIds.get(index);
         if (!id) return;
-
         if (delta.type === "text_delta") {
-          emitStream({ type: "text-delta", messageId, blockId: id, delta: delta.text });
+          push({ type: "text-delta", messageId, blockId: id, delta: delta.text });
         } else if (delta.type === "thinking_delta") {
-          emitStream({ type: "reasoning-delta", messageId, blockId: id, delta: delta.thinking });
+          push({ type: "reasoning-delta", messageId, blockId: id, delta: delta.thinking });
         } else if (delta.type === "input_json_delta") {
-          emitStream({ type: "tool-input-delta", messageId, toolCallId: id, delta: delta.partial_json });
+          push({ type: "tool-input-delta", messageId, toolCallId: id, delta: delta.partial_json });
         }
       }
 
@@ -89,26 +89,36 @@ export class AnthropicProvider implements LLMProvider {
         const id = blockIds.get(index);
         const blockType = blockTypes.get(index);
         if (!id || !blockType) return;
-
-        if (blockType === "text") {
-          emitStream({ type: "text-end", messageId, blockId: id });
-        } else if (blockType === "thinking") {
-          emitStream({ type: "reasoning-end", messageId, blockId: id });
-        }
+        if (blockType === "text") push({ type: "text-end", messageId, blockId: id });
+        else if (blockType === "thinking") push({ type: "reasoning-end", messageId, blockId: id });
         // tool_use: tool-input-end emitted after finalMessage (needs complete input)
       }
     });
 
-    const response = await stream.finalMessage();
-
-    // Emit tool-input-end with complete parsed inputs
-    for (const block of response.content) {
-      if (block.type === "tool_use") {
-        emitStream({ type: "tool-input-end", messageId, toolCallId: block.id, input: block.input });
+    // Resolves after pushing tool-input-end events + marking stream as finished
+    const response = anthropicStream.finalMessage().then((raw) => {
+      for (const block of raw.content) {
+        if (block.type === "tool_use") {
+          push({ type: "tool-input-end", messageId, toolCallId: block.id, input: block.input });
+        }
       }
+      finished = true;
+      wake?.(); wake = null;
+      return parseResponse(raw);
+    });
+
+    response.catch(() => { finished = true; wake?.(); wake = null; });
+
+    async function* eventGen(): AsyncGenerator<StreamData> {
+      while (true) {
+        while (buf.length) yield buf.shift()!;
+        if (finished) break;
+        await new Promise<void>((r) => { wake = r; });
+      }
+      while (buf.length) yield buf.shift()!; // drain tail
     }
 
-    return parseResponse(response);
+    return { events: eventGen(), response };
   }
 
   async generateText(prompt: string): Promise<string> {

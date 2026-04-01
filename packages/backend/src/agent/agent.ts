@@ -162,13 +162,16 @@ export class Agent {
 
   private async callModel(runtime: AgentRuntime): Promise<LLMResponse> {
     const msgId = `stream_${Date.now()}`;
-    return this.provider.chat(
+    const { events, response } = this.provider.stream(
       runtime.messages,
       toolRegistry.toToolDefinitions(),
       buildSystemPrompt(),
-      runtime.emitStream,
       msgId,
     );
+    for await (const event of events) {
+      runtime.emitStream(event);
+    }
+    return response;
   }
 
   // --- Assistant Message ---
