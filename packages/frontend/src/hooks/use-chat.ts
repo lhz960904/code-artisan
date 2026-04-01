@@ -313,7 +313,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
  */
 /**
  * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
- * Strips optimistic messages on first real event.
+ * Optimistic messages are kept until refetchMessages replaces the full list.
  */
 function upsertMessage(
   prev: Message[],
@@ -321,12 +321,11 @@ function upsertMessage(
   role: Message["role"],
   update: (parts: MessagePart[]) => MessagePart[],
 ): Message[] {
-  const base = prev.filter((m) => !m.id.startsWith("opt-"));
-  const existing = base.find((m) => m.id === messageId);
+  const existing = prev.find((m) => m.id === messageId);
   if (existing) {
-    return base.map((m) => m.id !== messageId ? m : { ...m, parts: update(m.parts) });
+    return prev.map((m) => m.id !== messageId ? m : { ...m, parts: update(m.parts) });
   }
-  return [...base, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
+  return [...prev, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
 }
 
 /** Find a ToolCallPart by toolCallId across all messages and apply an updater */
