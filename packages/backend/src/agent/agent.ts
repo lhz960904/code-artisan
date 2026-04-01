@@ -47,7 +47,9 @@ export class Agent {
       await this.runHook("beforeAgent", runtime);
 
       if (userMessage) {
-        await this.addMessage(runtime, "user", [{ type: "text", text: userMessage }]);
+        const userPart = { type: "text" as const, text: userMessage };
+        const msg = await this.addMessage(runtime, "user", [userPart]);
+        this.emitPart(runtime, msg.id, "user", userPart);
       }
 
       await this.handlePendingConfirm(runtime);
@@ -76,10 +78,9 @@ export class Agent {
         } catch (toolErr) {
           console.error(`[agent] Tool execution error:`, toolErr);
           await this.runHook("onError", runtime, toolErr as Error);
-          await this.addMessage(runtime, "assistant", [{
-            type: "error",
-            message: `Tool execution failed: ${String(toolErr)}`,
-          }]);
+          const errPart = { type: "error" as const, message: `Tool execution failed: ${String(toolErr)}` };
+          const errMsg = await this.addMessage(runtime, "assistant", [errPart]);
+          this.emitPart(runtime, errMsg.id, "assistant", errPart);
         }
       }
 
@@ -89,7 +90,9 @@ export class Agent {
       await this.runHook("onError", runtime!, err as Error).catch(() => {});
       if (runtime) {
         try {
-          await this.addMessage(runtime, "assistant", [{ type: "error", message: String(err) }]);
+          const errPart = { type: "error" as const, message: String(err) };
+          const errMsg = await this.addMessage(runtime, "assistant", [errPart]);
+          this.emitPart(runtime, errMsg.id, "assistant", errPart);
         } catch {
           // persist failed, just log
         }
@@ -163,15 +166,13 @@ export class Agent {
         onTextDelta: (text) => {
           runtime.emitStream({
             messageId: msgId,
-            type: "text-delta",
-            textDelta: text,
+            part: { type: "text", text, status: "streaming" },
           });
         },
         onThinkingDelta: (thinking) => {
           runtime.emitStream({
             messageId: msgId,
-            type: "thinking-delta",
-            thinkingDelta: thinking,
+            part: { type: "thinking", thinking, status: "streaming" },
           });
         },
       },
@@ -215,6 +216,7 @@ export class Agent {
         state: "call",
       };
       const toolMsg = await this.addMessage(runtime, "tool", [toolPart]);
+      this.emitPart(runtime, toolMsg.id, "tool", toolPart);
       toolMsgIds.push({ msgId: toolMsg.id, tc });
     }
 
@@ -228,7 +230,7 @@ export class Agent {
     // Confirm mode
     if (runtime.mode === "confirm" && toolMsgIds.length > 0) {
       await runtime.store.updatePart(toolMsgIds[0].msgId, 0, { approval: "pending" });
-      this.emitPart(runtime, toolMsgIds[0].msgId, {
+      this.emitPart(runtime, toolMsgIds[0].msgId, "tool", {
         type: "tool-call",
         toolCallId: toolMsgIds[0].tc.id,
         toolName: toolMsgIds[0].tc.name,
@@ -262,7 +264,7 @@ export class Agent {
         part.output = output;
       }
 
-      this.emitPart(runtime, msgId, {
+      this.emitPart(runtime, msgId, "tool", {
         type: "tool-call",
         toolCallId: tc.id,
         toolName: tc.name,
@@ -292,10 +294,12 @@ export class Agent {
     if (tc.name === "start_server") {
       const port = Number(tc.input.port) || 3000;
       const url = runtime.sandbox.getHostUrl(port);
-      await this.addMessage(runtime, "assistant", [{ type: "text", text: `Preview URL: ${url}` }], {
+      const previewPart = { type: "text" as const, text: `Preview URL: ${url}` };
+      const previewMsg = await this.addMessage(runtime, "assistant", [previewPart], {
         previewUrl: url,
         port,
       });
+      this.emitPart(runtime, previewMsg.id, "assistant", previewPart);
     }
   }
 
@@ -339,7 +343,7 @@ export class Agent {
         output,
         approval: "approved",
       });
-      this.emitPart(runtime, pendingToolMsg.id, {
+      this.emitPart(runtime, pendingToolMsg.id, "tool", {
         ...pendingPart,
         state: "result",
         output,
@@ -352,7 +356,7 @@ export class Agent {
         output: "User rejected this tool call.",
         approval: "rejected",
       });
-      this.emitPart(runtime, pendingToolMsg.id, {
+      this.emitPart(runtime, pendingToolMsg.id, "tool", {
         ...pendingPart,
         state: "error",
         output: "User rejected this tool call.",
@@ -363,6 +367,7 @@ export class Agent {
 
   // --- Helpers ---
 
+  /** Persist message to DB + update runtime.messages. Does NOT emit SSE events. */
   private async addMessage(
     runtime: AgentRuntime,
     role: Message["role"],
@@ -378,14 +383,11 @@ export class Agent {
       createdAt: new Date().toISOString(),
     };
     runtime.messages.push(msg);
-    for (const part of parts) {
-      this.emitPart(runtime, msg.id, part);
-    }
     return msg;
   }
 
-  private emitPart(runtime: AgentRuntime, messageId: string, part: MessagePart): void {
-    runtime.emitStream({ messageId, part });
+  private emitPart(runtime: AgentRuntime, messageId: string, role: Message["role"], part: MessagePart): void {
+    runtime.emitStream({ messageId, role, part });
   }
 
   private async runHook(

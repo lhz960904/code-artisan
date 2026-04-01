@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { Message } from "@code-artisan/shared";
 import { apiFetch } from "./client";
 
 // ============================================================
@@ -12,6 +13,7 @@ export interface ConversationResponse {
   mode: string;
   sandbox_id: string | null;
   deploy_url: string | null;
+  agent_running: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -58,10 +60,11 @@ const conversations = {
 // Hooks
 // ============================================================
 
-export function useConversations() {
+export function useConversations(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["conversations"],
     queryFn: conversations.list,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -70,6 +73,17 @@ export function useConversation(id: string) {
     queryKey: ["conversations", id],
     queryFn: () => conversations.get(id),
     enabled: !!id,
+  });
+}
+
+export const fetchMessages = (conversationId: string) =>
+  apiFetch<Message[]>(`/conversations/${conversationId}/messages`);
+
+export function useMessages(conversationId: string) {
+  return useQuery({
+    queryKey: ["conversations", conversationId, "messages"],
+    queryFn: () => apiFetch<Message[]>(`/conversations/${conversationId}/messages`),
+    enabled: !!conversationId,
   });
 }
 
@@ -129,3 +143,4 @@ export function useFileSnapshots(conversationId: string) {
 
 /** Direct fetch for non-hook contexts (e.g. WorkspaceContext) */
 export const fetchFileSnapshots = conversations.files;
+

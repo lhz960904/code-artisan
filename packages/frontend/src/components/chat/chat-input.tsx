@@ -2,18 +2,17 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Square, Plus, Paperclip, Sparkles, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useSendMessage } from "@/lib/apis";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
-  conversationId: string;
+  onSend: (content: string) => void;
   disabled?: boolean;
+  sending?: boolean;
 }
 
-export function ChatInput({ conversationId, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
-  const sendMsg = useSendMessage();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -39,9 +38,9 @@ export function ChatInput({ conversationId, disabled }: ChatInputProps) {
 
   function handleSend() {
     const content = input.trim();
-    if (!content || sendMsg.isPending || disabled) return;
+    if (!content || sending || disabled) return;
     setInput("");
-    sendMsg.mutate({ conversationId, content });
+    onSend(content);
   }
 
   return (
@@ -115,7 +114,7 @@ export function ChatInput({ conversationId, disabled }: ChatInputProps) {
               size="icon"
               className="h-8 w-8 rounded-full"
               onClick={handleSend}
-              disabled={sendMsg.isPending || !input.trim()}
+              disabled={sending || !input.trim()}
             >
               <Send className="h-3.5 w-3.5" />
             </Button>

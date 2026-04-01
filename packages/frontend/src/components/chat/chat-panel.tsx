@@ -1,10 +1,11 @@
 import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { useConversationStream } from "@/hooks/use-conversation-stream";
+import { useChat } from "@/hooks/use-chat";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
-import { MarkdownRenderer } from "@/components/common/markdown-renderer";
 import { useWorkspace } from "@/contexts/workspace-context";
+import { useMessages, useSendMessage, fetchMessages } from "@/lib/apis";
+import { API_BASE } from "@/lib/apis/client";
 import type { Message } from "@code-artisan/shared";
 
 interface ChatPanelProps {
@@ -12,41 +13,41 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ conversationId }: ChatPanelProps) {
-  const { messages, streamingText, streamingThinking } = useConversationStream(conversationId);
+  const { data: initialMessages } = useMessages(conversationId);
+  const sendMsgApi = useSendMessage();
+
+  const { messages, status, sendMessage } =
+    useChat(conversationId, {
+      initialMessages,
+      streamUrl: `${API_BASE}/conversations/${conversationId}/stream`,
+      sendMessage: (id, content) => sendMsgApi.mutateAsync({ conversationId: id, content }),
+      fetchMessages,
+    });
   const scrollRef = useRef<HTMLDivElement>(null);
   const processedRef = useRef(new Set<string>());
   const { updateFile, openFile, appendTerminal, setPreviewUrl, loadSnapshots } =
     useWorkspace();
 
-  // Load initial file snapshots
   useEffect(() => {
     loadSnapshots(conversationId);
   }, [conversationId, loadSnapshots]);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingText, streamingThinking]);
+  }, [messages]);
 
-  // Process messages into workspace state (side effects)
   useEffect(() => {
     for (const msg of messages) {
+      if (msg.id.startsWith("opt-")) continue;
       if (processedRef.current.has(msg.id)) continue;
       processedRef.current.add(msg.id);
       processMessageSideEffects(msg, { updateFile, openFile, appendTerminal, setPreviewUrl });
     }
   }, [messages, updateFile, openFile, appendTerminal, setPreviewUrl]);
 
-  const isAgentRunning =
-    streamingText !== null ||
-    streamingThinking !== null ||
-    (messages.length > 0 &&
-      messages[messages.length - 1].role === "assistant" &&
-      messages[messages.length - 1].parts.some(
-        (p) => p.type === "tool-call" && p.state === "call" && !p.approval,
-      ));
+  const isBusy = status !== "ready" && status !== "error";
 
   return (
     <div className="flex h-full flex-col">
@@ -60,43 +61,20 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
             />
           ))}
 
-          {/* Streaming thinking */}
-          {streamingThinking && (
-            <div className="rounded-lg border border-border bg-card p-3">
-              <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground" />
-                Thinking...
-              </div>
-              <div className="max-h-40 overflow-y-auto text-xs leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
-                {streamingThinking}
-              </div>
-            </div>
-          )}
-
-          {/* Streaming text */}
-          {streamingText && (
-            <div className="text-sm leading-relaxed text-foreground">
-              <MarkdownRenderer content={streamingText} />
-            </div>
-          )}
-
-          {/* Working indicator */}
-          {isAgentRunning && !streamingText && !streamingThinking && (
+          {isBusy && !messages.some((m) => m.parts.some((p) => "status" in p && p.status === "streaming")) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Working...
             </div>
           )}
-
         </div>
       </div>
 
-      <ChatInput conversationId={conversationId} disabled={isAgentRunning} />
+      <ChatInput onSend={sendMessage} disabled={isBusy} />
     </div>
   );
 }
 
-/** Extract workspace side effects from messages */
 function processMessageSideEffects(
   msg: Message,
   ctx: {

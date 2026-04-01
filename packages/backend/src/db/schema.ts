@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, serial, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, bigint, boolean, serial, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -7,6 +7,7 @@ export const conversations = pgTable("conversations", {
   mode: text("mode").notNull().default("yolo"),
   sandboxId: text("sandbox_id"),
   deployUrl: text("deploy_url"),
+  agentRunning: boolean("agent_running").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

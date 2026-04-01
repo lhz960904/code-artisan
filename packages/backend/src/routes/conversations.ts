@@ -97,16 +97,25 @@ conversationsRouter.get("/:id/files", async (c) => {
 });
 
 // SSE stream — real-time stream for a conversation
-conversationsRouter.get("/:id/stream", (c) => {
+conversationsRouter.get("/:id/stream", async (c) => {
   const id = c.req.param("id");
+
+  // Check if agent is running; if not, return done immediately
+  const [conv] = await db
+    .select({ agentRunning: conversations.agentRunning })
+    .from(conversations)
+    .where(eq(conversations.id, id));
+
+  if (!conv?.agentRunning) {
+    return streamSSE(c, async (stream) => {
+      await stream.writeSSE({ data: JSON.stringify({ type: "done" }) });
+    });
+  }
 
   return streamSSE(c, async (stream) => {
     const unsub = eventBus.subscribe(id, async (data) => {
       try {
-        await stream.writeSSE({
-          data: JSON.stringify(data),
-          event: "type" in data ? (data as { type: string }).type : "stream",
-        });
+        await stream.writeSSE({ data: JSON.stringify(data) });
       } catch {
         // Client disconnected
       }
@@ -116,14 +125,14 @@ conversationsRouter.get("/:id/stream", (c) => {
       unsub();
     });
 
-    // Heartbeat every 30s
+    // Heartbeat every 15s
     const heartbeat = setInterval(async () => {
       try {
-        await stream.writeSSE({ data: "", event: "heartbeat" });
+        await stream.writeSSE({ data: "" });
       } catch {
         clearInterval(heartbeat);
       }
-    }, 30_000);
+    }, 15_000);
 
     await new Promise<void>((resolve) => {
       stream.onAbort(() => {
@@ -151,14 +160,22 @@ conversationsRouter.post("/:id/messages", async (c) => {
   if (!conv) return c.json({ error: "Conversation not found" }, 404);
 
   const agent = createAgent();
-  agent.run({ conversationId: id, userMessage: content }).catch((err) => {
-    console.error(`Agent error for conversation ${id}:`, err);
-  });
 
   await db
     .update(conversations)
-    .set({ updatedAt: new Date() })
+    .set({ agentRunning: true, updatedAt: new Date() })
     .where(eq(conversations.id, id));
+
+  agent.run({ conversationId: id, userMessage: content })
+    .catch((err) => {
+      console.error(`Agent error for conversation ${id}:`, err);
+    })
+    .finally(() => {
+      db.update(conversations)
+        .set({ agentRunning: false })
+        .where(eq(conversations.id, id))
+        .catch(() => {});
+    });
 
   return c.json({ status: "started" });
 });
@@ -183,9 +200,22 @@ conversationsRouter.post("/:id/confirm", async (c) => {
 
   // Re-invoke agent to continue
   const agent = createAgent();
-  agent.run({ conversationId: id }).catch((err) => {
-    console.error(`Agent error after confirm for conversation ${id}:`, err);
-  });
+
+  await db
+    .update(conversations)
+    .set({ agentRunning: true })
+    .where(eq(conversations.id, id));
+
+  agent.run({ conversationId: id })
+    .catch((err) => {
+      console.error(`Agent error after confirm for conversation ${id}:`, err);
+    })
+    .finally(() => {
+      db.update(conversations)
+        .set({ agentRunning: false })
+        .where(eq(conversations.id, id))
+        .catch(() => {});
+    });
 
   return c.json({ status: "ok" });
 });

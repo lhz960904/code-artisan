@@ -5,6 +5,7 @@
 export interface TextPart {
   type: "text";
   text: string;
+  status?: "streaming" | "done";
 }
 
 export interface ImagePart {
@@ -24,6 +25,7 @@ export interface ThinkingPart {
   type: "thinking";
   thinking: string;
   signature?: string;
+  status?: "streaming" | "done";
 }
 
 /**
@@ -80,25 +82,12 @@ export interface Message {
 
 export interface StreamEvent {
   messageId: string;
+  role?: MessageRole;
   part: MessagePart;
 }
 
-/** text delta (streaming, not persisted) */
-export interface StreamTextDelta {
-  messageId: string;
-  type: "text-delta";
-  textDelta: string;
-}
-
-/** thinking delta (streaming, not persisted) */
-export interface StreamThinkingDelta {
-  messageId: string;
-  type: "thinking-delta";
-  thinkingDelta: string;
-}
-
 /** streaming data union type */
-export type StreamData = StreamEvent | StreamTextDelta | StreamThinkingDelta;
+export type StreamData = StreamEvent;
 
 // ============================================================
 // Conversation

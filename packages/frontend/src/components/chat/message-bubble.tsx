@@ -94,15 +94,32 @@ function PartRenderer({
       );
 
     case "thinking":
-      return <ThinkingBlock thinking={part.thinking} />;
+      return <ThinkingBlock thinking={part.thinking} streaming={part.status === "streaming"} />;
 
     default:
       return null;
   }
 }
 
-function ThinkingBlock({ thinking }: { thinking: string }) {
+function ThinkingBlock({ thinking, streaming }: { thinking: string; streaming?: boolean }) {
   const [open, setOpen] = useState(false);
+
+  // Show content directly while streaming
+  if (streaming) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-3">
+        <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-muted-foreground" />
+          Thinking...
+        </div>
+        <div className="max-h-40 overflow-y-auto text-xs leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
+          {thinking}
+        </div>
+      </div>
+    );
+  }
+
+  // Collapsible after done
   return (
     <div className="rounded-lg border border-border bg-card">
       <button

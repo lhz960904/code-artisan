@@ -7,6 +7,8 @@ export {
   useSendMessage,
   useConfirmAction,
   useFileSnapshots,
+  useMessages,
+  fetchMessages,
   fetchFileSnapshots,
   type ConversationResponse,
   type FileSnapshot,

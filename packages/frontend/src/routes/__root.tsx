@@ -9,11 +9,12 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
-  const { data: conversations = [] } = useConversations();
-  const createConv = useConversationCreate();
-  const deleteConv = useConversationDelete();
   const navigate = useNavigate();
   const location = useLocation();
+  const isChat = location.pathname.startsWith("/chat/");
+  const { data: conversations = [] } = useConversations({ enabled: !isChat });
+  const createConv = useConversationCreate();
+  const deleteConv = useConversationDelete();
 
   async function handleNewChat() {
     const conv = await createConv.mutateAsync();
@@ -28,8 +29,6 @@ function RootLayout() {
       navigate({ to: "/" });
     }
   }
-
-  const isChat = location.pathname.startsWith("/chat/");
 
   return (
     <div className="flex h-screen bg-background text-foreground">
