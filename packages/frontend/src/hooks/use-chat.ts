@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Message, MessagePart } from "@code-artisan/shared";
+import type { Message, MessagePart, StreamData } from "@code-artisan/shared";
 
 // ============================================================
 // Types
@@ -66,54 +66,54 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
   // -- SSE event handler --
   const createSSEHandler = useCallback(
     () => (e: MessageEvent) => {
+      if (!e.data) return; // heartbeat ping (empty data)
       try {
-        const data = JSON.parse(e.data);
+        const event = JSON.parse(e.data) as StreamData;
 
-        // Done signal
-        if (data.type === "done") {
-          setStatus("ready");
-          sendInFlightRef.current = false;
-          if (esRef.current) {
-            esRef.current.close();
-            esRef.current = null;
-          }
-          refetchMessages();
-          optionsRef.current.onFinish?.();
-          return;
-        }
-
-        // StreamEvent with part
-        if (data.messageId && data.part) {
-          const { messageId, role, part } = data as {
-            messageId: string;
-            role?: Message["role"];
-            part: MessagePart;
-          };
-          setStatus("streaming");
-
-          setMessages((prev) => {
-            // Remove optimistic messages when first real event arrives
-            const base = prev.filter((m) => !m.id.startsWith("opt-"));
-            const existing = base.find((m) => m.id === messageId);
-
-            if (existing) {
-              return base.map((m) => {
-                if (m.id !== messageId) return m;
-                return updateMessagePart(m, part);
-              });
+        switch (event.type) {
+          case 'stream-finish': {
+            setStatus("ready");
+            sendInFlightRef.current = false;
+            if (esRef.current) {
+              esRef.current.close();
+              esRef.current = null;
             }
+            refetchMessages();
+            optionsRef.current.onFinish?.();
+            break;
+          }
 
-            // New message from SSE
-            return [
-              ...base,
-              {
-                id: messageId,
-                role: role ?? "assistant",
-                parts: [part],
-                createdAt: new Date().toISOString(),
-              } as Message,
-            ];
-          });
+          case 'part': {
+            const { messageId, role, part } = event;
+            setStatus("streaming");
+            setMessages((prev) => {
+              const base = prev.filter((m) => !m.id.startsWith("opt-"));
+              const existing = base.find((m) => m.id === messageId);
+              if (existing) {
+                return base.map((m) => m.id !== messageId ? m : updateMessagePart(m, part));
+              }
+              return [
+                ...base,
+                { id: messageId, role: role ?? "assistant", parts: [part], createdAt: new Date().toISOString() } as Message,
+              ];
+            });
+            break;
+          }
+
+          case 'error': {
+            const err = new Error(event.error);
+            setStatus("error");
+            setError(err);
+            sendInFlightRef.current = false;
+            optionsRef.current.onError?.(err);
+            break;
+          }
+
+          case 'step-start':
+          case 'step-finish':
+          case 'abort':
+          case 'ping':
+            break;
         }
       } catch {
         // ignore parse errors

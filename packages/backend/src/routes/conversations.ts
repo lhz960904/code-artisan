@@ -108,7 +108,7 @@ conversationsRouter.get("/:id/stream", async (c) => {
 
   if (!conv?.agentRunning) {
     return streamSSE(c, async (stream) => {
-      await stream.writeSSE({ data: JSON.stringify({ type: "done" }) });
+      await stream.writeSSE({ data: JSON.stringify({ type: "stream-finish" }) });
     });
   }
 

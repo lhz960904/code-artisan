@@ -77,17 +77,24 @@ export interface Message {
 }
 
 // ============================================================
-// SSE Stream - part-level streaming
+// SSE Stream - discriminated union of all event types
 // ============================================================
 
-export interface StreamEvent {
-  messageId: string;
-  role?: MessageRole;
-  part: MessagePart;
-}
+export type FinishReason = 'stop' | 'tool_calls' | 'length' | 'content_filter' | 'error' | 'abort';
 
-/** streaming data union type */
-export type StreamData = StreamEvent;
+export type StreamData =
+  // ── 消息内容 ───────────────────────────────────
+  | { type: 'part'; messageId: string; role?: MessageRole; part: MessagePart }
+
+  // ── 生命周期 ───────────────────────────────────
+  | { type: 'step-start'; stepIndex: number }
+  | { type: 'step-finish'; stepIndex: number; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
+  | { type: 'stream-finish' }
+
+  // ── 错误与控制 ─────────────────────────────────
+  | { type: 'error'; error: string; code?: string }
+  | { type: 'abort' }
+  | { type: 'ping' };
 
 // ============================================================
 // Conversation

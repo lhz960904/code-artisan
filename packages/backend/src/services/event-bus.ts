@@ -17,13 +17,9 @@ class ConversationEventBus {
     this.getEmitter(conversationId).emit("stream", data);
   }
 
-  emitDone(conversationId: string): void {
-    this.getEmitter(conversationId).emit("stream", { type: "done" });
-  }
-
   subscribe(
     conversationId: string,
-    handler: (data: StreamData | { type: "done" }) => void,
+    handler: (data: StreamData) => void,
   ): () => void {
     const emitter = this.getEmitter(conversationId);
     emitter.on("stream", handler);

@@ -13,7 +13,7 @@ import type {
   LLMResponse,
   ToolCall,
 } from "./types.js";
-import type { Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
+import type { FinishReason, Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
 
 function buildSystemPrompt(): string {
   const toolSection = toolRegistry.toPromptSection();
@@ -55,6 +55,8 @@ export class Agent {
       await this.handlePendingConfirm(runtime);
 
       for (let i = 0; i < maxIterations && !runtime.shouldStop; i++) {
+        runtime.emitStream({ type: 'step-start', stepIndex: i });
+
         await this.runHook("beforeModel", runtime);
 
         if (runtime.shouldStop) break;
@@ -69,6 +71,9 @@ export class Agent {
         runtime.usage.outputTokens += response.usage.outputTokens;
 
         await this.persistAssistantMessage(runtime, response, i);
+
+        const finishReason: FinishReason = response.stopReason === "tool_use" ? "tool_calls" : (response.stopReason as FinishReason) ?? "stop";
+        runtime.emitStream({ type: 'step-finish', stepIndex: i, finishReason, usage: response.usage });
 
         if (response.stopReason !== "tool_use") break;
 
@@ -98,7 +103,7 @@ export class Agent {
         }
       }
     } finally {
-      eventBus.emitDone(conversationId);
+      eventBus.emitStream(conversationId, { type: 'stream-finish' });
     }
   }
 
@@ -165,12 +170,14 @@ export class Agent {
       {
         onTextDelta: (text) => {
           runtime.emitStream({
+            type: 'part',
             messageId: msgId,
             part: { type: "text", text, status: "streaming" },
           });
         },
         onThinkingDelta: (thinking) => {
           runtime.emitStream({
+            type: 'part',
             messageId: msgId,
             part: { type: "thinking", thinking, status: "streaming" },
           });
@@ -387,7 +394,7 @@ export class Agent {
   }
 
   private emitPart(runtime: AgentRuntime, messageId: string, role: Message["role"], part: MessagePart): void {
-    runtime.emitStream({ messageId, role, part });
+    runtime.emitStream({ type: 'part', messageId, role, part });
   }
 
   private async runHook(
