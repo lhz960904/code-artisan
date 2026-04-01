@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Message, MessagePart, MessageStreamEvent, TextPart, ThinkingPart } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent, TextPart, ThinkingPart, ToolCallPart } from "@code-artisan/shared";
 
 // ============================================================
 // Types
@@ -83,31 +83,20 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
             break;
           }
 
-          case 'part': {
-            const { role = "assistant", part } = event;
-            setMessages((prev) => {
-              const base = prev.filter((m) => !m.id.startsWith("opt-"));
-              if (part.type === "tool-call") {
-                const idx = base.findIndex((m) =>
-                  m.parts.some((p) => p.type === "tool-call" && p.toolCallId === part.toolCallId),
-                );
-                if (idx >= 0) {
-                  return base.map((m, i) => i !== idx ? m : {
-                    ...m,
-                    parts: m.parts.map((p) =>
-                      p.type === "tool-call" && p.toolCallId === part.toolCallId ? part : p
-                    ),
-                  });
-                }
-              }
-              const last = [...base].reverse().find((m) => m.role === role);
-              if (last) {
-                return base.map((m) => m.id !== last.id ? m : { ...m, parts: [...m.parts, part] });
-              }
-              return [...base, {
-                id: `part_${Date.now()}`, role, parts: [part], createdAt: new Date().toISOString(),
-              } as Message];
-            });
+          case 'tool-output': {
+            setMessages((prev) => updateToolCallPart(prev, event.toolCallId, (part) => ({
+              ...part,
+              state: event.state,
+              output: event.output,
+            })));
+            break;
+          }
+
+          case 'tool-approval': {
+            setMessages((prev) => updateToolCallPart(prev, event.toolCallId, (part) => ({
+              ...part,
+              approval: event.approval,
+            })));
             break;
           }
 
@@ -322,6 +311,10 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
  * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
  * Strips optimistic messages on first real event.
  */
+/**
+ * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
+ * Strips optimistic messages on first real event.
+ */
 function upsertMessage(
   prev: Message[],
   messageId: string,
@@ -334,4 +327,21 @@ function upsertMessage(
     return base.map((m) => m.id !== messageId ? m : { ...m, parts: update(m.parts) });
   }
   return [...base, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
+}
+
+/** Find a ToolCallPart by toolCallId across all messages and apply an updater */
+function updateToolCallPart(
+  messages: Message[],
+  toolCallId: string,
+  updater: (part: ToolCallPart) => ToolCallPart,
+): Message[] {
+  return messages.map((m) => {
+    const idx = m.parts.findIndex(
+      (p) => p.type === "tool-call" && p.toolCallId === toolCallId,
+    );
+    if (idx < 0) return m;
+    const newParts = [...m.parts];
+    newParts[idx] = updater(newParts[idx] as ToolCallPart);
+    return { ...m, parts: newParts };
+  });
 }

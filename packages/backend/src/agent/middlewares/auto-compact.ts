@@ -36,7 +36,6 @@ export class AutoCompactMiddleware implements AgentMiddleware {
         parts: [{ type: "text", text: buildCompactPrompt(text) }],
         createdAt: new Date().toISOString(),
       }],
-      tools: [],
     });
 
     const compactMsg = await runtime.store.addMessage("user", [{ type: "text", text: `[Conversation Summary]\n\n${summary}` }], {

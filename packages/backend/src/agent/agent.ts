@@ -5,18 +5,8 @@ import { conversations } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { getSandboxProvider } from "../sandbox/index.js";
 import { toolRegistry } from "../tools/index.js";
-import type {
-  AgentConfig,
-  AgentMiddleware,
-  AgentRuntime,
-  LLMProvider,
-  LLMResponse,
-  ThinkingBlock,
-  ToolCall,
-} from "./types.js";
-import type { Message, MessagePart, MessageStreamEvent, ToolCallPart } from "@code-artisan/shared";
-
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+import type { AgentConfig, AgentMiddleware, AgentRuntime, LLMProvider, LLMResponse, ThinkingBlock, ToolCall } from "./types.js";
+import type { Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
 
 function buildSystemPrompt(): string {
   const toolSection = toolRegistry.toPromptSection();
@@ -50,9 +40,7 @@ export class Agent {
       await this.runHook("beforeAgent", runtime);
 
       if (userMessage) {
-        const userPart = { type: "text" as const, text: userMessage };
-        const msg = await this.addMessage(runtime, "user", [userPart]);
-        this.emitPart(runtime, "user", userPart);
+        await this.addMessage(runtime, "user", [{ type: "text", text: userMessage }]);
       }
 
       await this.handlePendingConfirm(runtime);
@@ -81,9 +69,9 @@ export class Agent {
         } catch (toolErr) {
           console.error(`[agent] Tool execution error:`, toolErr);
           await this.runHook("onError", runtime, toolErr as Error);
-          const errPart = { type: "error" as const, message: `Tool execution failed: ${String(toolErr)}` };
-          await this.addMessage(runtime, "assistant", [errPart]);
-          this.emitPart(runtime, "assistant", errPart);
+          const errMsg = `Tool execution failed: ${String(toolErr)}`;
+          await this.addMessage(runtime, "assistant", [{ type: "error", message: errMsg }]);
+          runtime.emitStream({ type: "error", error: errMsg });
         }
       }
 
@@ -93,15 +81,15 @@ export class Agent {
       await this.runHook("onError", runtime!, err as Error).catch(() => {});
       if (runtime) {
         try {
-          const errPart = { type: "error" as const, message: String(err) };
-          await this.addMessage(runtime, "assistant", [errPart]);
-          this.emitPart(runtime, "assistant", errPart);
+          const errMsg = String(err);
+          await this.addMessage(runtime, "assistant", [{ type: "error", message: errMsg }]);
+          runtime.emitStream({ type: "error", error: errMsg });
         } catch {
           // persist failed, just log
         }
       }
     } finally {
-      eventBus.emitStream(conversationId, { type: 'stream-finish' });
+      eventBus.emitStream(conversationId, { type: "stream-finish" });
     }
   }
 
@@ -110,10 +98,7 @@ export class Agent {
   private async initRuntime(conversationId: string): Promise<AgentRuntime> {
     const store = new MessageStore(conversationId);
 
-    const [conv] = await db
-      .select({ mode: conversations.mode })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
+    const [conv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, conversationId));
 
     const sandbox = await this.getOrCreateSandbox(conversationId, store);
     const messages = await store.getMessages();
@@ -135,10 +120,7 @@ export class Agent {
   private async getOrCreateSandbox(conversationId: string, store: MessageStore) {
     const provider = getSandboxProvider();
 
-    const [conv] = await db
-      .select({ sandboxId: conversations.sandboxId })
-      .from(conversations)
-      .where(eq(conversations.id, conversationId));
+    const [conv] = await db.select({ sandboxId: conversations.sandboxId }).from(conversations).where(eq(conversations.id, conversationId));
 
     const sandbox = await provider.acquire(conv?.sandboxId ?? undefined);
 
@@ -147,10 +129,7 @@ export class Agent {
       if (snapshots.length > 0) {
         await provider.restoreFiles(sandbox, snapshots);
       }
-      await db
-        .update(conversations)
-        .set({ sandboxId: sandbox.id })
-        .where(eq(conversations.id, conversationId));
+      await db.update(conversations).set({ sandboxId: sandbox.id }).where(eq(conversations.id, conversationId));
     }
 
     return sandbox;
@@ -159,8 +138,9 @@ export class Agent {
   // --- LLM Call ---
 
   private async callModel(runtime: AgentRuntime): Promise<LLMResponse> {
+    const model = "anthropic/claude-opus-4.6";
     const stream = this.provider.stream({
-      model: DEFAULT_MODEL,
+      model,
       system: buildSystemPrompt(),
       messages: runtime.messages,
       tools: toolRegistry.toToolDefinitions(),
@@ -178,6 +158,7 @@ export class Agent {
       }
       switch (event.type) {
         case "thinking-end":
+          console.log(`[agent] thinking-end: ${event.text}, signature: ${event.signature}`);
           thinkingBlocks.push({ thinking: event.text, signature: event.signature });
           break;
         case "text-end":
@@ -193,16 +174,12 @@ export class Agent {
       }
     }
 
-    return { textContent, thinkingBlocks, toolCalls, stopReason, usage, model: DEFAULT_MODEL };
+    return { textContent, thinkingBlocks, toolCalls, stopReason, usage, model };
   }
 
   // --- Assistant Message ---
 
-  private async persistAssistantMessage(
-    runtime: AgentRuntime,
-    response: LLMResponse,
-    stepIndex: number,
-  ): Promise<void> {
+  private async persistAssistantMessage(runtime: AgentRuntime, response: LLMResponse, stepIndex: number): Promise<void> {
     const parts: MessagePart[] = [];
     for (const tb of response.thinkingBlocks) {
       parts.push({ type: "thinking", thinking: tb.thinking, signature: tb.signature });
@@ -232,33 +209,25 @@ export class Agent {
         state: "call",
       };
       const toolMsg = await this.addMessage(runtime, "tool", [toolPart]);
-      this.emitPart(runtime, "tool", toolPart);
       toolMsgIds.push({ msgId: toolMsg.id, tc });
     }
 
-    const [currentConv] = await db
-      .select({ mode: conversations.mode })
-      .from(conversations)
-      .where(eq(conversations.id, runtime.conversationId));
+    const [currentConv] = await db.select({ mode: conversations.mode }).from(conversations).where(eq(conversations.id, runtime.conversationId));
     runtime.mode = (currentConv?.mode as "yolo" | "confirm") ?? "yolo";
 
     if (runtime.mode === "confirm" && toolMsgIds.length > 0) {
       await runtime.store.updatePart(toolMsgIds[0].msgId, 0, { approval: "pending" });
-      this.emitPart(runtime, "tool", {
-        type: "tool-call",
+      runtime.emitStream({
+        type: "tool-approval",
         toolCallId: toolMsgIds[0].tc.id,
         toolName: toolMsgIds[0].tc.name,
-        input: toolMsgIds[0].tc.input,
-        state: "call",
         approval: "pending",
       });
       runtime.shouldStop = true;
       return;
     }
 
-    const results = await Promise.allSettled(
-      toolCalls.map((tc) => this.executeTool(runtime, tc)),
-    );
+    const results = await Promise.allSettled(toolCalls.map((tc) => this.executeTool(runtime, tc)));
 
     for (let i = 0; i < toolCalls.length; i++) {
       const tc = toolCalls[i];
@@ -276,11 +245,10 @@ export class Agent {
         part.output = output;
       }
 
-      this.emitPart(runtime, "tool", {
-        type: "tool-call",
+      runtime.emitStream({
+        type: "tool-output",
         toolCallId: tc.id,
         toolName: tc.name,
-        input: tc.input,
         state,
         output,
       });
@@ -292,10 +260,7 @@ export class Agent {
   private async executeTool(runtime: AgentRuntime, tc: ToolCall): Promise<string> {
     const tool = toolRegistry.get(tc.name);
     if (!tool) return `Error: Unknown tool: ${tc.name}`;
-    return tool.call(
-      { sandbox: runtime.sandbox, conversationId: runtime.conversationId },
-      tc.input,
-    );
+    return tool.call({ sandbox: runtime.sandbox, conversationId: runtime.conversationId }, tc.input);
   }
 
   private async handleToolSideEffects(runtime: AgentRuntime, tc: ToolCall): Promise<void> {
@@ -306,12 +271,10 @@ export class Agent {
     if (tc.name === "start_server") {
       const port = Number(tc.input.port) || 3000;
       const url = runtime.sandbox.getHostUrl(port);
-      const previewPart = { type: "text" as const, text: `Preview URL: ${url}` };
-      await this.addMessage(runtime, "assistant", [previewPart], {
+      await this.addMessage(runtime, "assistant", [{ type: "text", text: `Preview URL: ${url}` }], {
         previewUrl: url,
         port,
       });
-      this.emitPart(runtime, "assistant", previewPart);
     }
   }
 
@@ -320,26 +283,17 @@ export class Agent {
   private async handlePendingConfirm(runtime: AgentRuntime): Promise<void> {
     if (runtime.messages.length < 2) return;
 
-    const lastConfirmMsg = [...runtime.messages]
-      .reverse()
-      .find((m) => m.metadata?.confirmResponse != null);
+    const lastConfirmMsg = [...runtime.messages].reverse().find((m) => m.metadata?.confirmResponse != null);
     if (!lastConfirmMsg) return;
 
-    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } })
-      .confirmResponse.approved;
+    const approved = (lastConfirmMsg.metadata as { confirmResponse: { approved: boolean } }).confirmResponse.approved;
 
     const pendingToolMsg = [...runtime.messages]
       .reverse()
-      .find(
-        (m) =>
-          m.role === "tool" &&
-          m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"),
-      );
+      .find((m) => m.role === "tool" && m.parts.some((p) => p.type === "tool-call" && p.approval === "pending"));
     if (!pendingToolMsg) return;
 
-    const pendingPart = pendingToolMsg.parts.find(
-      (p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending",
-    );
+    const pendingPart = pendingToolMsg.parts.find((p): p is ToolCallPart => p.type === "tool-call" && p.approval === "pending");
     if (!pendingPart) return;
 
     const tc: ToolCall = {
@@ -355,11 +309,18 @@ export class Agent {
         output,
         approval: "approved",
       });
-      this.emitPart(runtime, "tool", {
-        ...pendingPart,
+      runtime.emitStream({
+        type: "tool-approval",
+        toolCallId: tc.id,
+        toolName: tc.name,
+        approval: "approved",
+      });
+      runtime.emitStream({
+        type: "tool-output",
+        toolCallId: tc.id,
+        toolName: tc.name,
         state: "result",
         output,
-        approval: "approved",
       });
       await this.handleToolSideEffects(runtime, tc);
     } else {
@@ -368,23 +329,25 @@ export class Agent {
         output: "User rejected this tool call.",
         approval: "rejected",
       });
-      this.emitPart(runtime, "tool", {
-        ...pendingPart,
+      runtime.emitStream({
+        type: "tool-approval",
+        toolCallId: tc.id,
+        toolName: tc.name,
+        approval: "rejected",
+      });
+      runtime.emitStream({
+        type: "tool-output",
+        toolCallId: tc.id,
+        toolName: tc.name,
         state: "error",
         output: "User rejected this tool call.",
-        approval: "rejected",
       });
     }
   }
 
   // --- Helpers ---
 
-  private async addMessage(
-    runtime: AgentRuntime,
-    role: Message["role"],
-    parts: MessagePart[],
-    metadata?: Record<string, unknown>,
-  ): Promise<Message> {
+  private async addMessage(runtime: AgentRuntime, role: Message["role"], parts: MessagePart[], metadata?: Record<string, unknown>): Promise<Message> {
     const row = await runtime.store.addMessage(role, parts, metadata);
     const msg: Message = {
       id: row.id,
@@ -397,15 +360,7 @@ export class Agent {
     return msg;
   }
 
-  private emitPart(runtime: AgentRuntime, role: Message["role"], part: MessagePart): void {
-    runtime.emitStream({ type: 'part', role, part });
-  }
-
-  private async runHook(
-    hook: keyof Omit<AgentMiddleware, "name">,
-    runtime: AgentRuntime,
-    ...args: unknown[]
-  ): Promise<void> {
+  private async runHook(hook: keyof Omit<AgentMiddleware, "name">, runtime: AgentRuntime, ...args: unknown[]): Promise<void> {
     for (const mw of this.middlewares) {
       const fn = mw[hook];
       if (!fn) continue;

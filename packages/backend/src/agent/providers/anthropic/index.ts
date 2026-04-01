@@ -44,14 +44,16 @@ export class AnthropicProvider implements LLMProvider {
     }
 
     const stream = this.client.messages.stream(anthropicParams);
-    let inputTokens = 0
-    let lastToolCallId = ''
-    let lastToolName = ''
-    let lastThinkingSignature = ''
-    let lastEventType: "text" | "thinking" | "tool_use" | undefined = undefined
-    let lastText = ''
-    let lastThinking = ''
-    let lastToolInput = ''
+    let inputTokens = 0;
+
+    // Track each content block by index
+    const blocks = new Map<number, {
+      type: "text" | "thinking" | "tool_use";
+      text: string;
+      toolCallId: string;
+      toolName: string;
+      signature: string;
+    }>();
 
     try {
       for await (const event of stream) {
@@ -59,55 +61,57 @@ export class AnthropicProvider implements LLMProvider {
           inputTokens = event.message?.usage?.input_tokens ?? 0;
           yield { type: "step-start" };
         }
+
         if (event.type === "content_block_start") {
-          const index = event.index;
+          const { index, content_block: cb } = event;
           const id = index.toString();
-          const contentBlock = event.content_block;
-          if (contentBlock.type === "text") {
-            lastEventType = "text";
+          if (cb.type === "text") {
+            blocks.set(index, { type: "text", text: "", toolCallId: "", toolName: "", signature: "" });
             yield { type: "text-start", id };
-          } else if (contentBlock.type === "thinking") {
-            lastEventType = "thinking";
+          } else if (cb.type === "thinking") {
+            blocks.set(index, { type: "thinking", text: "", toolCallId: "", toolName: "", signature: "" });
             yield { type: "thinking-start", id };
-          } else if (contentBlock.type === "tool_use") {
-            lastEventType = "tool_use";
-            lastToolCallId = contentBlock.id;
-            lastToolName = contentBlock.name;
-            yield { type: "tool-input-start", toolCallId: contentBlock.id, toolName: contentBlock.name };
+          } else if (cb.type === "tool_use") {
+            blocks.set(index, { type: "tool_use", text: "", toolCallId: cb.id, toolName: cb.name, signature: "" });
+            yield { type: "tool-input-start", toolCallId: cb.id, toolName: cb.name };
           }
         }
 
         if (event.type === "content_block_delta") {
-          const index = event.index;
+          const { index, delta } = event;
           const id = index.toString();
-          const delta = event.delta;
+          const block = blocks.get(index);
+          if (!block) continue;
+
           if (delta.type === "text_delta") {
-            lastText += delta.text;
+            block.text += delta.text;
             yield { type: "text-delta", id, delta: delta.text };
           } else if (delta.type === "thinking_delta") {
-            lastThinking += delta.thinking;
+            block.text += delta.thinking;
             yield { type: "thinking-delta", id, delta: delta.thinking };
           } else if (delta.type === "input_json_delta") {
-            lastToolInput += delta.partial_json;
-            yield { type: "tool-input-delta", toolCallId: lastToolCallId, toolName: lastToolName, delta: delta.partial_json };
+            block.text += delta.partial_json;
+            yield { type: "tool-input-delta", toolCallId: block.toolCallId, toolName: block.toolName, delta: delta.partial_json };
           } else if (delta.type === "signature_delta") {
-            lastThinkingSignature = delta.signature;
+            block.signature = delta.signature;
           }
         }
+
         if (event.type === "content_block_stop") {
-          const index = event.index;
+          const { index } = event;
           const id = index.toString();
-          if (lastEventType === "text") {
-            yield { type: "text-end", id, text: lastText };
-          } else if (lastEventType === "thinking") {
-            yield { type: "thinking-end", id, signature: lastThinkingSignature, text: lastThinking };
-          } else if (lastEventType === "tool_use") {
-            yield { type: "tool-input-end", toolCallId: lastToolCallId, toolName: lastToolName, text: lastToolInput };
+          const block = blocks.get(index);
+          if (!block) continue;
+
+          if (block.type === "text") {
+            yield { type: "text-end", id, text: block.text };
+          } else if (block.type === "thinking") {
+            yield { type: "thinking-end", id, signature: block.signature, text: block.text };
+          } else if (block.type === "tool_use") {
+            yield { type: "tool-input-end", toolCallId: block.toolCallId, toolName: block.toolName, text: block.text };
           }
-          lastEventType = undefined;
-          lastToolCallId = '';
-          lastToolName = '';
-          lastThinkingSignature = '';
+
+          blocks.delete(index);
         }
 
         if (event.type === "message_delta") {

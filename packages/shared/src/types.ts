@@ -54,7 +54,6 @@ export interface StepEndPart {
   model?: string;
 }
 
-/** 错误 */
 export interface ErrorPart {
   type: "error";
   message: string;
@@ -83,31 +82,32 @@ export interface Message {
 export type FinishReason = 'stop' | 'tool_calls' | 'max_tokens' | 'error' | 'abort';
 
 export type MessageStreamEvent =
-  // ── Agent 层：非流式消息内容（tool 状态、user 消息、error part）──
-  | { type: 'part'; role?: MessageRole; part: MessagePart }
-
-  // ── Provider 层：三段式文本 ──────────────────────
+  // -- Provider: three-phase text streaming --
   | { type: 'text-start'; id: string }
   | { type: 'text-delta'; id: string; delta: string }
-  | { type: 'text-end'; id: string, text: string }
+  | { type: 'text-end'; id: string; text: string }
 
-  // ── Provider 层：三段式思考链 ────────────────────
+  // -- Provider: three-phase thinking (CoT) streaming --
   | { type: 'thinking-start'; id: string }
   | { type: 'thinking-delta'; id: string; delta: string }
-  | { type: 'thinking-end';  id: string, signature: string, text: string }
+  | { type: 'thinking-end'; id: string; signature: string; text: string }
 
-  // ── Provider 层：Tool 参数流式 ───────────────────
+  // -- Provider: tool input streaming --
   | { type: 'tool-input-start'; toolCallId: string; toolName: string }
-  | { type: 'tool-input-delta'; toolCallId: string; toolName: string, delta: string }
-  | { type: 'tool-input-end'; toolCallId: string; toolName: string, text: string }
+  | { type: 'tool-input-delta'; toolCallId: string; toolName: string; delta: string }
+  | { type: 'tool-input-end'; toolCallId: string; toolName: string; text: string }
 
-  // ── 生命周期 ───────────────────────────────────
-  | { type: 'step-start'; }
+  // -- Provider: step lifecycle --
+  | { type: 'step-start' }
   | { type: 'step-finish'; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
-  | { type: 'stream-finish' }
 
-  // ── 错误与控制 ─────────────────────────────────
-  | { type: 'error'; error: string; }
+  // -- Agent: tool execution results --
+  | { type: 'tool-output'; toolCallId: string; toolName: string; state: 'result' | 'error'; output: string }
+  | { type: 'tool-approval'; toolCallId: string; toolName: string; approval: 'pending' | 'approved' | 'rejected' }
+
+  // -- Lifecycle & control --
+  | { type: 'stream-finish' }
+  | { type: 'error'; error: string }
   | { type: 'abort' }
   | { type: 'ping' };
 

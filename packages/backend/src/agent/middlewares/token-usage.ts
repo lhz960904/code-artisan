@@ -28,10 +28,7 @@ export class TokenUsageMiddleware implements AgentMiddleware {
       const msg = await runtime.store.addMessage("assistant", [
         { type: "error", message: "Token quota exceeded." },
       ]);
-      runtime.emitStream({
-        type: 'part',
-        part: { type: "error", message: "Token quota exceeded." },
-      });
+      runtime.emitStream({ type: "error", error: "Token quota exceeded." });
     }
   }
 
