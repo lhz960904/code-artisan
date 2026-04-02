@@ -4,6 +4,17 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useWorkspace } from "@/contexts/workspace-context";
 
+function getTerminalColors() {
+  const style = getComputedStyle(document.documentElement);
+  const bg = style.getPropertyValue("--background").trim();
+  const fg = style.getPropertyValue("--foreground").trim();
+
+  return {
+    background: bg ? `hsl(${bg})` : "#1e1e1e",
+    foreground: fg ? `hsl(${fg})` : "#d4d4d4",
+  };
+}
+
 export function TerminalPanel() {
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
@@ -11,15 +22,16 @@ export function TerminalPanel() {
   const writtenCountRef = useRef(0);
   const { terminalHistory } = useWorkspace();
 
-  // Initialize terminal
   useEffect(() => {
     if (!termRef.current) return;
 
+    const colors = getTerminalColors();
+
     const term = new Terminal({
       theme: {
-        background: "#0d1117",
-        foreground: "#e6edf3",
-        cursor: "#e6edf3",
+        background: colors.background,
+        foreground: colors.foreground,
+        cursor: colors.foreground,
         selectionBackground: "#264f78",
       },
       fontSize: 12,
@@ -49,7 +61,6 @@ export function TerminalPanel() {
     };
   }, []);
 
-  // Write new terminal entries
   useEffect(() => {
     const term = xtermRef.current;
     if (!term) return;
@@ -72,5 +83,5 @@ export function TerminalPanel() {
     writtenCountRef.current = terminalHistory.length;
   }, [terminalHistory]);
 
-  return <div ref={termRef} className="h-full w-full" />;
+  return <div ref={termRef} className="h-full w-full bg-background" />;
 }

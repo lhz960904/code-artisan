@@ -217,12 +217,18 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
             break;
           case "tool-input-end": {
             const msgId = streamMsgIdRef.current;
+            let parsedInput: Record<string, unknown> = {};
+            try { parsedInput = JSON.parse(event.text || "{}"); } catch { /* ignore */ }
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id !== msgId) return m;
                 return {
                   ...m,
-                  parts: m.parts.map((p) => (p.type === "tool-call" && p.toolCallId === event.toolCallId ? { ...p, state: "call" } : p)),
+                  parts: m.parts.map((p) =>
+                    p.type === "tool-call" && p.toolCallId === event.toolCallId
+                      ? { ...p, state: "call", input: parsedInput }
+                      : p,
+                  ),
                 };
               }),
             );

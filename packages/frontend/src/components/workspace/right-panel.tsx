@@ -36,7 +36,7 @@ export function RightPanel() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === "preview" && previewUrl && <PreviewPanel />}
+        {activeTab === "preview" && <PreviewPanel />}
         {activeTab === "code" && <CodeView />}
         {activeTab === "terminal" && <TerminalPanel />}
       </div>

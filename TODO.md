@@ -8,7 +8,8 @@
 
 ## Frontend
 - [x] Sidebar 独立组件（从 `__root.tsx` 提取，`useConversations` 移入）
-- [ ] Step 6: 右侧面板组件（Preview 空状态 / FileTree lucide icons / Terminal 样式）
+- [x] Step 6: 右侧面板组件（Preview 空状态 / FileTree lucide icons / Terminal 样式）
+- [x] Fix: tool call 流式阶段显示 undefined（tool-input-end 未解析 input + label fallback）
 - [ ] Step 7: Landing Page 重设计（居中 Hero / 动态 placeholder / 蓝色光晕）
 - [ ] Step 8: 动画 + Loading + Empty States
 - [ ] ChatInput 边框科技感（待打磨）

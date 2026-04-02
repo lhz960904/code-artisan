@@ -1,4 +1,6 @@
+import { FileCode2 } from "lucide-react";
 import Editor from "@monaco-editor/react";
+import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/contexts/workspace-context";
 
 function getLanguage(path: string): string {
@@ -37,25 +39,27 @@ export function EditorPanel() {
 
   if (openTabs.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0d1117] text-sm text-[#484f58]">
-        Select a file to edit
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
+        <FileCode2 className="h-10 w-10 opacity-30" />
+        <p className="text-sm">Select a file to view</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#0d1117]">
+    <div className="flex h-full flex-col bg-background">
       {/* Tabs */}
-      <div className="flex shrink-0 overflow-x-auto border-b border-[#30363d] bg-[#161b22]">
+      <div className="flex shrink-0 overflow-x-auto border-b border-border bg-card">
         {openTabs.map((path) => (
           <button
             key={path}
             onClick={() => setActiveTab(path)}
-            className={`group flex shrink-0 items-center gap-1.5 border-r border-[#30363d] px-3 py-1.5 text-xs ${
+            className={cn(
+              "group flex shrink-0 items-center gap-1.5 border-r border-border px-3 py-1.5 text-xs",
               activeTab === path
-                ? "bg-[#0d1117] text-[#e6edf3]"
-                : "text-[#8b949e] hover:bg-[#1c2128]"
-            }`}
+                ? "bg-background text-foreground"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+            )}
           >
             <span>{fileName(path)}</span>
             <span
@@ -63,7 +67,7 @@ export function EditorPanel() {
                 e.stopPropagation();
                 closeTab(path);
               }}
-              className="ml-1 hidden rounded px-0.5 text-[#484f58] hover:text-[#f85149] group-hover:inline"
+              className="ml-1 hidden rounded px-0.5 text-muted-foreground hover:text-destructive group-hover:inline"
             >
               ×
             </span>

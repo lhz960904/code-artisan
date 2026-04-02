@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 import type { ToolCallPart } from "@code-artisan/shared";
 
 const TOOL_CONFIG: Record<string, { icon: typeof FileText; label: (input: Record<string, string>) => string }> = {
-  write_file: { icon: FileCode, label: (i) => `write ${i.path}` },
-  read_file:  { icon: FileText, label: (i) => `read ${i.path}` },
-  bash:       { icon: Terminal, label: (i) => i.command },
-  ls:         { icon: FolderOpen, label: (i) => `ls ${i.path}` },
-  start_server: { icon: Play, label: (i) => `server :${i.port}` },
-  str_replace:  { icon: Replace, label: (i) => `edit ${i.path}` },
+  write_file: { icon: FileCode, label: (i) => `write ${i.path ?? "..."}` },
+  read_file:  { icon: FileText, label: (i) => `read ${i.path ?? "..."}` },
+  bash:       { icon: Terminal, label: (i) => i.command ?? "..." },
+  ls:         { icon: FolderOpen, label: (i) => `ls ${i.path ?? "..."}` },
+  start_server: { icon: Play, label: (i) => `server :${i.port ?? "..."}` },
+  str_replace:  { icon: Replace, label: (i) => `edit ${i.path ?? "..."}` },
 };
 
 interface ToolCallItemProps {
