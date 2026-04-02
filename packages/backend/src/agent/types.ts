@@ -1,6 +1,6 @@
 import type { Sandbox } from "../sandbox/index.js";
 import type { MessageStore } from "../services/message-store.js";
-import type { Message, MessageStreamEvent } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent } from "@code-artisan/shared";
 
 // ============================================================
 // LLM Provider interface
@@ -76,7 +76,7 @@ export interface AgentRuntime {
 /** Agent config */
 export interface AgentConfig {
   conversationId: string;
-  userMessage?: string;
+  userParts?: MessagePart[];
   maxIterations?: number;
 }
 

@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../../../env.js";
+import { getFileBuffer, getPublicUrl } from "../../../services/storage.js";
 import type { LLMProvider, ToolDefinition, MessageStreamParams, GenerateTextParams } from "../../types.js";
-import type { Message, MessageStreamEvent, FinishReason } from "@code-artisan/shared";
+import type { Message, MessageStreamEvent, FinishReason, ImagePart, DocumentPart } from "@code-artisan/shared";
 
 interface AnthropicProviderOptions {
   apiKey?: string;
@@ -37,7 +38,7 @@ export class AnthropicProvider implements LLMProvider {
       max_tokens: this.maxTokens,
       system: params.system,
       tools: toAnthropicTools(params.tools),
-      messages: toAnthropicMessages(params.messages),
+      messages: await toAnthropicMessages(params.messages),
     };
     if (this.thinking) {
       anthropicParams.thinking = { type: "enabled", budget_tokens: this.thinkingBudget };
@@ -135,7 +136,7 @@ export class AnthropicProvider implements LLMProvider {
       model: params.model,
       max_tokens: 100,
       system: params.system,
-      messages: toAnthropicMessages(params.messages),
+      messages: await toAnthropicMessages(params.messages),
     });
 
     return response.content
@@ -165,7 +166,7 @@ function mapStopReason(stopReason: string | null | undefined): FinishReason {
  * Uses look-ahead to batch consecutive tool messages with their preceding assistant message.
  * Anthropic requires: assistant(tool_use) → user(tool_result), strictly paired.
  */
-export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
+export async function toAnthropicMessages(messages: Message[]): Promise<Anthropic.MessageParam[]> {
   const result: Anthropic.MessageParam[] = [];
 
   for (let i = 0; i < messages.length; i++) {
@@ -173,12 +174,35 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
 
     if (msg.role === "user") {
       if (msg.metadata?.confirmResponse) continue;
-      const text = msg.parts
-        .filter((p) => p.type === "text")
-        .map((p) => p.text)
-        .join("\n");
-      if (text) {
-        result.push({ role: "user", content: text });
+
+      const hasAttachments = msg.parts.some((p) => p.type === "image" || p.type === "document");
+
+      if (!hasAttachments) {
+        const text = msg.parts
+          .filter((p) => p.type === "text")
+          .map((p) => p.text)
+          .join("\n");
+        if (text) {
+          result.push({ role: "user", content: text });
+        }
+      } else {
+        const contentBlocks: Anthropic.ContentBlockParam[] = [];
+
+        for (const part of msg.parts) {
+          if (part.type === "image") {
+            const block = await resolveImageContent(part);
+            contentBlocks.push(block);
+          } else if (part.type === "document") {
+            const block = await resolveDocumentContent(part);
+            contentBlocks.push(block);
+          } else if (part.type === "text" && part.text) {
+            contentBlocks.push({ type: "text", text: part.text });
+          }
+        }
+
+        if (contentBlocks.length > 0) {
+          result.push({ role: "user", content: contentBlocks });
+        }
       }
     }
 
@@ -241,4 +265,93 @@ function toAnthropicTools(tools?: ToolDefinition[]): Anthropic.Tool[] {
       description: t.description,
       input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
     })) ?? [];
+}
+
+// ============================================================
+// Attachment resolution helpers
+// ============================================================
+
+const TEXT_EXTENSIONS = new Set([
+  "txt", "md", "json", "js", "ts", "jsx", "tsx", "py", "rb", "go", "rs",
+  "java", "c", "cpp", "h", "hpp", "css", "html", "xml", "yaml", "yml",
+  "toml", "ini", "cfg", "sh", "bash", "zsh", "sql", "graphql", "vue",
+  "svelte", "astro", "env", "gitignore", "dockerignore", "makefile",
+]);
+
+function isTextFile(mimeType: string, fileUrl: string): boolean {
+  if (mimeType.startsWith("text/")) return true;
+  if (mimeType === "application/json" || mimeType === "application/xml") return true;
+  const ext = fileUrl.split(".").pop()?.toLowerCase() ?? "";
+  return TEXT_EXTENSIONS.has(ext);
+}
+
+function extractFileId(url: string): string {
+  return url.replace(/^files\//, "");
+}
+
+async function resolveImageContent(part: ImagePart): Promise<Anthropic.ImageBlockParam> {
+  if (part.source.type === "base64") {
+    return {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: part.mediaType as Anthropic.Base64ImageSource["media_type"],
+        data: part.source.data,
+      },
+    };
+  }
+  const fileId = extractFileId(part.source.url);
+  const publicUrl = getPublicUrl(fileId);
+  return {
+    type: "image",
+    source: { type: "url", url: publicUrl },
+  };
+}
+
+async function resolveDocumentContent(part: DocumentPart): Promise<Anthropic.ContentBlockParam> {
+  if (part.source.type === "base64") {
+    return {
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: part.mediaType as "application/pdf",
+        data: part.source.data,
+      },
+      ...(part.title && { title: part.title }),
+    } as Anthropic.ContentBlockParam;
+  }
+
+  if (part.source.type === "text") {
+    return { type: "text", text: part.title ? `[File: ${part.title}]\n${part.source.text}` : part.source.text };
+  }
+
+  // URL source — fetch from storage
+  const fileId = extractFileId(part.source.url);
+
+  // PDF → base64 document block
+  if (part.mediaType === "application/pdf") {
+    const buffer = await getFileBuffer(fileId);
+    const base64 = Buffer.from(buffer).toString("base64");
+    return {
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: base64 },
+      ...(part.title && { title: part.title }),
+    } as Anthropic.ContentBlockParam;
+  }
+
+  // Text-like files → read as text
+  if (isTextFile(part.mediaType, part.source.url)) {
+    const buffer = await getFileBuffer(fileId);
+    const text = new TextDecoder().decode(buffer);
+    return {
+      type: "text",
+      text: part.title ? `[File: ${part.title}]\n${text}` : text,
+    };
+  }
+
+  // Unsupported binary
+  return {
+    type: "text",
+    text: `[Unsupported file: ${part.title ?? fileId}]`,
+  };
 }

@@ -6,6 +6,7 @@ import { eq, desc } from "drizzle-orm";
 import { createAgent, stopAgent } from "../agent/index.js";
 import { eventBus } from "../services/event-bus.js";
 import { MessageStore } from "../services/message-store.js";
+import type { Attachment, MessagePart } from "@code-artisan/shared";
 
 const conversationsRouter = new Hono();
 
@@ -146,10 +147,14 @@ conversationsRouter.get("/:id/stream", async (c) => {
 // Send message
 conversationsRouter.post("/:id/messages", async (c) => {
   const id = c.req.param("id");
-  const { content } = await c.req.json<{ content: string }>();
+  const { content, attachments } = await c.req.json<{ content: string; attachments?: Attachment[] }>();
 
-  if (!content?.trim()) {
-    return c.json({ error: "Message content is required" }, 400);
+  if (!content?.trim() && (!attachments || attachments.length === 0)) {
+    return c.json({ error: "Message content or attachments required" }, 400);
+  }
+
+  if (attachments && attachments.length > 5) {
+    return c.json({ error: "Maximum 5 attachments per message" }, 400);
   }
 
   const [conv] = await db
@@ -159,6 +164,39 @@ conversationsRouter.post("/:id/messages", async (c) => {
 
   if (!conv) return c.json({ error: "Conversation not found" }, 404);
 
+  // Build user message parts from attachments + text
+  const userParts: MessagePart[] = [];
+
+  if (attachments) {
+    for (const att of attachments) {
+      if (att.mimeType.startsWith("image/")) {
+        userParts.push({
+          type: "image",
+          mediaType: att.mimeType,
+          source: { type: "url", url: `files/${att.fileId}` },
+        });
+      } else if (att.mimeType === "application/pdf") {
+        userParts.push({
+          type: "document",
+          mediaType: att.mimeType,
+          title: att.fileName,
+          source: { type: "url", url: `files/${att.fileId}` },
+        });
+      } else {
+        userParts.push({
+          type: "document",
+          mediaType: att.mimeType,
+          title: att.fileName,
+          source: { type: "url", url: `files/${att.fileId}` },
+        });
+      }
+    }
+  }
+
+  if (content?.trim()) {
+    userParts.push({ type: "text", text: content });
+  }
+
   const agent = createAgent();
 
   await db
@@ -166,7 +204,7 @@ conversationsRouter.post("/:id/messages", async (c) => {
     .set({ agentRunning: true, updatedAt: new Date() })
     .where(eq(conversations.id, id));
 
-  agent.run({ conversationId: id, userMessage: content })
+  agent.run({ conversationId: id, userParts })
     .catch((err) => {
       console.error(`Agent error for conversation ${id}:`, err);
     })

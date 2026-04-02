@@ -15,3 +15,4 @@ export {
 } from "./conversations";
 
 export { useQuota, type QuotaResponse } from "./quota";
+export { uploadFile } from "./upload";

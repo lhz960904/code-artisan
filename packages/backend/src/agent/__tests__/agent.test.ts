@@ -147,7 +147,7 @@ describe("Agent", () => {
     const provider = makeProvider([textResponse("Hello!")]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "hi" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "hi" }] });
 
     expect(mockAddMessage).toHaveBeenCalledTimes(2);
     expect(mockAddMessage.mock.calls[0][0]).toBe("user");
@@ -167,7 +167,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "run echo" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "run echo" }] });
 
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "assistant"]);
@@ -194,7 +194,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "write and run" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "write and run" }] });
 
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "tool", "assistant"]);
@@ -210,7 +210,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "write and run python" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "write and run python" }] });
 
     expect(provider.stream).toHaveBeenCalledTimes(3);
 
@@ -226,7 +226,7 @@ describe("Agent", () => {
     const provider = makeProvider(infiniteTools);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "loop", maxIterations: 3 });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "loop" }], maxIterations: 3 });
 
     expect(provider.stream).toHaveBeenCalledTimes(3);
   });
@@ -245,7 +245,7 @@ describe("Agent", () => {
     };
 
     const agent = new Agent(provider, [stopMiddleware]);
-    await agent.run({ conversationId: "conv-1", userMessage: "test" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "test" }] });
 
     expect(provider.stream).toHaveBeenCalledTimes(1);
   });
@@ -262,7 +262,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "do something" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "do something" }] });
 
     expect(mockUpdatePart).toHaveBeenCalledWith(
       expect.any(String),
@@ -281,7 +281,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userMessage: "delete everything" });
+    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "delete everything" }] });
 
     const toolCall = mockAddMessage.mock.calls.find((c) => c[0] === "tool");
     expect(toolCall).toBeDefined();

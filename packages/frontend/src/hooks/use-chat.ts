@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Message, MessagePart, MessageStreamEvent, TextPart, ThinkingPart, ToolCallPart } from "@code-artisan/shared";
+import type { Message, MessagePart, MessageStreamEvent, TextPart, ThinkingPart, ToolCallPart, Attachment } from "@code-artisan/shared";
 
 // ============================================================
 // Types
@@ -13,7 +13,7 @@ export interface UseChatOptions {
   /** SSE stream URL for this conversation */
   streamUrl: string;
   /** Send a user message to start agent */
-  sendMessage: (conversationId: string, content: string) => Promise<unknown>;
+  sendMessage: (conversationId: string, content: string, attachments?: Attachment[]) => Promise<unknown>;
   /** Fetch messages from DB (for catch-up after SSE done/error) */
   fetchMessages: (conversationId: string) => Promise<Message[]>;
   /** Callback when SSE is finished */
@@ -25,7 +25,7 @@ export interface UseChatOptions {
 export interface UseChatReturn {
   messages: Message[];
   status: ChatStatus;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, attachments?: Attachment[]) => void;
   stop: () => void;
   error: Error | null;
 }
@@ -283,16 +283,40 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
 
   // -- Send message --
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: Attachment[]) => {
       if (!conversationId || sendInFlightRef.current) return;
       sendInFlightRef.current = true;
+
+      // Build optimistic parts
+      const optimisticParts: MessagePart[] = [];
+      if (attachments) {
+        for (const att of attachments) {
+          if (att.mimeType.startsWith("image/")) {
+            optimisticParts.push({
+              type: "image",
+              mediaType: att.mimeType,
+              source: { type: "url", url: `files/${att.fileId}` },
+            });
+          } else {
+            optimisticParts.push({
+              type: "document",
+              mediaType: att.mimeType,
+              title: att.fileName,
+              source: { type: "url", url: `files/${att.fileId}` },
+            });
+          }
+        }
+      }
+      if (content) {
+        optimisticParts.push({ type: "text", text: content });
+      }
 
       setMessages((prev) => [
         ...prev,
         {
           id: `opt-${Date.now()}`,
           role: "user",
-          parts: [{ type: "text", text: content }],
+          parts: optimisticParts.length > 0 ? optimisticParts : [{ type: "text", text: content }],
           createdAt: new Date().toISOString(),
         } as Message,
       ]);
@@ -300,7 +324,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
       setError(null);
 
       try {
-        await optionsRef.current.sendMessage(conversationId, content);
+        await optionsRef.current.sendMessage(conversationId, content, attachments);
         connectSSE();
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));

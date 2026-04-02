@@ -1,12 +1,13 @@
 import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useChat } from "@/hooks/use-chat";
+import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useWorkspace } from "@/contexts/workspace-context";
 import { useMessages, useSendMessage, fetchMessages } from "@/lib/apis";
 import { API_BASE } from "@/lib/apis/client";
-import type { Message } from "@code-artisan/shared";
+import type { Message, Attachment } from "@code-artisan/shared";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -16,6 +17,7 @@ interface ChatPanelProps {
 export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
   const { data: fetchedMessages } = useMessages(conversationId);
   const sendMsgApi = useSendMessage();
+  const fileUpload = useFileUpload();
 
   // If navigating from home page with an initial message, show it as optimistic
   const initialMessages = fetchedMessages?.length
@@ -24,11 +26,13 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
       ? [{ id: `opt-init`, role: "user" as const, parts: [{ type: "text" as const, text: initialMessage }], createdAt: new Date().toISOString() }]
       : undefined;
 
-  const { messages, status, sendMessage } =
+  const { messages, status, sendMessage: chatSendMessage } =
     useChat(conversationId, {
       initialMessages,
       streamUrl: `${API_BASE}/conversations/${conversationId}/stream`,
-      sendMessage: (id, content) => sendMsgApi.mutateAsync({ conversationId: id, content }),
+      sendMessage: async (id, content, attachments) => {
+        await sendMsgApi.mutateAsync({ conversationId: id, content, attachments });
+      },
       fetchMessages,
     });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,6 +61,17 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
 
   const isBusy = status !== "ready" && status !== "error";
 
+  const handleSend = async (content: string) => {
+    let attachments: Attachment[] | undefined;
+
+    if (fileUpload.hasFiles) {
+      attachments = await fileUpload.uploadAll();
+      fileUpload.clear();
+    }
+
+    chatSendMessage(content, attachments);
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
@@ -78,7 +93,14 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
         </div>
       </div>
 
-      <ChatInput onSend={sendMessage} disabled={isBusy} />
+      <ChatInput
+        onSend={handleSend}
+        disabled={isBusy}
+        files={fileUpload.files}
+        onAddFiles={fileUpload.addFiles}
+        onRemoveFile={fileUpload.removeFile}
+        isUploading={fileUpload.isUploading}
+      />
     </div>
   );
 }

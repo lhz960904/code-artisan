@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Message } from "@code-artisan/shared";
+import type { Message, Attachment } from "@code-artisan/shared";
 import { apiFetch } from "./client";
 
 // ============================================================
@@ -43,10 +43,10 @@ const conversations = {
     }),
   delete: (id: string) =>
     apiFetch<void>(`/conversations/${id}`, { method: "DELETE" }),
-  sendMessage: (id: string, content: string) =>
+  sendMessage: (id: string, content: string, attachments?: Attachment[]) =>
     apiFetch<{ status: string }>(`/conversations/${id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, attachments }),
     }),
   confirm: (id: string, approved: boolean) =>
     apiFetch<{ status: string }>(`/conversations/${id}/confirm`, {
@@ -121,8 +121,8 @@ export function useConversationDelete() {
 
 export function useSendMessage() {
   return useMutation({
-    mutationFn: ({ conversationId, content }: { conversationId: string; content: string }) =>
-      conversations.sendMessage(conversationId, content),
+    mutationFn: ({ conversationId, content, attachments }: { conversationId: string; content: string; attachments?: Attachment[] }) =>
+      conversations.sendMessage(conversationId, content, attachments),
   });
 }
 

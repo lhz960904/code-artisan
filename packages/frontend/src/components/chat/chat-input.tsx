@@ -1,20 +1,36 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Square, Plus, Paperclip, Sparkles, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { AttachmentPreview } from "@/components/chat/attachment-preview";
+import type { FileAttachment } from "@/hooks/use-file-upload";
 
 interface ChatInputProps {
   onSend: (content: string) => void;
   disabled?: boolean;
   sending?: boolean;
+  files?: FileAttachment[];
+  onAddFiles?: (files: File[]) => void;
+  onRemoveFile?: (id: string) => void;
+  isUploading?: boolean;
 }
 
-export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  sending,
+  files = [],
+  onAddFiles,
+  onRemoveFile,
+  isUploading,
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -38,14 +54,89 @@ export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
 
   function handleSend() {
     const content = input.trim();
-    if (!content || sending || disabled) return;
+    if ((!content && files.length === 0) || sending || disabled || isUploading) return;
     setInput("");
     onSend(content);
   }
 
+  function handleFileSelect() {
+    fileInputRef.current?.click();
+    setMenuOpen(false);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = e.target.files;
+    if (fileList && onAddFiles) {
+      onAddFiles(Array.from(fileList));
+    }
+    e.target.value = "";
+  }
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items || !onAddFiles) return;
+
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        onAddFiles(imageFiles);
+      }
+    },
+    [onAddFiles],
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      if (!onAddFiles) return;
+      const droppedFiles = Array.from(e.dataTransfer.files);
+      if (droppedFiles.length > 0) {
+        onAddFiles(droppedFiles);
+      }
+    },
+    [onAddFiles],
+  );
+
   return (
     <div className="border-t border-border p-3">
-      <div className="rounded-xl border border-border bg-card">
+      <div
+        className={cn(
+          "rounded-xl border bg-card transition-colors",
+          isDragging ? "border-primary bg-primary/5" : "border-border",
+        )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Attachment preview area */}
+        <AttachmentPreview files={files} onRemove={onRemoveFile ?? (() => {})} />
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
         {/* Textarea area */}
         <Textarea
           ref={textareaRef}
@@ -57,6 +148,7 @@ export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
               handleSend();
             }
           }}
+          onPaste={handlePaste}
           placeholder="How can CodeArtisan help you today?"
           disabled={disabled}
           rows={3}
@@ -80,7 +172,11 @@ export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
               {/* Dropdown menu */}
               {menuOpen && (
                 <div className="absolute bottom-10 left-0 z-50 w-52 rounded-lg border border-border bg-popover p-1 shadow-lg">
-                  <MenuItem icon={<Paperclip className="h-4 w-4" />} label="Attach file" disabled />
+                  <MenuItem
+                    icon={<Paperclip className="h-4 w-4" />}
+                    label="Attach file"
+                    onClick={handleFileSelect}
+                  />
                   <MenuItem icon={<Sparkles className="h-4 w-4" />} label="Enhance prompt" disabled />
                 </div>
               )}
@@ -114,7 +210,7 @@ export function ChatInput({ onSend, disabled, sending }: ChatInputProps) {
               size="icon"
               className="h-8 w-8 rounded-full"
               onClick={handleSend}
-              disabled={sending || !input.trim()}
+              disabled={sending || isUploading || (!input.trim() && files.length === 0)}
             >
               <Send className="h-3.5 w-3.5" />
             </Button>

@@ -130,8 +130,16 @@ export interface Conversation {
 // API Types
 // ============================================================
 
+export interface Attachment {
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface SendMessageRequest {
   content: string;
+  attachments?: Attachment[];
 }
 
 export interface SendMessageResponse {

@@ -40,7 +40,7 @@ export class Agent {
   // --- Public API ---
 
   async run(config: AgentConfig): Promise<void> {
-    const { conversationId, userMessage, maxIterations = 10 } = config;
+    const { conversationId, userParts, maxIterations = 10 } = config;
 
     const ac = new AbortController();
     runningAgents.set(conversationId, ac);
@@ -59,8 +59,8 @@ export class Agent {
 
       await this.runHook("beforeAgent", runtime);
 
-      if (userMessage) {
-        await this.addMessage(runtime, "user", [{ type: "text", text: userMessage }]);
+      if (userParts && userParts.length > 0) {
+        await this.addMessage(runtime, "user", userParts);
       }
 
       await this.handlePendingConfirm(runtime);

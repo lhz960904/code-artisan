@@ -6,11 +6,16 @@ vi.mock("../../../env.js", () => ({
   env: {
     ANTHROPIC_API_KEY: "test-key",
     DATABASE_URL: "test",
-    SUPABASE_URL: "test",
+    SUPABASE_URL: "https://test.supabase.co",
     SUPABASE_PUBLISHABLE_KEY: "test",
     SUPABASE_SECRET_KEY: "test",
     E2B_API_KEY: "test",
   },
+}));
+
+vi.mock("../../../services/storage.js", () => ({
+  getFileBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+  getPublicUrl: vi.fn().mockImplementation((fileId: string) => `https://storage.test.com/${fileId}`),
 }));
 
 import { AnthropicProvider, toAnthropicMessages } from "./index.js";
@@ -57,19 +62,19 @@ const defaultParams = {
 // ── toAnthropicMessages ──────────────────────────────────────
 
 describe("toAnthropicMessages", () => {
-  it("converts simple user + assistant text conversation", () => {
+  it("converts simple user + assistant text conversation", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "hello" }]),
       msg("2", "assistant", [{ type: "text", text: "hi there" }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     expect(result).toEqual([
       { role: "user", content: "hello" },
       { role: "assistant", content: [{ type: "text", text: "hi there" }] },
     ]);
   });
 
-  it("handles single tool call with result", () => {
+  it("handles single tool call with result", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "list files" }]),
       msg("2", "assistant", [{ type: "text", text: "I'll list the files." }]),
@@ -78,7 +83,7 @@ describe("toAnthropicMessages", () => {
         input: { path: "/tmp" }, state: "result", output: "file1.txt\nfile2.txt",
       }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     expect(result).toHaveLength(3);
     expect(result[1]).toEqual({
       role: "assistant",
@@ -93,7 +98,7 @@ describe("toAnthropicMessages", () => {
     });
   });
 
-  it("handles multiple consecutive tool calls", () => {
+  it("handles multiple consecutive tool calls", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "write and run" }]),
       msg("2", "assistant", [{ type: "text", text: "I'll write then run." }]),
@@ -106,7 +111,7 @@ describe("toAnthropicMessages", () => {
         input: { command: "python /tmp/a.py" }, state: "result", output: "hi",
       }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     expect(result).toHaveLength(3);
     const assistantContent = result[1].content as unknown[];
     expect(assistantContent).toHaveLength(3);
@@ -118,7 +123,7 @@ describe("toAnthropicMessages", () => {
     expect(toolResults[1]).toMatchObject({ type: "tool_result", tool_use_id: "toolu_2" });
   });
 
-  it("preserves thinking block signature", () => {
+  it("preserves thinking block signature", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "think about this" }]),
       msg("2", "assistant", [
@@ -126,14 +131,14 @@ describe("toAnthropicMessages", () => {
         { type: "text", text: "Here's my answer." },
       ]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     const assistantContent = result[1].content as unknown[];
     expect(assistantContent[0]).toMatchObject({
       type: "thinking", thinking: "Let me think...", signature: "sig_abc123",
     });
   });
 
-  it("skips thinking blocks without signature", () => {
+  it("skips thinking blocks without signature", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "test" }]),
       msg("2", "assistant", [
@@ -141,25 +146,25 @@ describe("toAnthropicMessages", () => {
         { type: "text", text: "answer" },
       ]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     const assistantContent = result[1].content as unknown[];
     expect(assistantContent).toHaveLength(1);
     expect(assistantContent[0]).toEqual({ type: "text", text: "answer" });
   });
 
-  it("skips confirm response messages", () => {
+  it("skips confirm response messages", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "do something" }]),
       msg("2", "user", [{ type: "text", text: "Approved" }], { confirmResponse: { approved: true } }),
       msg("3", "assistant", [{ type: "text", text: "ok" }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({ role: "user", content: "do something" });
     expect(result[1].role).toBe("assistant");
   });
 
-  it("handles multi-turn conversation with tools", () => {
+  it("handles multi-turn conversation with tools", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "create a file" }]),
       msg("2", "assistant", [{ type: "text", text: "Creating file." }]),
@@ -176,14 +181,14 @@ describe("toAnthropicMessages", () => {
       }]),
       msg("8", "assistant", [{ type: "text", text: "Output is 1." }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     expect(result).toHaveLength(8);
     for (let i = 1; i < result.length; i++) {
       expect(result[i].role).not.toBe(result[i - 1].role);
     }
   });
 
-  it("skips tool in call state to avoid unpaired tool_use/tool_result", () => {
+  it("skips tool in call state to avoid unpaired tool_use/tool_result", async () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "do it" }]),
       msg("2", "assistant", [{ type: "text", text: "doing" }]),
@@ -192,12 +197,27 @@ describe("toAnthropicMessages", () => {
         input: { command: "echo hi" }, state: "call",
       }]),
     ];
-    const result = toAnthropicMessages(messages);
+    const result = await toAnthropicMessages(messages);
     const assistantContent = result[1].content as unknown[];
-    // tool in "call" state excluded — no tool_use without matching tool_result
     expect(assistantContent).toHaveLength(1);
     expect(assistantContent[0]).toMatchObject({ type: "text", text: "doing" });
     expect(result).toHaveLength(2);
+  });
+
+  it("converts user message with image attachment to multi-content block", async () => {
+    const messages: Message[] = [
+      msg("1", "user", [
+        { type: "image", mediaType: "image/png", source: { type: "url", url: "files/abc123.png" } },
+        { type: "text", text: "analyze this image" },
+      ]),
+    ];
+    const result = await toAnthropicMessages(messages);
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe("user");
+    const content = result[0].content as unknown[];
+    expect(content).toHaveLength(2);
+    expect(content[0]).toMatchObject({ type: "image", source: { type: "url", url: "https://storage.test.com/abc123.png" } });
+    expect(content[1]).toMatchObject({ type: "text", text: "analyze this image" });
   });
 });
 

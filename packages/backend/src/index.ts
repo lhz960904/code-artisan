@@ -6,6 +6,7 @@ import { env } from "./env.js";
 import { db } from "./db/index.js";
 import { userQuotas } from "./db/schema.js";
 import { conversationsRouter } from "./routes/conversations.js";
+import { uploadRouter } from "./routes/upload.js";
 
 const app = new Hono();
 
@@ -13,6 +14,7 @@ app.use("*", logger());
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 app.route("/api/conversations", conversationsRouter);
+app.route("/api/upload", uploadRouter);
 
 // Get user quota (hardcoded user for now)
 app.get("/api/quota", async (c) => {

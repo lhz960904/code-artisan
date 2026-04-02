@@ -14,3 +14,12 @@
 - [ ] Step 8: 动画 + Loading + Empty States
 - [ ] ChatInput 边框科技感（待打磨）
 - [ ] 可拖拽面板宽度（react-resizable-panels v4 兼容问题待解决）
+
+## Features Backlog
+- [x] 附件支持（用户上传图片/文件给 Agent）— 待创建 Supabase `attachments` bucket
+- [ ] Tools 补充（web_search）
+- [ ] MCP 支持（通用 MCP Client + 配置页面，优先集成 context7）
+- [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
+- [ ] TODO 功能（项目内 TODO 管理）
+- [ ] Custom Rules（用户自定义 system prompt 规则）
+- [ ] DB 集成（项目内持久化 + 管理面板，类似 bolt.new/v0）
