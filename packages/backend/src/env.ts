@@ -8,6 +8,7 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string(),
   E2B_API_KEY: z.string().min(1),
+  TAVILY_API_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
