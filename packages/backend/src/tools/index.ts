@@ -16,3 +16,13 @@ toolRegistry.register(new ReadFileTool());
 toolRegistry.register(new WriteFileTool());
 toolRegistry.register(new StrReplaceTool());
 toolRegistry.register(new StartServerTool());
+
+import { WebSearchTool } from "./builtins/web-search.js";
+import { WebFetchTool } from "./builtins/web-fetch.js";
+import { env } from "../env.js";
+
+// Web search tools (optional, requires TAVILY_API_KEY)
+if (env.TAVILY_API_KEY) {
+  toolRegistry.register(new WebSearchTool(env.TAVILY_API_KEY));
+  toolRegistry.register(new WebFetchTool(env.TAVILY_API_KEY));
+}
