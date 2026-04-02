@@ -4,16 +4,17 @@ import { RightPanel } from "@/components/workspace/right-panel";
 
 interface WorkspaceLayoutProps {
   conversationId: string;
+  initialMessage?: string;
 }
 
-export function WorkspaceLayout({ conversationId }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ conversationId, initialMessage }: WorkspaceLayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <Header conversationId={conversationId} />
       <div className="flex flex-1 overflow-hidden">
         <div className="flex w-[400px] shrink-0 flex-col border-r border-border">
           <div className="min-h-0 flex-1">
-            <ChatPanel conversationId={conversationId} />
+            <ChatPanel conversationId={conversationId} initialMessage={initialMessage} />
           </div>
         </div>
         <div className="flex-1 overflow-hidden">

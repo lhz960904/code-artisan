@@ -10,11 +10,19 @@ import type { Message } from "@code-artisan/shared";
 
 interface ChatPanelProps {
   conversationId: string;
+  initialMessage?: string;
 }
 
-export function ChatPanel({ conversationId }: ChatPanelProps) {
-  const { data: initialMessages } = useMessages(conversationId);
+export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
+  const { data: fetchedMessages } = useMessages(conversationId);
   const sendMsgApi = useSendMessage();
+
+  // If navigating from home page with an initial message, show it as optimistic
+  const initialMessages = fetchedMessages?.length
+    ? fetchedMessages
+    : initialMessage
+      ? [{ id: `opt-init`, role: "user" as const, parts: [{ type: "text" as const, text: initialMessage }], createdAt: new Date().toISOString() }]
+      : undefined;
 
   const { messages, status, sendMessage } =
     useChat(conversationId, {

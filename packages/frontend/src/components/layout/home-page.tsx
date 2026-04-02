@@ -13,8 +13,12 @@ export function HomePage() {
     if (!content || createConv.isPending) return;
 
     const conv = await createConv.mutateAsync();
-    navigate({ to: "/chat/$conversationId", params: { conversationId: conv.id } });
-    sendMsg.mutate({ conversationId: conv.id, content });
+    await sendMsg.mutateAsync({ conversationId: conv.id, content });
+    navigate({
+      to: "/chat/$conversationId",
+      params: { conversationId: conv.id },
+      state: { initialMessage: content } as never,
+    });
   }
 
   return (

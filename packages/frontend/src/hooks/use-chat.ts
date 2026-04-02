@@ -44,6 +44,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  // eslint-disable-next-line react-hooks/purity
   const streamMsgIdRef = useRef(`stream_${Date.now()}`);
 
   // Sync when initialMessages loaded/changed externally (e.g. TanStack Query resolves)
@@ -60,7 +61,10 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
   // -- Refetch from DB to ensure consistency --
   const refetchMessages = useCallback(() => {
     if (!conversationId) return;
-    optionsRef.current.fetchMessages(conversationId).then(setMessages).catch(() => {});
+    optionsRef.current
+      .fetchMessages(conversationId)
+      .then(setMessages)
+      .catch(() => {});
   }, [conversationId]);
 
   // -- SSE event handler --
@@ -71,7 +75,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
         const event = JSON.parse(e.data) as MessageStreamEvent;
 
         switch (event.type) {
-          case 'stream-finish': {
+          case "stream-finish": {
             setStatus("ready");
             sendInFlightRef.current = false;
             if (esRef.current) {
@@ -83,24 +87,28 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
             break;
           }
 
-          case 'tool-output': {
-            setMessages((prev) => updateToolCallPart(prev, event.toolCallId, (part) => ({
-              ...part,
-              state: event.state,
-              output: event.output,
-            })));
+          case "tool-output": {
+            setMessages((prev) =>
+              updateToolCallPart(prev, event.toolCallId, (part) => ({
+                ...part,
+                state: event.state,
+                output: event.output,
+              })),
+            );
             break;
           }
 
-          case 'tool-approval': {
-            setMessages((prev) => updateToolCallPart(prev, event.toolCallId, (part) => ({
-              ...part,
-              approval: event.approval,
-            })));
+          case "tool-approval": {
+            setMessages((prev) =>
+              updateToolCallPart(prev, event.toolCallId, (part) => ({
+                ...part,
+                approval: event.approval,
+              })),
+            );
             break;
           }
 
-          case 'error': {
+          case "error": {
             const err = new Error(event.error);
             setStatus("error");
             setError(err);
@@ -110,111 +118,120 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
           }
 
           // ── step lifecycle ──────────────────────────────
-          case 'step-start': {
+          case "step-start": {
             streamMsgIdRef.current = `stream_${Date.now()}`;
             break;
           }
 
           // ── 三段式文本 ──────────────────────────────
-          case 'text-start': {
+          case "text-start": {
             setStatus("streaming");
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
-              (parts) => [...parts, { type: "text" as const, text: "", status: "streaming" as const }]
-            ));
+            setMessages((prev) => upsertMessage(prev, msgId, "assistant", (parts) => [...parts, { type: "text", text: "", status: "streaming" }]));
             break;
           }
-          case 'text-delta': {
+          case "text-delta": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => prev.map((m) => {
-              if (m.id !== msgId) return m;
-              const parts = [...m.parts];
-              const idx = parts.findLastIndex((p) => p.type === "text" && p.status === "streaming");
-              if (idx < 0) return m;
-              const cur = parts[idx] as TextPart;
-              parts[idx] = { ...cur, text: cur.text + event.delta };
-              return { ...m, parts };
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== msgId) return m;
+                const parts = [...m.parts];
+                const idx = parts.findLastIndex((p) => p.type === "text" && p.status === "streaming");
+                if (idx < 0) return m;
+                const cur = parts[idx] as TextPart;
+                parts[idx] = { ...cur, text: cur.text + event.delta };
+                return { ...m, parts };
+              }),
+            );
             break;
           }
-          case 'text-end': {
+          case "text-end": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => prev.map((m) => {
-              if (m.id !== msgId) return m;
-              return { ...m, parts: m.parts.map((p) =>
-                p.type === "text" && p.status === "streaming"
-                  ? { ...p, status: "done" as const } : p
-              )};
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== msgId) return m;
+                return { ...m, parts: m.parts.map((p) => (p.type === "text" && p.status === "streaming" ? { ...p, status: "done" } : p)) };
+              }),
+            );
             break;
           }
 
           // ── 三段式思考链 ─────────────────────────────
-          case 'thinking-start': {
+          case "thinking-start": {
             setStatus("streaming");
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
-              (parts) => [...parts, { type: "thinking" as const, thinking: "", status: "streaming" as const }]
-            ));
+            setMessages((prev) =>
+              upsertMessage(prev, msgId, "assistant", (parts) => [...parts, { type: "thinking", thinking: "", status: "streaming" }]),
+            );
             break;
           }
-          case 'thinking-delta': {
+          case "thinking-delta": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => prev.map((m) => {
-              if (m.id !== msgId) return m;
-              const parts = [...m.parts];
-              const idx = parts.findLastIndex((p) => p.type === "thinking" && p.status === "streaming");
-              if (idx < 0) return m;
-              const cur = parts[idx] as ThinkingPart;
-              parts[idx] = { ...cur, thinking: cur.thinking + event.delta };
-              return { ...m, parts };
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== msgId) return m;
+                const parts = [...m.parts];
+                const idx = parts.findLastIndex((p) => p.type === "thinking" && p.status === "streaming");
+                if (idx < 0) return m;
+                const cur = parts[idx] as ThinkingPart;
+                parts[idx] = { ...cur, thinking: cur.thinking + event.delta };
+                return { ...m, parts };
+              }),
+            );
             break;
           }
-          case 'thinking-end': {
+          case "thinking-end": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => prev.map((m) => {
-              if (m.id !== msgId) return m;
-              return { ...m, parts: m.parts.map((p) =>
-                p.type === "thinking" && p.status === "streaming"
-                  ? { ...p, signature: event.signature, status: "done" as const } : p
-              )};
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== msgId) return m;
+                return {
+                  ...m,
+                  parts: m.parts.map((p) =>
+                    p.type === "thinking" && p.status === "streaming" ? { ...p, signature: event.signature, status: "done" } : p,
+                  ),
+                };
+              }),
+            );
             break;
           }
 
           // ── Tool 参数流式 ─────────────────────────────
-          case 'tool-input-start': {
+          case "tool-input-start": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => upsertMessage(prev, msgId, "assistant",
-              (parts) => [...parts, {
-                type: "tool-call" as const,
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-                input: {} as Record<string, unknown>,
-                state: "partial-call" as const,
-              }]
-            ));
+            setMessages((prev) =>
+              upsertMessage(prev, msgId, "assistant", (parts) => [
+                ...parts,
+                {
+                  type: "tool-call",
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                  input: {} as Record<string, unknown>,
+                  state: "partial-call",
+                },
+              ]),
+            );
             break;
           }
-          case 'tool-input-delta':
+          case "tool-input-delta":
             break;
-          case 'tool-input-end': {
+          case "tool-input-end": {
             const msgId = streamMsgIdRef.current;
-            setMessages((prev) => prev.map((m) => {
-              if (m.id !== msgId) return m;
-              return { ...m, parts: m.parts.map((p) =>
-                p.type === "tool-call" && p.toolCallId === event.toolCallId
-                  ? { ...p, state: "call" as const }
-                  : p
-              )};
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== msgId) return m;
+                return {
+                  ...m,
+                  parts: m.parts.map((p) => (p.type === "tool-call" && p.toolCallId === event.toolCallId ? { ...p, state: "call" } : p)),
+                };
+              }),
+            );
             break;
           }
 
-          case 'step-finish':
-          case 'abort':
-          case 'ping':
+          case "step-finish":
+          case "abort":
+          case "ping":
             break;
         }
       } catch {
@@ -315,29 +332,18 @@ export function useChat(conversationId: string | null, options: UseChatOptions):
  * Ensure a message with the given ID exists in the list, then apply `update` to its parts.
  * Optimistic messages are kept until refetchMessages replaces the full list.
  */
-function upsertMessage(
-  prev: Message[],
-  messageId: string,
-  role: Message["role"],
-  update: (parts: MessagePart[]) => MessagePart[],
-): Message[] {
+function upsertMessage(prev: Message[], messageId: string, role: Message["role"], update: (parts: MessagePart[]) => MessagePart[]): Message[] {
   const existing = prev.find((m) => m.id === messageId);
   if (existing) {
-    return prev.map((m) => m.id !== messageId ? m : { ...m, parts: update(m.parts) });
+    return prev.map((m) => (m.id !== messageId ? m : { ...m, parts: update(m.parts) }));
   }
   return [...prev, { id: messageId, role, parts: update([]), createdAt: new Date().toISOString() } as Message];
 }
 
 /** Find a ToolCallPart by toolCallId across all messages and apply an updater */
-function updateToolCallPart(
-  messages: Message[],
-  toolCallId: string,
-  updater: (part: ToolCallPart) => ToolCallPart,
-): Message[] {
+function updateToolCallPart(messages: Message[], toolCallId: string, updater: (part: ToolCallPart) => ToolCallPart): Message[] {
   return messages.map((m) => {
-    const idx = m.parts.findIndex(
-      (p) => p.type === "tool-call" && p.toolCallId === toolCallId,
-    );
+    const idx = m.parts.findIndex((p) => p.type === "tool-call" && p.toolCallId === toolCallId);
     if (idx < 0) return m;
     const newParts = [...m.parts];
     newParts[idx] = updater(newParts[idx] as ToolCallPart);
