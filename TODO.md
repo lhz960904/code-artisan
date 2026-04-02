@@ -17,7 +17,7 @@
 
 ## Features Backlog
 - [x] 附件支持（用户上传图片/文件给 Agent）— 待创建 Supabase `attachments` bucket
-- [ ] Tools 补充（web_search）
+- [x] Tools 补充（web_search + web_fetch，Tavily API）
 - [ ] MCP 支持（通用 MCP Client + 配置页面，优先集成 context7）
 - [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] TODO 功能（项目内 TODO 管理）
