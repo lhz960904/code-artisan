@@ -183,7 +183,7 @@ describe("toAnthropicMessages", () => {
     }
   });
 
-  it("handles tool in call state (no result yet)", () => {
+  it("skips tool in call state to avoid unpaired tool_use/tool_result", () => {
     const messages: Message[] = [
       msg("1", "user", [{ type: "text", text: "do it" }]),
       msg("2", "assistant", [{ type: "text", text: "doing" }]),
@@ -194,8 +194,9 @@ describe("toAnthropicMessages", () => {
     ];
     const result = toAnthropicMessages(messages);
     const assistantContent = result[1].content as unknown[];
-    expect(assistantContent).toHaveLength(2);
-    expect(assistantContent[1]).toMatchObject({ type: "tool_use", id: "toolu_1" });
+    // tool in "call" state excluded — no tool_use without matching tool_result
+    expect(assistantContent).toHaveLength(1);
+    expect(assistantContent[0]).toMatchObject({ type: "text", text: "doing" });
     expect(result).toHaveLength(2);
   });
 });

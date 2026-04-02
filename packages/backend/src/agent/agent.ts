@@ -18,6 +18,16 @@ ${toolSection}
 Always use tools to interact with the filesystem. When the user asks you to write code, use write_file to create the file, then bash to run it. For web servers, use start_server to launch them and provide the preview URL. Use str_replace to make targeted edits to existing files instead of rewriting the entire file. Be concise in your text responses.`;
 }
 
+/** Track running agents by conversationId for external abort */
+const runningAgents = new Map<string, AbortController>();
+
+export function stopAgent(conversationId: string): boolean {
+  const ac = runningAgents.get(conversationId);
+  if (!ac) return false;
+  ac.abort();
+  return true;
+}
+
 export class Agent {
   private provider: LLMProvider;
   private middlewares: AgentMiddleware[];
@@ -32,10 +42,20 @@ export class Agent {
   async run(config: AgentConfig): Promise<void> {
     const { conversationId, userMessage, maxIterations = 10 } = config;
 
+    const ac = new AbortController();
+    runningAgents.set(conversationId, ac);
+
     let runtime: AgentRuntime | null = null;
 
     try {
       runtime = await this.initRuntime(conversationId);
+
+      // Check abort signal before each major step
+      const checkAbort = () => {
+        if (ac.signal.aborted) {
+          runtime!.shouldStop = true;
+        }
+      };
 
       await this.runHook("beforeAgent", runtime);
 
@@ -46,14 +66,16 @@ export class Agent {
       await this.handlePendingConfirm(runtime);
 
       for (let i = 0; i < maxIterations && !runtime.shouldStop; i++) {
-        await this.runHook("beforeModel", runtime);
+        checkAbort();
+        if (runtime.shouldStop) break;
 
+        await this.runHook("beforeModel", runtime);
         if (runtime.shouldStop) break;
 
         const response = await this.callModel(runtime);
 
+        checkAbort();
         await this.runHook("afterModel", runtime, response);
-
         if (runtime.shouldStop) break;
 
         runtime.usage.inputTokens += response.usage.inputTokens;
@@ -89,6 +111,7 @@ export class Agent {
         }
       }
     } finally {
+      runningAgents.delete(conversationId);
       eventBus.emitStream(conversationId, { type: "stream-finish" });
     }
   }
@@ -158,7 +181,6 @@ export class Agent {
       }
       switch (event.type) {
         case "thinking-end":
-          console.log(`[agent] thinking-end: ${event.text}, signature: ${event.signature}`);
           thinkingBlocks.push({ thinking: event.text, signature: event.signature });
           break;
         case "text-end":

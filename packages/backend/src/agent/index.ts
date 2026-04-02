@@ -1,4 +1,4 @@
-export { Agent } from "./agent.js";
+export { Agent, stopAgent } from "./agent.js";
 export type {
   AgentConfig,
   AgentMiddleware,

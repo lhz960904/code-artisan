@@ -3,7 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { db } from "../db/index.js";
 import { conversations, messages, fileSnapshots } from "../db/schema.js";
 import { eq, desc } from "drizzle-orm";
-import { createAgent } from "../agent/index.js";
+import { createAgent, stopAgent } from "../agent/index.js";
 import { eventBus } from "../services/event-bus.js";
 import { MessageStore } from "../services/message-store.js";
 
@@ -218,6 +218,19 @@ conversationsRouter.post("/:id/confirm", async (c) => {
     });
 
   return c.json({ status: "ok" });
+});
+
+// Stop agent
+conversationsRouter.post("/:id/stop", async (c) => {
+  const id = c.req.param("id");
+  const stopped = stopAgent(id);
+  if (stopped) {
+    await db
+      .update(conversations)
+      .set({ agentRunning: false })
+      .where(eq(conversations.id, id));
+  }
+  return c.json({ status: stopped ? "stopped" : "not_running" });
 });
 
 export { conversationsRouter };

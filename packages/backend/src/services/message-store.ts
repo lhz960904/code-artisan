@@ -55,15 +55,15 @@ export class MessageStore {
     const entries = Object.entries(updates).filter(([key]) => key !== "type");
     if (entries.length === 0) return;
 
-    // Nest jsonb_set calls: jsonb_set(jsonb_set(parts, ...), ...)
-    let expr = "parts";
+    // Build nested jsonb_set using parameterized values
+    let expr = sql`parts`;
     for (const [key, value] of entries) {
       const jsonPath = `{${partIndex},${key}}`;
-      expr = `jsonb_set(${expr}, '${jsonPath}', '${JSON.stringify(value)}'::jsonb)`;
+      expr = sql`jsonb_set(${expr}, ${jsonPath}, ${JSON.stringify(value)}::jsonb)`;
     }
 
     await db.execute(
-      sql.raw(`UPDATE messages SET parts = ${expr} WHERE id = '${messageId}'`),
+      sql`UPDATE messages SET parts = ${expr} WHERE id = ${messageId}`,
     );
   }
 

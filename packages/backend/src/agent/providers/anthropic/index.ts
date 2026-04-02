@@ -202,19 +202,20 @@ export function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam
       while (j < messages.length && messages[j].role === "tool") {
         for (const part of messages[j].parts) {
           if (part.type !== "tool-call") continue;
+          // Only include completed tool calls (with matching result)
+          // Skip state="call" or "partial-call" — no tool_result to pair with
+          if (part.state !== "result" && part.state !== "error") continue;
           content.push({
             type: "tool_use",
             id: part.toolCallId,
             name: part.toolName,
             input: part.input,
           });
-          if (part.state === "result" || part.state === "error") {
-            toolResultBlocks.push({
-              type: "tool_result",
-              tool_use_id: part.toolCallId,
-              content: part.output ?? "",
-            });
-          }
+          toolResultBlocks.push({
+            type: "tool_result",
+            tool_use_id: part.toolCallId,
+            content: part.output ?? "",
+          });
         }
         j++;
       }
