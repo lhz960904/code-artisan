@@ -76,6 +76,7 @@ export interface AgentRuntime {
 /** Agent config */
 export interface AgentConfig {
   conversationId: string;
+  userId: string;
   userParts?: MessagePart[];
   maxIterations?: number;
 }

@@ -1,15 +1,37 @@
 import { MessageStore } from "../services/message-store.js";
 import { eventBus } from "../services/event-bus.js";
 import { db } from "../db/index.js";
-import { conversations } from "../db/schema.js";
+import { conversations, mcpServers } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { McpTools } from "../mcp/mcp-tools.js";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { getSandboxProvider } from "../sandbox/index.js";
-import { toolRegistry } from "../tools/index.js";
+import { createToolRegistry } from "../tools/index.js";
+import type { ToolRegistry } from "../tools/index.js";
 import type { AgentConfig, AgentMiddleware, AgentRuntime, LLMProvider, LLMResponse, ThinkingBlock, ToolCall } from "./types.js";
 import type { Message, MessagePart, ToolCallPart } from "@code-artisan/shared";
 
-function buildSystemPrompt(): string {
-  const toolSection = toolRegistry.toPromptSection();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function loadMcpRegistry(): Record<string, { command: string; args: string[] }> {
+  try {
+    const registryPath = join(__dirname, "../mcp/mcp-registry.json");
+    const data = JSON.parse(readFileSync(registryPath, "utf-8"));
+    const map: Record<string, { command: string; args: string[] }> = {};
+    for (const server of data.servers) {
+      map[server.id] = { command: server.command, args: server.args };
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+function buildSystemPrompt(registry: ToolRegistry): string {
+  const toolSection = registry.toPromptSection();
   return `You are an AI coding agent running in a sandboxed Linux environment. You help users write code, execute commands, and build projects.
 
 You have access to these tools:
@@ -31,24 +53,50 @@ export function stopAgent(conversationId: string): boolean {
 export class Agent {
   private provider: LLMProvider;
   private middlewares: AgentMiddleware[];
+  private registry: ToolRegistry;
 
   constructor(provider: LLMProvider, middlewares: AgentMiddleware[] = []) {
     this.provider = provider;
     this.middlewares = middlewares;
+    this.registry = createToolRegistry();
   }
 
   // --- Public API ---
 
   async run(config: AgentConfig): Promise<void> {
-    const { conversationId, userParts, maxIterations = 10 } = config;
+    const { conversationId, userId, userParts, maxIterations = 10 } = config;
 
     const ac = new AbortController();
     runningAgents.set(conversationId, ac);
 
     let runtime: AgentRuntime | null = null;
+    const mcpTools = new McpTools();
 
     try {
       runtime = await this.initRuntime(conversationId);
+
+      // Initialize MCP tools for this user
+      const installedServers = await db
+        .select()
+        .from(mcpServers)
+        .where(eq(mcpServers.userId, userId));
+
+      if (installedServers.length > 0) {
+        const registryMap = loadMcpRegistry();
+        const mcpConfigs = installedServers
+          .filter((s) => registryMap[s.serverId])
+          .map((s) => ({
+            serverId: s.serverId,
+            command: registryMap[s.serverId].command,
+            args: registryMap[s.serverId].args,
+            envVars: (s.envVars as Record<string, string>) || {},
+          }));
+
+        const mcpToolInstances = await mcpTools.initialize(mcpConfigs);
+        for (const tool of mcpToolInstances) {
+          this.registry.register(tool);
+        }
+      }
 
       // Check abort signal before each major step
       const checkAbort = () => {
@@ -113,6 +161,7 @@ export class Agent {
     } finally {
       runningAgents.delete(conversationId);
       eventBus.emitStream(conversationId, { type: "stream-finish" });
+      await mcpTools.cleanup();
     }
   }
 
@@ -164,9 +213,9 @@ export class Agent {
     const model = "anthropic/claude-opus-4.6";
     const stream = this.provider.stream({
       model,
-      system: buildSystemPrompt(),
+      system: buildSystemPrompt(this.registry),
       messages: runtime.messages,
-      tools: toolRegistry.toToolDefinitions(),
+      tools: this.registry.toToolDefinitions(),
     });
 
     let textContent = "";
@@ -280,7 +329,7 @@ export class Agent {
   }
 
   private async executeTool(runtime: AgentRuntime, tc: ToolCall): Promise<string> {
-    const tool = toolRegistry.get(tc.name);
+    const tool = this.registry.get(tc.name);
     if (!tool) return `Error: Unknown tool: ${tc.name}`;
     return tool.call({ sandbox: runtime.sandbox, conversationId: runtime.conversationId }, tc.input);
   }

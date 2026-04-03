@@ -16,3 +16,10 @@ export {
 
 export { useQuota, type QuotaResponse } from "./quota";
 export { uploadFile } from "./upload";
+
+export {
+  useMcpServers,
+  useInstallMcpServer,
+  useUninstallMcpServer,
+  useUpdateMcpServer,
+} from "./mcp-servers";

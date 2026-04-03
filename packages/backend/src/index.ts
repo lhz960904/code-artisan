@@ -7,6 +7,7 @@ import { db } from "./db/index.js";
 import { userQuotas } from "./db/schema.js";
 import { conversationsRouter } from "./routes/conversations.js";
 import { uploadRouter } from "./routes/upload.js";
+import { mcpServersRouter } from "./routes/mcp-servers.js";
 
 const app = new Hono();
 
@@ -15,6 +16,7 @@ app.use("*", logger());
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 app.route("/api/conversations", conversationsRouter);
 app.route("/api/upload", uploadRouter);
+app.route("/api/mcp-servers", mcpServersRouter);
 
 // Get user quota (hardcoded user for now)
 app.get("/api/quota", async (c) => {

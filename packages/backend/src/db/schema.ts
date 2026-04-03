@@ -42,3 +42,15 @@ export const userQuotas = pgTable("user_quotas", {
   totalTokens: bigint("total_tokens", { mode: "number" }).notNull().default(1000000),
   usedTokens: bigint("used_tokens", { mode: "number" }).notNull().default(0),
 });
+
+export const mcpServers = pgTable(
+  "mcp_servers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    serverId: text("server_id").notNull(),
+    envVars: jsonb("env_vars").notNull().default({}),
+    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.userId, table.serverId)],
+);

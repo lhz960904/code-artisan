@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as McpServersRouteImport } from './routes/mcp-servers'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChatConversationIdRouteImport } from './routes/chat.$conversationId'
 
+const McpServersRoute = McpServersRouteImport.update({
+  id: '/mcp-servers',
+  path: '/mcp-servers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -25,32 +31,43 @@ const ChatConversationIdRoute = ChatConversationIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/mcp-servers': typeof McpServersRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/mcp-servers': typeof McpServersRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/mcp-servers': typeof McpServersRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/chat/$conversationId'
+  fullPaths: '/' | '/mcp-servers' | '/chat/$conversationId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/chat/$conversationId'
-  id: '__root__' | '/' | '/chat/$conversationId'
+  to: '/' | '/mcp-servers' | '/chat/$conversationId'
+  id: '__root__' | '/' | '/mcp-servers' | '/chat/$conversationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  McpServersRoute: typeof McpServersRoute
   ChatConversationIdRoute: typeof ChatConversationIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/mcp-servers': {
+      id: '/mcp-servers'
+      path: '/mcp-servers'
+      fullPath: '/mcp-servers'
+      preLoaderRoute: typeof McpServersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  McpServersRoute: McpServersRoute,
   ChatConversationIdRoute: ChatConversationIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,7 +1,7 @@
 import type { BaseTool } from "./base.js";
 import type { ToolDefinition } from "../agent/types.js";
 
-class ToolRegistry {
+export class ToolRegistry {
   private tools = new Map<string, BaseTool>();
 
   register(tool: BaseTool): void {
@@ -32,4 +32,3 @@ class ToolRegistry {
   }
 }
 
-export const toolRegistry = new ToolRegistry();

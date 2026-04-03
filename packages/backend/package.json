@@ -17,6 +17,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@code-artisan/shared": "workspace:*",
     "@e2b/code-interpreter": "^1.0.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.49.1",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.7.0",

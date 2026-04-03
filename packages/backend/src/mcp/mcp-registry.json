@@ -1,0 +1,68 @@
+{
+  "servers": [
+    {
+      "id": "context7",
+      "name": "Context7",
+      "author": "upstash",
+      "description": "Up-to-date code documentation for LLMs. Provides version-specific documentation and code examples straight from the source, eliminating outdated or hallucinated API references.",
+      "category": "documentation",
+      "tags": ["documentation", "code-examples", "library-docs", "api-reference", "up-to-date"],
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "envVars": [],
+      "docUrl": "https://github.com/upstash/context7"
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "author": "modelcontextprotocol",
+      "description": "An MCP server that provides a tool for dynamic, reflective problem-solving through a structured thinking process with branching and revision capabilities.",
+      "category": "thinking",
+      "tags": ["thinking", "reasoning", "problem-solving", "chain-of-thought"],
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "envVars": [],
+      "docUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "author": "modelcontextprotocol",
+      "description": "Web and local search using Brave's Search API. Provides both web search and local business/place search capabilities.",
+      "category": "search",
+      "tags": ["search", "web-search", "brave", "local-search"],
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "envVars": [
+        {
+          "name": "BRAVE_API_KEY",
+          "label": "Brave API Key",
+          "placeholder": "BSA-xxxxxxxxxxxxxxxx",
+          "description": "Your Brave Search API key from https://brave.com/search/api/",
+          "required": true
+        }
+      ],
+      "docUrl": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search"
+    },
+    {
+      "id": "firecrawl",
+      "name": "Firecrawl",
+      "author": "mendableai",
+      "description": "Advanced web scraping, crawling, and batch processing. Extract clean content from any website with automatic format conversion.",
+      "category": "web-scraping",
+      "tags": ["web-scraping", "crawling", "content-extraction", "batch-processing"],
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "envVars": [
+        {
+          "name": "FIRECRAWL_API_KEY",
+          "label": "Firecrawl API Key",
+          "placeholder": "fc-xxxxxxxxxxxxxxxx",
+          "description": "Your Firecrawl API key from https://www.firecrawl.dev/app/api-keys",
+          "required": true
+        }
+      ],
+      "docUrl": "https://github.com/mendableai/firecrawl-mcp"
+    }
+  ]
+}

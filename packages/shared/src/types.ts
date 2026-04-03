@@ -146,3 +146,46 @@ export interface SendMessageResponse {
   conversationId: string;
   status: "started";
 }
+
+// ============================================================
+// MCP Types
+// ============================================================
+
+export interface McpEnvVar {
+  name: string;
+  label: string;
+  placeholder: string;
+  description: string;
+  required: boolean;
+}
+
+export interface McpRegistryServer {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  category: string;
+  tags: string[];
+  command: string;
+  args: string[];
+  envVars: McpEnvVar[];
+  docUrl: string;
+}
+
+export interface McpInstalledServer {
+  id: string;
+  serverId: string;
+  envVars: Record<string, string>;
+  installedAt: string;
+  name: string;
+  author: string;
+  description: string;
+  category: string;
+  tags: string[];
+  docUrl: string;
+}
+
+export interface McpServerListItem extends McpRegistryServer {
+  installed: boolean;
+  installedId?: string;
+}

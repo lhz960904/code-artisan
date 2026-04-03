@@ -204,7 +204,7 @@ conversationsRouter.post("/:id/messages", async (c) => {
     .set({ agentRunning: true, updatedAt: new Date() })
     .where(eq(conversations.id, id));
 
-  agent.run({ conversationId: id, userParts })
+  agent.run({ conversationId: id, userId: conv.userId, userParts })
     .catch((err) => {
       console.error(`Agent error for conversation ${id}:`, err);
     })
@@ -244,7 +244,7 @@ conversationsRouter.post("/:id/confirm", async (c) => {
     .set({ agentRunning: true })
     .where(eq(conversations.id, id));
 
-  agent.run({ conversationId: id })
+  agent.run({ conversationId: id, userId: conv.userId })
     .catch((err) => {
       console.error(`Agent error after confirm for conversation ${id}:`, err);
     })

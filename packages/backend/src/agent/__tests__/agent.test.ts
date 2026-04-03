@@ -21,8 +21,16 @@ vi.mock("../../db/index.js", () => ({
     }),
   },
 }));
+
+vi.mock("../../mcp/mcp-tools.js", () => ({
+  McpTools: class {
+    initialize = vi.fn().mockResolvedValue([]);
+    cleanup = vi.fn().mockResolvedValue(undefined);
+  },
+}));
 vi.mock("../../db/schema.js", () => ({
   conversations: { id: "id", mode: "mode", sandboxId: "sandbox_id", userId: "user_id" },
+  mcpServers: { userId: "user_id", serverId: "server_id" },
 }));
 vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
 
@@ -69,14 +77,16 @@ vi.mock("../../sandbox/index.js", () => ({
   }),
 }));
 
+const mockRegistry = {
+  get: vi.fn().mockReturnValue({
+    call: vi.fn().mockResolvedValue("tool output"),
+  }),
+  toToolDefinitions: vi.fn().mockReturnValue([]),
+  toPromptSection: vi.fn().mockReturnValue("- bash: Execute command"),
+};
+
 vi.mock("../../tools/index.js", () => ({
-  toolRegistry: {
-    get: vi.fn().mockReturnValue({
-      call: vi.fn().mockResolvedValue("tool output"),
-    }),
-    toToolDefinitions: vi.fn().mockReturnValue([]),
-    toPromptSection: vi.fn().mockReturnValue("- bash: Execute command"),
-  },
+  createToolRegistry: vi.fn(() => mockRegistry),
 }));
 
 // --- Helpers ---
@@ -147,7 +157,7 @@ describe("Agent", () => {
     const provider = makeProvider([textResponse("Hello!")]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "hi" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "hi" }] });
 
     expect(mockAddMessage).toHaveBeenCalledTimes(2);
     expect(mockAddMessage.mock.calls[0][0]).toBe("user");
@@ -167,7 +177,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "run echo" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "run echo" }] });
 
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "assistant"]);
@@ -194,7 +204,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "write and run" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "write and run" }] });
 
     const roles = mockAddMessage.mock.calls.map((c) => c[0]);
     expect(roles).toEqual(["user", "assistant", "tool", "tool", "assistant"]);
@@ -210,7 +220,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "write and run python" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "write and run python" }] });
 
     expect(provider.stream).toHaveBeenCalledTimes(3);
 
@@ -226,7 +236,7 @@ describe("Agent", () => {
     const provider = makeProvider(infiniteTools);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "loop" }], maxIterations: 3 });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "loop" }], maxIterations: 3 });
 
     expect(provider.stream).toHaveBeenCalledTimes(3);
   });
@@ -245,14 +255,13 @@ describe("Agent", () => {
     };
 
     const agent = new Agent(provider, [stopMiddleware]);
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "test" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "test" }] });
 
     expect(provider.stream).toHaveBeenCalledTimes(1);
   });
 
   it("recovers from tool execution error via Promise.allSettled", async () => {
-    const { toolRegistry } = await import("../../tools/index.js");
-    (toolRegistry.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+    (mockRegistry.get as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       call: vi.fn().mockRejectedValue(new Error("sandbox crashed")),
     });
 
@@ -262,7 +271,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "do something" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "do something" }] });
 
     expect(mockUpdatePart).toHaveBeenCalledWith(
       expect.any(String),
@@ -281,7 +290,7 @@ describe("Agent", () => {
     ]);
     const agent = new Agent(provider);
 
-    await agent.run({ conversationId: "conv-1", userParts: [{ type: "text", text: "delete everything" }] });
+    await agent.run({ conversationId: "conv-1", userId: "test-user", userParts: [{ type: "text", text: "delete everything" }] });
 
     const toolCall = mockAddMessage.mock.calls.find((c) => c[0] === "tool");
     expect(toolCall).toBeDefined();

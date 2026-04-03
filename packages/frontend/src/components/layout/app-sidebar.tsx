@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { Plus, Home, Trash2 } from "lucide-react";
+import { Plus, Home, Trash2, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversations, useConversationCreate, useConversationDelete } from "@/lib/apis";
@@ -41,9 +41,15 @@ export function AppSidebar() {
       <div className="px-3 pb-2">
         <Link
           to="/"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-accent [&.active]:text-accent-foreground"
         >
           <Home className="h-4 w-4" /> Home
+        </Link>
+        <Link
+          to="/mcp-servers"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-accent [&.active]:text-accent-foreground"
+        >
+          <Plug className="h-4 w-4" /> MCP Servers
         </Link>
       </div>
 
