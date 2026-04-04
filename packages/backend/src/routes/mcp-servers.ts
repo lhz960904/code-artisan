@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { db } from "../db/index.js";
@@ -12,6 +12,7 @@ const __dirname = dirname(__filename);
 
 function loadRegistry(): McpRegistryServer[] {
   const registryPath = join(__dirname, "../mcp/mcp-registry.json");
+  if (!existsSync(registryPath)) return [];
   const data = JSON.parse(readFileSync(registryPath, "utf-8"));
   return data.servers;
 }

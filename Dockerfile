@@ -34,6 +34,7 @@ FROM oven/bun:1-slim
 WORKDIR /app
 
 COPY --from=build /app/packages/backend/dist ./dist
+COPY --from=build /app/packages/backend/src/mcp/mcp-registry.json ./dist/mcp/mcp-registry.json
 COPY --from=build /app/packages/frontend/dist ./dist/public
 COPY --from=build /app/node_modules ./node_modules
 
