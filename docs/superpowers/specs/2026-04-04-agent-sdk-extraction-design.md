@@ -30,66 +30,60 @@ packages/agent/
 │   │   ├── index.ts                    # Provider exports
 │   │   ├── base.ts                     # LLMProvider interface
 │   │   ├── anthropic.ts               # Anthropic implementation
-│   │   └── __tests__/
-│   │       └── anthropic.test.ts
+│   │   └── anthropic.test.ts
 │   │
 │   ├── checkpoint/
 │   │   ├── index.ts                    # Checkpoint exports
 │   │   ├── base.ts                     # CheckpointSaver interface
 │   │   ├── memory.ts                   # InMemoryCheckpointSaver
-│   │   └── __tests__/
-│   │       └── memory.test.ts
+│   │   └── memory.test.ts
 │   │
 │   ├── sandbox/
 │   │   ├── index.ts                    # Sandbox exports
 │   │   ├── base.ts                     # Sandbox interface
 │   │   ├── local.ts                    # LocalSandbox (local shell execution)
-│   │   └── __tests__/
-│   │       └── local.test.ts
+│   │   └── local.test.ts
 │   │
 │   ├── tools/
 │   │   ├── index.ts                    # Tool exports + createDefaultTools()
 │   │   ├── base.ts                     # BaseTool abstract class
+│   │   ├── base.test.ts
 │   │   ├── registry.ts                # ToolRegistry
+│   │   ├── registry.test.ts
 │   │   ├── bash.ts
+│   │   ├── bash.test.ts
 │   │   ├── ls.ts
+│   │   ├── ls.test.ts
 │   │   ├── read-file.ts
+│   │   ├── read-file.test.ts
 │   │   ├── write-file.ts
+│   │   ├── write-file.test.ts
 │   │   ├── str-replace.ts
+│   │   ├── str-replace.test.ts
 │   │   ├── start-server.ts
+│   │   ├── start-server.test.ts
 │   │   ├── web-search.ts
-│   │   ├── web-fetch.ts
-│   │   └── __tests__/
-│   │       ├── base.test.ts
-│   │       ├── registry.test.ts
-│   │       ├── bash.test.ts
-│   │       ├── ls.test.ts
-│   │       ├── read-file.test.ts
-│   │       ├── write-file.test.ts
-│   │       ├── str-replace.test.ts
-│   │       └── start-server.test.ts
+│   │   └── web-fetch.ts
 │   │
 │   ├── mcp/
 │   │   ├── index.ts                    # MCP exports
 │   │   ├── mcp-tools.ts              # MCP dynamic tool loading
-│   │   └── __tests__/
-│   │       └── mcp-tools.test.ts
+│   │   └── mcp-tools.test.ts
 │   │
 │   ├── middlewares/
 │   │   ├── index.ts                    # Middleware exports + defaultMiddlewares()
 │   │   ├── dangling-tool-call.ts
+│   │   ├── dangling-tool-call.test.ts
 │   │   ├── micro-compact.ts
+│   │   ├── micro-compact.test.ts
 │   │   ├── auto-compact.ts
+│   │   ├── auto-compact.test.ts
 │   │   ├── loop-detection.ts
-│   │   └── __tests__/
-│   │       ├── dangling-tool-call.test.ts
-│   │       ├── micro-compact.test.ts
-│   │       ├── auto-compact.test.ts
-│   │       └── loop-detection.test.ts
+│   │   └── loop-detection.test.ts
 │   │
-│   └── __tests__/
-│       ├── agent.test.ts              # Agent execution loop tests
-│       └── agent.interrupt.test.ts    # HITL interrupt/resume tests
+│   ├── agent.ts                        # Agent class
+│   ├── agent.test.ts                   # Agent execution loop tests
+│   ├── agent.interrupt.test.ts         # HITL interrupt/resume tests
 │
 ├── package.json
 ├── tsconfig.json
