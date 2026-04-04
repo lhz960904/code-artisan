@@ -7,9 +7,8 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
 
-# Install pnpm and dependencies (enable build scripts for esbuild)
+# Install pnpm and dependencies
 RUN bun install -g pnpm \
-    && echo "enable-scripts=true" > .npmrc \
     && pnpm install --frozen-lockfile
 
 # Install typescript globally for tsc
