@@ -4,7 +4,7 @@
   "scripts": {
     "dev:frontend": "pnpm --filter @code-artisan/frontend dev",
     "dev:backend": "pnpm --filter @code-artisan/backend dev",
-    "dev": "pnpm run --parallel dev:frontend dev:backend",
+    "dev": "pnpm --parallel --filter @code-artisan/frontend --filter @code-artisan/backend dev",
     "build": "pnpm --filter @code-artisan/shared build && pnpm --filter @code-artisan/frontend build && pnpm --filter @code-artisan/backend build",
     "test": "pnpm --filter @code-artisan/backend test"
   },
