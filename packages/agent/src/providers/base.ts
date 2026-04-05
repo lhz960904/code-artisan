@@ -122,11 +122,9 @@ export type ChatStreamEvent =
 
 // ---- Provider Base ----
 
-export interface BaseInvokeParams {
+export type BaseInvokeParams = {
   messages: MessageParam[];
-  // llm provider specific params
-  [key: string]: unknown;
-}
+} & Record<string, unknown>;
 
 export abstract class BaseProvider {
   abstract invoke(params: BaseInvokeParams): Promise<ChatResponse>;

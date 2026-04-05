@@ -1,5 +1,5 @@
 import { Anthropic } from "@anthropic-ai/sdk";
-import { BaseProvider, type BaseInvokeParams, type ChatResponse, type ChatStreamEvent, type MessageParam, type ToolCall } from "../base";
+import { BaseProvider, type BaseInvokeParams, type ChatResponse, type ChatStreamEvent, type MessageParam, type Tool, type ToolCall } from "../base";
 
 type AnthropicMessageParam = Anthropic.Messages.MessageParam;
 type AnthropicTool = Anthropic.Messages.Tool;
@@ -80,7 +80,7 @@ function toAnthropicMessages(messages: MessageParam[]): {
   return { system, messages: out };
 }
 
-function toAnthropicTools(tools?: BaseInvokeParams["tools"]): AnthropicTool[] | undefined {
+function toAnthropicTools(tools?: Tool[]): AnthropicTool[] | undefined {
   if (!tools?.length) return undefined;
   return tools.map((t) => ({
     name: t.function.name,
@@ -153,39 +153,45 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   async invoke(params: BaseInvokeParams): Promise<ChatResponse> {
-    const { messages, max_tokens, tools, system: paramSystem, ...rest } = params;
+    const { messages, max_tokens: rawMaxTokens, tools: rawTools, system: rawSystem, ...extra } = params;
     const { system: extractedSystem, messages: anthropicMessages } = toAnthropicMessages(messages);
+    const max_tokens = (rawMaxTokens as number | undefined) ?? 4096;
+    const tools = rawTools as Tool[] | undefined;
+    const system = (rawSystem as string | undefined) ?? extractedSystem;
 
     const response = await this.client.messages.create({
       model: this.model,
       messages: anthropicMessages,
       max_tokens,
-      system: paramSystem ?? extractedSystem,
+      system,
       ...(toAnthropicTools(tools) ? { tools: toAnthropicTools(tools) } : {}),
       stream: false as const,
-      ...rest,
+      ...extra,
     });
 
     return fromAnthropicResponse(response);
   }
 
   async *stream(params: BaseInvokeParams): AsyncIterable<ChatStreamEvent> {
-    const { messages, max_tokens, tools, system: paramSystem, ...rest } = params;
+    const { messages, max_tokens: rawMaxTokens, tools: rawTools, system: rawSystem, ...extra } = params;
     const { system: extractedSystem, messages: anthropicMessages } = toAnthropicMessages(messages);
+    const max_tokens = (rawMaxTokens as number | undefined) ?? 4096;
+    const tools = rawTools as Tool[] | undefined;
+    const system = (rawSystem as string | undefined) ?? extractedSystem;
 
     const response = await this.client.messages.create({
       model: this.model,
       messages: anthropicMessages,
       max_tokens,
-      system: paramSystem ?? extractedSystem,
+      system,
       ...(toAnthropicTools(tools) ? { tools: toAnthropicTools(tools) } : {}),
       stream: true,
-      ...rest,
+      ...extra,
     });
 
     let currentToolId = "";
 
-    for await (const event of response as AsyncIterable<Anthropic.Messages.RawMessageStreamEvent>) {
+    for await (const event of response) {
       if (event.type === "content_block_start") {
         if (event.content_block.type === "tool_use") {
           currentToolId = event.content_block.id;
