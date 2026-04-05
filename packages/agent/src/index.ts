@@ -26,3 +26,26 @@ export type {
   DocumentMediaType,
 } from "./providers/base.js";
 export type { CreateAgentParams } from "./types.js";
+export { tool } from "./tools/tool.js";
+export {
+  bashTool,
+  lsTool,
+  readFileTool,
+  writeFileTool,
+  strReplaceTool,
+  globTool,
+  grepTool,
+  createWebSearchTool,
+  createWebFetchTool,
+} from "./tools/builtins/index.js";
+export type { DefinedTool } from "./tools/tool.js";
+export type { ToolRuntime, ToolCallResult } from "./tools/types.js";
+export type {
+  Sandbox,
+  ExecOptions,
+  WriteFileOptions,
+  GlobResult,
+  GlobFileInfo,
+  GrepResult,
+  GrepMatch,
+} from "./sandboxs/base.js";
