@@ -5,5 +5,6 @@
   "editor.formatOnSaveMode": "file",
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit"
-  }
+  },
+  "liveServer.settings.port": 8081
 }
