@@ -49,3 +49,9 @@ export type {
   GrepResult,
   GrepMatch,
 } from "./sandboxs/base.js";
+export { E2BSandbox } from "./sandboxs/e2b/index.js";
+export { LocalSandbox } from "./sandboxs/local/index.js";
+export type { LocalSandboxOptions } from "./sandboxs/local/index.js";
+export type { SandboxProvider } from "./sandboxs/provider.js";
+export { E2BProvider } from "./sandboxs/e2b/provider.js";
+export { LocalProvider } from "./sandboxs/local/provider.js";

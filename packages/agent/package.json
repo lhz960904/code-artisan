@@ -23,6 +23,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@code-artisan/shared": "workspace:*",
+    "@e2b/code-interpreter": "^1.5.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.6.1",
     "openai": "^6.33.0",

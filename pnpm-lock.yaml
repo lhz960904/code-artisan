@@ -20,6 +20,9 @@ importers:
       '@code-artisan/shared':
         specifier: workspace:*
         version: link:../shared
+      '@e2b/code-interpreter':
+        specifier: ^1.5.1
+        version: 1.5.1
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)

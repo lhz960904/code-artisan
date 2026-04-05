@@ -17,12 +17,14 @@ import {
 
 function createMockSandbox(): Sandbox {
   return {
+    id: "mock-sandbox",
     exec: vi.fn().mockResolvedValue(""),
     readFile: vi.fn().mockResolvedValue(""),
     writeFile: vi.fn().mockResolvedValue(undefined),
     listDir: vi.fn().mockResolvedValue([]),
     glob: vi.fn().mockResolvedValue({ files: [] }),
     grep: vi.fn().mockResolvedValue({ matches: [] }),
+    close: vi.fn().mockResolvedValue(undefined),
   };
 }
 
