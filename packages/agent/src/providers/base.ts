@@ -118,6 +118,7 @@ export type ChatStreamEvent =
   | { type: "tool_call_start"; id: string; name: string }
   | { type: "tool_call_delta"; id: string; arguments: string }
   | { type: "tool_call_end"; id: string }
+  | { type: "tool_result"; id: string; name: string; output: string }
   | { type: "done"; finish_reason: FinishReason; usage: Usage };
 
 // ---- Provider Base ----

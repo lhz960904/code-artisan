@@ -1,4 +1,4 @@
-export { createAgent } from "./agent.js";
+export { Agent, createAgent } from "./agent.js";
 export { BaseProvider } from "./providers/base.js";
 export { AnthropicProvider } from "./providers/anthropic/index.js";
 export type { AnthropicProviderOptions } from "./providers/anthropic/index.js";
