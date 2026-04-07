@@ -1,5 +1,4 @@
-import "dotenv/config";
-import { AnthropicProvider, createAgent } from "../src/index.js";
+import { AnthropicProvider, createAgent } from "../index";
 
 const provider = new AnthropicProvider("claude-sonnet-4-20250514", {
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -8,9 +7,10 @@ const provider = new AnthropicProvider("claude-sonnet-4-20250514", {
 
 const agent = createAgent({ model: provider });
 
-const stream = agent.stream([{ role: "user", content: "用三句话介绍 TypeScript 的优点" }], {
-  thinking: { type: "enabled", budget_tokens: 16000 },
-});
+const stream = agent.stream(
+  [{ role: "user", content: [{ type: "text", text: "用三句话介绍 TypeScript 的优点" }] }],
+  { thinking: { type: "enabled", budget_tokens: 16000 } },
+);
 
 for await (const event of stream) {
   switch (event.type) {

@@ -1,5 +1,4 @@
-import "dotenv/config";
-import { AnthropicProvider, createAgent } from "../src/index.js";
+import { AnthropicProvider, createAgent } from "../index";
 
 const provider = new AnthropicProvider("claude-sonnet-4-20250514", {
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -8,8 +7,9 @@ const provider = new AnthropicProvider("claude-sonnet-4-20250514", {
 
 const agent = createAgent({ model: provider });
 
-const response = await agent.invoke([{ role: "user", content: "用一句话介绍你自己" }]);
+const response = await agent.invoke([
+  { role: "user", content: [{ type: "text", text: "用一句话介绍你自己" }] },
+]);
 
-console.log("Content:", response.content);
-console.log("Finish reason:", response.finish_reason);
-console.log("Usage:", response.usage);
+const text = response.content.find((c) => c.type === "text");
+console.log("Content:", text?.type === "text" ? text.text : null);
