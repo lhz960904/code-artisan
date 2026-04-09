@@ -54,6 +54,7 @@ export function AssistantMessageItem({ message }: { message: AssistantMessage })
             }
             return null;
           case "tool_use":
+            if (content.name === "todo_write") return null;
             return (
               <Box key={i} columnGap={1}>
                 <Text color={currentTheme.colors.secondaryText}>⏺</Text>

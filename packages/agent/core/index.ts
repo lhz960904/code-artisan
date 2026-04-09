@@ -5,6 +5,7 @@ import { bashTool, lsTool, globTool, grepTool, readFileTool, strReplaceTool, wri
 import type { Tool } from "../tools/tool";
 import type { AgentOptions } from "../types";
 import { Agent } from "./agent";
+import { createTodoSystem } from "../middlewares/todo";
 
 function mergeTools(builtins: Tool[], userTools?: Tool[]): Tool[] {
   if (!userTools?.length) return builtins;
@@ -15,16 +16,15 @@ function mergeTools(builtins: Tool[], userTools?: Tool[]): Tool[] {
 export function createAgent(options: AgentOptions): Agent {
   const { skillsDirs = [join(os.homedir(), ".agents/skills")] } = options;
 
-  const middlewares = [createSkillsMiddleware(skillsDirs), ...(options.middlewares ?? [])];
+  const todoSystem = createTodoSystem();
+
+  const middlewares = [createSkillsMiddleware(skillsDirs), todoSystem.middleware, ...(options.middlewares ?? [])];
 
   const agent = new Agent({
     prompt: options.prompt ?? "You are a helpful coding assistant.",
     model: options.model,
     maxSteps: options.maxSteps,
-    tools: mergeTools(
-      [bashTool, readFileTool, writeFileTool, strReplaceTool, globTool, grepTool, lsTool],
-      options.tools,
-    ),
+    tools: mergeTools([bashTool, readFileTool, writeFileTool, strReplaceTool, globTool, grepTool, lsTool, todoSystem.tool], options.tools),
     middlewares: middlewares,
   });
 
