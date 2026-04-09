@@ -128,7 +128,7 @@ describe("Agent", () => {
 
       const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
       expect(call.tools).toBeDefined();
-      expect(call.tools![0].name).toBe("greet");
+      expect(call.tools?.[0]?.name).toBe("greet");
     });
 
     it("should execute tool calls and loop", async () => {
@@ -189,7 +189,7 @@ describe("Agent", () => {
       const messages = await collectMessages(agent.invoke(userMessage));
 
       const toolMsg = messages[1] as ToolMessage;
-      expect(toolMsg.content[0].content).toContain("boom");
+      expect(toolMsg.content[0]?.content).toContain("boom");
     });
 
     it("should handle unknown tool name", async () => {
@@ -209,8 +209,8 @@ describe("Agent", () => {
       const messages = await collectMessages(agent.invoke(userMessage));
 
       const toolMsg = messages[1] as ToolMessage;
-      expect(toolMsg.content[0].content).toContain("nonexistent");
-      expect(toolMsg.content[0].content).toContain("not found");
+      expect(toolMsg.content[0]?.content).toContain("nonexistent");
+      expect(toolMsg.content[0]?.content).toContain("not found");
     });
 
     it("should throw after maxSteps", async () => {
@@ -263,7 +263,7 @@ describe("Agent", () => {
 
       const toolResults = messages.filter((m): m is ToolMessage => m.role === "tool");
       expect(toolResults).toHaveLength(2);
-      const ids = toolResults.map((m) => m.content[0].tool_use_id);
+      const ids = toolResults.map((m) => m.content[0]?.tool_use_id);
       expect(ids).toContain("call_1");
       expect(ids).toContain("call_2");
     });
