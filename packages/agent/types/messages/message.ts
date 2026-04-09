@@ -1,4 +1,9 @@
-import type { AssistantMessageContent, SystemMessageContent, ToolMessageContent, UserMessageContent } from "./content";
+import type {
+  AssistantMessageContent,
+  SystemMessageContent,
+  ToolMessageContent,
+  UserMessageContent,
+} from "./content";
 
 /**
  * System prompt or policy text for the model.
@@ -20,6 +25,11 @@ export interface UserMessage {
   content: UserMessageContent;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /**
  * Model reply, which may include text, thinking blocks, or tool calls.
  */
@@ -28,6 +38,8 @@ export interface AssistantMessage {
   role: "assistant";
   /** Text, optional reasoning, and/or tool calls; see {@link AssistantMessageContent}. */
   content: AssistantMessageContent;
+  /** Provider-reported token usage for the request that produced this message, when available. */
+  usage?: TokenUsage;
 }
 
 /**

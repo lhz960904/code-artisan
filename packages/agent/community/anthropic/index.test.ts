@@ -72,6 +72,7 @@ describe("AnthropicProvider", () => {
       expect(result).toEqual({
         role: "assistant",
         content: [{ type: "text", text: "Hello!" }],
+        usage: { inputTokens: 10, outputTokens: 5 },
       });
     });
 
@@ -284,6 +285,28 @@ describe("AnthropicProvider", () => {
       const provider = new AnthropicProvider(TEST_MODEL);
 
       await expect(provider.invoke(baseParams)).rejects.toThrow("Rate limited");
+    });
+
+    it("should extract token usage from Anthropic response", async () => {
+      mockCreate.mockResolvedValue(fakeAnthropicMessage);
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      const result = await provider.invoke(baseParams);
+
+      expect(result.usage).toEqual({
+        inputTokens: 10,
+        outputTokens: 5,
+      });
+    });
+
+    it("should omit usage when Anthropic response has no usage", async () => {
+      const { usage: _, ...messageWithoutUsage } = fakeAnthropicMessage;
+      mockCreate.mockResolvedValue(messageWithoutUsage);
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      const result = await provider.invoke(baseParams);
+
+      expect(result.usage).toBeUndefined();
     });
   });
 });

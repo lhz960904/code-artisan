@@ -91,6 +91,13 @@ export function parseAssistantMessage(response: Anthropic.Message): AssistantMes
     }
   }
 
+  if (response.usage) {
+    result.usage = {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    };
+  }
+
   return result;
 }
 
