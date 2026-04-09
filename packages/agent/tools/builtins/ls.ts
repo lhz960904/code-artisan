@@ -8,6 +8,9 @@ export const lsTool = defineTool({
   description:
     "List the contents of a directory up to 2 levels deep in tree format.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to list this directory. Always place `description` as the first parameter."),
     path: z
       .string()
       .describe("The absolute path to the directory to list."),

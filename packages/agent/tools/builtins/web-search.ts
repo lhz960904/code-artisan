@@ -6,6 +6,9 @@ export const webSearchTool = defineTool({
   description:
     "Search the web for current information, documentation, or any topic. Returns titles, snippets, and URLs.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to search for this. Always place `description` as the first parameter."),
     query: z.string().describe("The search query string."),
     maxResults: z
       .number()

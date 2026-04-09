@@ -8,6 +8,9 @@ export const globTool = defineTool({
   description:
     "Find files matching a glob pattern. Supports wildcards (*), recursive (**), character classes ([a-z]), and extension filters (*.ts).",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to search for files. Always place `description` as the first parameter."),
     pattern: z.string().describe("Glob pattern to match (e.g. '**/*.ts', 'src/*.js')."),
     path: z.string().describe("The absolute path to the directory to search in."),
   }),

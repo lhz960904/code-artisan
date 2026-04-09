@@ -8,6 +8,9 @@ export const readFileTool = defineTool({
   description:
     "Read the contents of a text file. Use this to examine source code, configuration files, logs, or any text-based file.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to read this file. Always place `description` as the first parameter."),
     path: z.string().describe("The absolute path to the file to read."),
     start_line: z
       .number()

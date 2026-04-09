@@ -6,6 +6,9 @@ export const bashTool = defineTool({
   description:
     "Execute a bash command in the local environment. Use this for short-lived commands only.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to execute the command. Always place `description` as the first parameter."),
     command: z
       .string()
       .describe("The bash command to execute."),

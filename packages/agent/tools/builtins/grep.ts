@@ -6,6 +6,9 @@ export const grepTool = defineTool({
   description:
     "Search for a text pattern across files in a directory. Returns matching lines with file paths and line numbers. Searches recursively.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to search for this pattern. Always place `description` as the first parameter."),
     pattern: z.string().describe("The text pattern to search for (literal string, not regex)."),
     path: z.string().describe("The absolute path to the directory to search in."),
     include: z

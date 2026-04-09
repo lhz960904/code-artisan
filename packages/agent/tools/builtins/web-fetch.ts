@@ -5,6 +5,9 @@ export const webFetchTool = defineTool({
   name: "web_fetch",
   description: "Fetch and extract the main readable content from a web page URL. Use after web_search to read full page content.",
   parameters: z.object({
+    description: z
+      .string()
+      .describe("Explain why you want to fetch this URL. Always place `description` as the first parameter."),
     url: z.string().url().describe("The URL to fetch and extract content from."),
   }),
   invoke: async ({ url }) => {

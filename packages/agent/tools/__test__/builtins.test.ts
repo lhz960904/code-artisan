@@ -19,12 +19,12 @@ afterEach(async () => {
 
 describe("bashTool", () => {
   it("should execute command and return output", async () => {
-    const result = await bashTool.invoke({ command: "echo hello" });
+    const result = await bashTool.invoke({ description: "test", command: "echo hello" });
     expect(result).toBe("hello");
   });
 
   it("should return (no output) for empty result", async () => {
-    const result = await bashTool.invoke({ command: "true" });
+    const result = await bashTool.invoke({ description: "test", command: "true" });
     expect(result).toBe("(no output)");
   });
 });
@@ -37,7 +37,7 @@ describe("lsTool", () => {
     await writeFile(join(tempDir, "package.json"), "{}");
     await writeFile(join(tempDir, "README.md"), "# hi");
 
-    const result = await lsTool.invoke({ path: tempDir });
+    const result = await lsTool.invoke({ description: "test", path: tempDir });
 
     expect(result).toContain("src/");
     expect(result).toContain("package.json");
@@ -48,7 +48,7 @@ describe("lsTool", () => {
     const emptyDir = join(tempDir, "empty");
     await mkdir(emptyDir);
 
-    const result = await lsTool.invoke({ path: emptyDir });
+    const result = await lsTool.invoke({ description: "test", path: emptyDir });
     expect(result).toBe("(empty)");
   });
 });
@@ -60,7 +60,7 @@ describe("readFileTool", () => {
     const filePath = join(tempDir, "test.txt");
     await writeFile(filePath, "hello world");
 
-    const result = await readFileTool.invoke({ path: filePath });
+    const result = await readFileTool.invoke({ description: "test", path: filePath });
     expect(result).toBe("hello world");
   });
 
@@ -68,7 +68,7 @@ describe("readFileTool", () => {
     const filePath = join(tempDir, "empty.txt");
     await writeFile(filePath, "");
 
-    const result = await readFileTool.invoke({ path: filePath });
+    const result = await readFileTool.invoke({ description: "test", path: filePath });
     expect(result).toBe("(empty)");
   });
 
@@ -76,7 +76,7 @@ describe("readFileTool", () => {
     const filePath = join(tempDir, "lines.txt");
     await writeFile(filePath, "line1\nline2\nline3\nline4\nline5");
 
-    const result = await readFileTool.invoke({ path: filePath, start_line: 2, end_line: 4 });
+    const result = await readFileTool.invoke({ description: "test", path: filePath, start_line: 2, end_line: 4 });
     expect(result).toBe("line2\nline3\nline4");
   });
 
@@ -85,7 +85,7 @@ describe("readFileTool", () => {
     const longContent = Array.from({ length: 1000 }, (_, i) => `line ${i + 1}: ${"x".repeat(20)}`).join("\n");
     await writeFile(filePath, longContent);
 
-    const result = await readFileTool.invoke({ path: filePath });
+    const result = await readFileTool.invoke({ description: "test", path: filePath });
     expect(result).toContain("characters omitted");
     expect(result).toContain("start_line");
   });
@@ -97,7 +97,7 @@ describe("writeFileTool", () => {
   it("should write content to file", async () => {
     const filePath = join(tempDir, "test.txt");
 
-    const result = await writeFileTool.invoke({ path: filePath, content: "hello" });
+    const result = await writeFileTool.invoke({ description: "test", path: filePath, content: "hello" });
     expect(result).toBe("OK");
 
     const content = await Bun.file(filePath).text();
@@ -108,7 +108,7 @@ describe("writeFileTool", () => {
     const filePath = join(tempDir, "log.txt");
     await writeFile(filePath, "first\n");
 
-    await writeFileTool.invoke({ path: filePath, content: "second", append: true });
+    await writeFileTool.invoke({ description: "test", path: filePath, content: "second", append: true });
 
     const content = await Bun.file(filePath).text();
     expect(content).toBe("first\nsecond");
@@ -117,7 +117,7 @@ describe("writeFileTool", () => {
   it("should create directories as needed", async () => {
     const filePath = join(tempDir, "deep", "nested", "file.txt");
 
-    await writeFileTool.invoke({ path: filePath, content: "deep" });
+    await writeFileTool.invoke({ description: "test", path: filePath, content: "deep" });
 
     const content = await Bun.file(filePath).text();
     expect(content).toBe("deep");
@@ -131,7 +131,7 @@ describe("strReplaceTool", () => {
     const filePath = join(tempDir, "test.txt");
     await writeFile(filePath, "foo bar foo");
 
-    const result = await strReplaceTool.invoke({ path: filePath, old_str: "foo", new_str: "baz" });
+    const result = await strReplaceTool.invoke({ description: "test", path: filePath, old_str: "foo", new_str: "baz" });
     expect(result).toBe("OK");
 
     const content = await Bun.file(filePath).text();
@@ -142,7 +142,7 @@ describe("strReplaceTool", () => {
     const filePath = join(tempDir, "test.txt");
     await writeFile(filePath, "foo bar foo");
 
-    await strReplaceTool.invoke({ path: filePath, old_str: "foo", new_str: "baz", replace_all: true });
+    await strReplaceTool.invoke({ description: "test", path: filePath, old_str: "foo", new_str: "baz", replace_all: true });
 
     const content = await Bun.file(filePath).text();
     expect(content).toBe("baz bar baz");
@@ -152,7 +152,7 @@ describe("strReplaceTool", () => {
     const filePath = join(tempDir, "test.txt");
     await writeFile(filePath, "hello world");
 
-    const result = await strReplaceTool.invoke({ path: filePath, old_str: "notfound", new_str: "x" });
+    const result = await strReplaceTool.invoke({ description: "test", path: filePath, old_str: "notfound", new_str: "x" });
     expect(result).toContain("not found");
   });
 });
@@ -165,14 +165,14 @@ describe("globTool", () => {
     await writeFile(join(tempDir, "src", "index.ts"), "");
     await writeFile(join(tempDir, "src", "utils.ts"), "");
 
-    const result = await globTool.invoke({ pattern: "**/*.ts", path: tempDir });
+    const result = await globTool.invoke({ description: "test", pattern: "**/*.ts", path: tempDir });
 
     expect(result).toContain("src/index.ts");
     expect(result).toContain("src/utils.ts");
   });
 
   it("should return message when no matches", async () => {
-    const result = await globTool.invoke({ pattern: "*.py", path: tempDir });
+    const result = await globTool.invoke({ description: "test", pattern: "*.py", path: tempDir });
     expect(result).toContain("No matches");
   });
 
@@ -182,7 +182,7 @@ describe("globTool", () => {
     const writes = Array.from({ length: MAX_GLOB_RESULTS + 10 }, (_, i) => writeFile(join(dir, `file${i}.txt`), ""));
     await Promise.all(writes);
 
-    const result = await globTool.invoke({ pattern: "**/*.txt", path: dir });
+    const result = await globTool.invoke({ description: "test", pattern: "**/*.txt", path: dir });
 
     expect(result).toContain(`Found ${MAX_GLOB_RESULTS} matches`);
     expect(result).toContain("truncated");
@@ -198,7 +198,7 @@ describe("grepTool", () => {
     await writeFile(join(tempDir, "src", "index.ts"), 'import { foo } from "bar"\nconst x = 1');
     await writeFile(join(tempDir, "src", "utils.ts"), "const foo = 42\nconst y = 2");
 
-    const result = await grepTool.invoke({ pattern: "foo", path: tempDir });
+    const result = await grepTool.invoke({ description: "test", pattern: "foo", path: tempDir });
 
     expect(result).toContain("index.ts");
     expect(result).toContain("utils.ts");
@@ -208,7 +208,7 @@ describe("grepTool", () => {
   it("should return message when no matches", async () => {
     await writeFile(join(tempDir, "test.txt"), "hello");
 
-    const result = await grepTool.invoke({ pattern: "nonexistent", path: tempDir });
+    const result = await grepTool.invoke({ description: "test", pattern: "nonexistent", path: tempDir });
     expect(result).toContain("No matches");
   });
 });
@@ -244,7 +244,7 @@ describe("webSearchTool", () => {
       }),
     } as Response);
 
-    const result = await webSearchTool.invoke({ query: "typescript" });
+    const result = await webSearchTool.invoke({ description: "test", query: "typescript" });
 
     expect(result).toContain("Result 1");
     expect(result).toContain("https://a.com");
@@ -256,7 +256,7 @@ describe("webSearchTool", () => {
       json: async () => ({ results: [] }),
     } as Response);
 
-    const result = await webSearchTool.invoke({ query: "nothing" });
+    const result = await webSearchTool.invoke({ description: "test", query: "nothing" });
 
     expect(result).toContain("No results found");
   });
@@ -268,7 +268,7 @@ describe("webSearchTool", () => {
       statusText: "Too Many Requests",
     } as Response);
 
-    await expect(webSearchTool.invoke({ query: "test" })).rejects.toThrow("429");
+    await expect(webSearchTool.invoke({ description: "test", query: "test" })).rejects.toThrow("429");
   });
 });
 
@@ -300,7 +300,7 @@ describe("webFetchTool", () => {
       }),
     } as Response);
 
-    const result = await webFetchTool.invoke({ url: "https://example.com" });
+    const result = await webFetchTool.invoke({ description: "test", url: "https://example.com" });
 
     expect(result).toContain("Page content here");
   });
@@ -311,7 +311,7 @@ describe("webFetchTool", () => {
       json: async () => ({ results: [] }),
     } as Response);
 
-    const result = await webFetchTool.invoke({ url: "https://example.com" });
+    const result = await webFetchTool.invoke({ description: "test", url: "https://example.com" });
 
     expect(result).toContain("Failed to extract");
   });
