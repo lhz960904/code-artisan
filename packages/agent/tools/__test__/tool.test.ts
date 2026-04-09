@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import * as z from "zod";
-import { defineTool } from "./tool";
+import { defineTool } from "../tool";
 
 describe("defineTool()", () => {
   describe("definition", () => {

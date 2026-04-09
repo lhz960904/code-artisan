@@ -1,58 +1,59 @@
 import * as z from "zod";
-import { defineTool, type FunctionTool } from "../tool";
+import { defineTool } from "../tool";
 
-export function createWebSearchTool(apiKey: string): FunctionTool {
-  return defineTool({
-    name: "web_search",
-    description:
-      "Search the web for current information, documentation, or any topic. Returns titles, snippets, and URLs.",
-    parameters: z.object({
-      query: z.string().describe("The search query string."),
-      maxResults: z
-        .number()
-        .min(1)
-        .max(10)
-        .default(5)
-        .optional()
-        .describe("Number of results to return (1-10)."),
-      searchDepth: z
-        .enum(["basic", "advanced"])
-        .default("basic")
-        .optional()
-        .describe("basic = fast snippets, advanced = deeper content."),
-    }),
-    invoke: async ({ query, maxResults, searchDepth }) => {
-      const body: Record<string, unknown> = {
-        api_key: apiKey,
-        query,
-        max_results: maxResults ?? 5,
-        search_depth: searchDepth ?? "basic",
-        include_answer: false,
-      };
+export const webSearchTool = defineTool({
+  name: "web_search",
+  description:
+    "Search the web for current information, documentation, or any topic. Returns titles, snippets, and URLs.",
+  parameters: z.object({
+    query: z.string().describe("The search query string."),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .optional()
+      .describe("Number of results to return (1-10)."),
+    searchDepth: z
+      .enum(["basic", "advanced"])
+      .default("basic")
+      .optional()
+      .describe("basic = fast snippets, advanced = deeper content."),
+  }),
+  invoke: async ({ query, maxResults, searchDepth }) => {
+    const apiKey = process.env.TAVILY_API_KEY;
+    if (!apiKey) throw new Error("TAVILY_API_KEY environment variable is not set");
 
-      const res = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+    const body: Record<string, unknown> = {
+      api_key: apiKey,
+      query,
+      max_results: maxResults ?? 5,
+      search_depth: searchDepth ?? "basic",
+      include_answer: false,
+    };
 
-      if (!res.ok) {
-        throw new Error(`Tavily API error: ${res.status} ${res.statusText}`);
-      }
+    const res = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-      const data = (await res.json()) as {
-        results: { title: string; content: string; url: string }[];
-      };
+    if (!res.ok) {
+      throw new Error(`Tavily API error: ${res.status} ${res.statusText}`);
+    }
 
-      if (!data.results?.length) {
-        return `No results found for: "${query}"`;
-      }
+    const data = (await res.json()) as {
+      results: { title: string; content: string; url: string }[];
+    };
 
-      const formatted = data.results
-        .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.content}\n    URL: ${r.url}`)
-        .join("\n\n");
+    if (!data.results?.length) {
+      return `No results found for: "${query}"`;
+    }
 
-      return `Search results for: "${query}"\n\n${formatted}`;
-    },
-  });
-}
+    const formatted = data.results
+      .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.content}\n    URL: ${r.url}`)
+      .join("\n\n");
+
+    return `Search results for: "${query}"\n\n${formatted}`;
+  },
+});

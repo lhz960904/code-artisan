@@ -5,10 +5,7 @@ import type { z } from "zod";
  * @param P - The parameters of the tool.
  * @param R - The result of the tool.
  */
-export interface FunctionTool<
-  P extends z.ZodSchema<Record<string, unknown>> = z.ZodSchema<Record<string, unknown>>,
-  R = unknown,
-> {
+export interface FunctionTool<P extends z.ZodSchema<Record<string, unknown>> = z.ZodSchema<Record<string, unknown>>, R = unknown> {
   /** The name of the tool. */
   name: string;
   /** The description of the tool. */
@@ -16,9 +13,10 @@ export interface FunctionTool<
   /** The parameters of the tool. */
   parameters: P;
   /** The function to invoke when the tool is called. */
-  // eslint-disable-next-line no-unused-vars
-  invoke: (input: z.infer<P>) => Promise<R>;
+  invoke: (input: z.infer<P>, signal?: AbortSignal) => Promise<R>;
 }
+
+export type Tool = FunctionTool;
 
 /**
  * Defines a function tool.

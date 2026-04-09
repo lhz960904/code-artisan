@@ -36,6 +36,8 @@ export interface ThinkingContent {
   type: "thinking";
   /** Opaque reasoning or chain-of-thought string from the model. */
   thinking: string;
+  /** Provider-issued signature for verification when sending thinking blocks back. */
+  signature?: string;
 }
 
 /**

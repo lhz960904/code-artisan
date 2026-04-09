@@ -1,32 +1,39 @@
 import * as z from "zod";
-import { defineTool, type FunctionTool } from "../tool";
-import type { Sandbox } from "../../sandbox/base";
+import { defineTool } from "../tool";
 
-export function createGlobTool(sandbox: Sandbox): FunctionTool {
-  return defineTool({
-    name: "glob",
-    description:
-      "Find files matching a glob pattern. Supports wildcards (*), recursive (**), character classes ([a-z]), and extension filters (*.ts).",
-    parameters: z.object({
-      pattern: z.string().describe("Glob pattern to match (e.g. '**/*.ts', 'src/*.js')."),
-      path: z.string().describe("The absolute path to the directory to search in."),
-    }),
-    invoke: async ({ pattern, path }) => {
-      const result = await sandbox.glob(pattern, path);
+export const MAX_GLOB_RESULTS = 500;
 
-      if (result.error) {
-        return `Error: ${result.error}`;
+export const globTool = defineTool({
+  name: "glob",
+  description:
+    "Find files matching a glob pattern. Supports wildcards (*), recursive (**), character classes ([a-z]), and extension filters (*.ts).",
+  parameters: z.object({
+    pattern: z.string().describe("Glob pattern to match (e.g. '**/*.ts', 'src/*.js')."),
+    path: z.string().describe("The absolute path to the directory to search in."),
+  }),
+  invoke: async ({ pattern, path }) => {
+    const glob = new Bun.Glob(pattern);
+    const files: string[] = [];
+    let truncated = false;
+
+    for await (const file of glob.scan({ cwd: path, dot: false })) {
+      if (files.length >= MAX_GLOB_RESULTS) {
+        truncated = true;
+        break;
       }
+      files.push(file);
+    }
 
-      if (result.files.length === 0) {
-        return `No matches found for pattern "${pattern}" in ${path}`;
-      }
+    if (files.length === 0) {
+      return `No matches found for pattern "${pattern}" in ${path}`;
+    }
 
-      const formatted = result.files
-        .map((f) => (f.is_dir ? `${f.path}/` : f.path))
-        .join("\n");
+    const result = `Found ${files.length} matches:\n${files.join("\n")}`;
 
-      return `Found ${result.files.length} matches:\n${formatted}`;
-    },
-  });
-}
+    if (truncated) {
+      return `${result}\n\n[Warning: Results truncated at ${MAX_GLOB_RESULTS} files. Consider using a more specific pattern to narrow down results.]`;
+    }
+
+    return result;
+  },
+});

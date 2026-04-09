@@ -1,16 +1,15 @@
 import { render } from "ink";
 
 import {
+  Agent,
   AnthropicProvider,
-  createAgent,
-  createBashTool,
-  createReadFileTool,
-  createWriteFileTool,
-  createStrReplaceTool,
-  createGlobTool,
-  createGrepTool,
-  createLsTool,
-  LocalSandbox,
+  bashTool,
+  readFileTool,
+  writeFileTool,
+  strReplaceTool,
+  globTool,
+  grepTool,
+  lsTool,
 } from "@code-artisan/agent";
 
 import { App } from "./tui/app";
@@ -23,20 +22,10 @@ const provider = new AnthropicProvider(model, {
   baseURL: process.env.ANTHROPIC_BASE_URL,
 });
 
-const sandbox = new LocalSandbox();
-
-const agent = createAgent({
+const agent = new Agent({
+  prompt: "You are a helpful coding assistant.",
   model: provider,
-  sandbox,
-  tools: [
-    createBashTool(sandbox),
-    createReadFileTool(sandbox),
-    createWriteFileTool(sandbox),
-    createStrReplaceTool(sandbox),
-    createGlobTool(sandbox),
-    createGrepTool(sandbox),
-    createLsTool(sandbox),
-  ],
+  tools: [bashTool, readFileTool, writeFileTool, strReplaceTool, globTool, grepTool, lsTool],
 });
 
 console.info();

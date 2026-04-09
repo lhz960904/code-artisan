@@ -1,90 +1,97 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import * as z from "zod";
-import { createAgent } from "./agent";
+import { Agent } from "./agent";
 import { defineTool } from "../tools/tool";
-import type { Message, AssistantMessage, StreamEvent } from "../types/messages";
-import { BaseProvider } from "../types/provider/base";
-import type { Sandbox } from "../sandbox/base";
+import type { AssistantMessage, ToolMessage, UserMessage, NonSystemMessage } from "../types/messages";
+import type { ModelInvokeParams } from "../types/provider";
+import { LLMProvider } from "../types/provider";
 
 const mockInvoke = mock();
-const mockStream = mock();
 
 const mockProvider = {
   invoke: mockInvoke,
-  stream: mockStream,
-} as unknown as BaseProvider;
+} as unknown as LLMProvider;
 
-const mockSandbox = {
-  id: "mock",
-  exec: mock(),
-  readFile: mock(),
-  writeFile: mock(),
-  listDir: mock(),
-  glob: mock(),
-  grep: mock(),
-  close: mock(),
-} as unknown as Sandbox;
-
-const USER_MESSAGE: Message[] = [{ role: "user", content: [{ type: "text", text: "Hello" }] }];
+const userMessage: UserMessage = { role: "user", content: [{ type: "text", text: "Hello" }] };
 
 const fakeResponse: AssistantMessage = {
   role: "assistant",
   content: [{ type: "text", text: "Hi!" }],
 };
 
-describe("createAgent", () => {
+async function collectMessages(gen: AsyncGenerator<AssistantMessage | ToolMessage>): Promise<NonSystemMessage[]> {
+  const messages: NonSystemMessage[] = [];
+  for await (const msg of gen) {
+    messages.push(msg);
+  }
+  return messages;
+}
+
+describe("Agent", () => {
   beforeEach(() => {
     mockInvoke.mockReset();
-    mockStream.mockReset();
   });
 
-  it("should return an object with invoke and stream methods", () => {
-    const agent = createAgent({ model: mockProvider });
+  it("should have an invoke method", () => {
+    const agent = new Agent({ prompt: "test", model: mockProvider });
     expect(typeof agent.invoke).toBe("function");
-    expect(typeof agent.stream).toBe("function");
   });
 
-  // --- invoke without tools (passthrough) ---
+  // --- invoke without tools ---
 
   describe("invoke (no tools)", () => {
-    it("should delegate to provider.invoke", async () => {
+    it("should yield a single assistant message", async () => {
       mockInvoke.mockResolvedValue(fakeResponse);
-      const agent = createAgent({ model: mockProvider });
+      const agent = new Agent({ prompt: "", model: mockProvider });
 
-      const result = await agent.invoke(USER_MESSAGE);
+      const messages = await collectMessages(agent.invoke(userMessage));
 
-      expect(result).toBe(fakeResponse);
-      expect(mockInvoke).toHaveBeenCalledWith({
-        messages: USER_MESSAGE,
-      });
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toBe(fakeResponse);
     });
 
-    it("should merge extra options", async () => {
+    it("should call provider with messages and signal", async () => {
       mockInvoke.mockResolvedValue(fakeResponse);
-      const agent = createAgent({ model: mockProvider });
+      const agent = new Agent({ prompt: "", model: mockProvider });
 
-      await agent.invoke(USER_MESSAGE, {
-        temperature: 0.5,
-        max_tokens: 2048,
-      });
+      await collectMessages(agent.invoke(userMessage));
 
-      expect(mockInvoke).toHaveBeenCalledWith(
-        expect.objectContaining({
-          temperature: 0.5,
-          max_tokens: 2048,
-        }),
-      );
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
+      // Agent appends userMessage to internal history before calling provider
+      expect(call.messages[0]).toEqual(userMessage);
+      expect(call.signal).toBeDefined();
     });
 
-    it("should propagate errors", async () => {
+    it("should propagate provider errors", async () => {
       mockInvoke.mockRejectedValue(new Error("Provider Error"));
-      const agent = createAgent({ model: mockProvider });
+      const agent = new Agent({ prompt: "", model: mockProvider });
 
-      await expect(agent.invoke(USER_MESSAGE)).rejects.toThrow("Provider Error");
+      await expect(collectMessages(agent.invoke(userMessage))).rejects.toThrow("Provider Error");
+    });
+
+    it("should throw if invoked while already running", async () => {
+      let resolveProvider!: (v: AssistantMessage) => void;
+      mockInvoke.mockImplementation(() => new Promise((r) => { resolveProvider = r; }));
+      const agent = new Agent({ prompt: "", model: mockProvider });
+
+      const gen = agent.invoke(userMessage);
+      // Start consuming — enters the generator body and sets _running
+      const pending = gen.next();
+
+      // Wait a tick for the generator to reach the await
+      await new Promise((r) => setTimeout(r, 0));
+
+      const gen2 = agent.invoke(userMessage);
+      await expect(gen2.next()).rejects.toThrow("already running");
+
+      // Resolve to clean up
+      resolveProvider(fakeResponse);
+      await pending;
     });
   });
 
-  // --- invoke with tools (agent loop) ---
+  // --- invoke with tools ---
 
   describe("invoke (with tools)", () => {
     const greetTool = defineTool({
@@ -96,66 +103,49 @@ describe("createAgent", () => {
 
     it("should pass tool definitions to provider", async () => {
       mockInvoke.mockResolvedValue(fakeResponse);
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool],
-        sandbox: mockSandbox,
       });
 
-      await agent.invoke(USER_MESSAGE);
+      await collectMessages(agent.invoke(userMessage));
 
-      const call = mockInvoke.mock.calls[0]?.[0];
+      const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
       expect(call.tools).toBeDefined();
-      expect(call.tools[0].name).toBe("greet");
+      expect(call.tools![0].name).toBe("greet");
     });
 
     it("should execute tool calls and loop", async () => {
-      // First response: model calls tool
       const toolCallResponse: AssistantMessage = {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "call_1", name: "greet", input: { name: "Alice" } },
-        ],
+        content: [{ type: "tool_use", id: "call_1", name: "greet", input: { name: "Alice" } }],
       };
 
-      // Second response: model returns final answer
       const finalResponse: AssistantMessage = {
         role: "assistant",
         content: [{ type: "text", text: "I greeted Alice for you!" }],
       };
 
-      mockInvoke
-        .mockResolvedValueOnce(toolCallResponse)
-        .mockResolvedValueOnce(finalResponse);
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(finalResponse);
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool],
-        sandbox: mockSandbox,
       });
 
-      const result = await agent.invoke(USER_MESSAGE);
+      const messages = await collectMessages(agent.invoke(userMessage));
 
-      expect(mockInvoke).toHaveBeenCalledTimes(2);
-
-      // Second call should include assistant + tool messages
-      const secondCall = mockInvoke.mock.calls[1]?.[0];
-      const messages = secondCall.messages as Message[];
-
-      expect(messages[0]).toEqual(USER_MESSAGE[0]);
-
-      // Assistant message with tool_use
-      expect(messages[1]).toEqual(toolCallResponse);
-
-      // Tool result
-      expect(messages[2]).toEqual({
+      // Should yield: assistant (tool_use) → tool_result → assistant (final)
+      expect(messages).toHaveLength(3);
+      expect(messages[0]).toBe(toolCallResponse);
+      expect(messages[1]).toEqual({
         role: "tool",
         content: [{ type: "tool_result", tool_use_id: "call_1", content: "Hello, Alice!" }],
       });
-
-      // Final result
-      const text = result.content.find((c) => c.type === "text");
-      expect(text?.type === "text" && text.text).toBe("I greeted Alice for you!");
+      expect(messages[2]).toBe(finalResponse);
+      expect(mockInvoke).toHaveBeenCalledTimes(2);
     });
 
     it("should handle tool execution errors gracefully", async () => {
@@ -170,76 +160,60 @@ describe("createAgent", () => {
 
       const toolCallResponse: AssistantMessage = {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "call_1", name: "fail", input: {} },
-        ],
+        content: [{ type: "tool_use", id: "call_1", name: "fail", input: {} }],
       };
 
-      mockInvoke
-        .mockResolvedValueOnce(toolCallResponse)
-        .mockResolvedValueOnce(fakeResponse);
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [failTool],
-        sandbox: mockSandbox,
       });
 
-      await agent.invoke(USER_MESSAGE);
+      const messages = await collectMessages(agent.invoke(userMessage));
 
-      expect(mockInvoke).toHaveBeenCalledTimes(2);
-      const messages = mockInvoke.mock.calls[1]?.[0]?.messages as Message[];
-      const toolMsg = messages[2] as any;
+      const toolMsg = messages[1] as ToolMessage;
       expect(toolMsg.content[0].content).toContain("boom");
     });
 
     it("should handle unknown tool name", async () => {
       const toolCallResponse: AssistantMessage = {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "call_1", name: "nonexistent", input: {} },
-        ],
+        content: [{ type: "tool_use", id: "call_1", name: "nonexistent", input: {} }],
       };
 
-      mockInvoke
-        .mockResolvedValueOnce(toolCallResponse)
-        .mockResolvedValueOnce(fakeResponse);
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool],
-        sandbox: mockSandbox,
       });
 
-      await agent.invoke(USER_MESSAGE);
+      const messages = await collectMessages(agent.invoke(userMessage));
 
-      const messages = mockInvoke.mock.calls[1]?.[0]?.messages as Message[];
-      const toolMsg = messages[2] as any;
+      const toolMsg = messages[1] as ToolMessage;
       expect(toolMsg.content[0].content).toContain("nonexistent");
       expect(toolMsg.content[0].content).toContain("not found");
     });
 
-    it("should stop after maxIterations", async () => {
+    it("should throw after maxSteps", async () => {
       const toolCallResponse: AssistantMessage = {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "call_1", name: "greet", input: { name: "Bob" } },
-        ],
+        content: [{ type: "tool_use", id: "call_1", name: "greet", input: { name: "Bob" } }],
       };
 
       mockInvoke.mockResolvedValue(toolCallResponse);
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool],
-        sandbox: mockSandbox,
-        maxIterations: 3,
+        maxSteps: 2,
       });
 
-      const result = await agent.invoke(USER_MESSAGE);
-
-      expect(mockInvoke).toHaveBeenCalledTimes(3);
-      expect(result).toBe(toolCallResponse);
+      await expect(collectMessages(agent.invoke(userMessage))).rejects.toThrow("Maximum number of steps");
     });
 
     it("should handle multiple tool calls in one response", async () => {
@@ -258,144 +232,106 @@ describe("createAgent", () => {
         ],
       };
 
-      mockInvoke
-        .mockResolvedValueOnce(multiToolResponse)
-        .mockResolvedValueOnce(fakeResponse);
+      mockInvoke.mockResolvedValueOnce(multiToolResponse).mockResolvedValueOnce(fakeResponse);
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool, echoTool],
-        sandbox: mockSandbox,
       });
 
-      await agent.invoke(USER_MESSAGE);
+      const messages = await collectMessages(agent.invoke(userMessage));
 
-      const messages = mockInvoke.mock.calls[1]?.[0]?.messages as Message[];
-      // user + assistant + tool_result_1 + tool_result_2 = 4
+      // assistant + 2 tool results + final assistant
       expect(messages).toHaveLength(4);
-      expect((messages[2] as any).content[0].tool_use_id).toBe("call_1");
-      expect((messages[3] as any).content[0].tool_use_id).toBe("call_2");
+      expect(messages[0]).toBe(multiToolResponse);
+
+      const toolResults = messages.filter((m): m is ToolMessage => m.role === "tool");
+      expect(toolResults).toHaveLength(2);
+      const ids = toolResults.map((m) => m.content[0].tool_use_id);
+      expect(ids).toContain("call_1");
+      expect(ids).toContain("call_2");
     });
   });
 
-  // --- stream ---
+  // --- middleware ---
 
-  describe("stream", () => {
-    const fakeTextEvents: StreamEvent[] = [
-      { type: "text", text: "Hi" },
-      { type: "done", finish_reason: "stop", usage: { input_tokens: 0, output_tokens: 5 } },
-    ];
+  describe("middleware", () => {
+    it("should call beforeAgentRun and afterAgentRun", async () => {
+      mockInvoke.mockResolvedValue(fakeResponse);
+      const beforeAgentRun = mock(() => Promise.resolve());
+      const afterAgentRun = mock(() => Promise.resolve());
 
-    function makeFakeStream(events: StreamEvent[] = fakeTextEvents) {
-      return (async function* () {
-        for (const e of events) yield e;
-      })();
-    }
-
-    it("should delegate to provider.stream with correct params", async () => {
-      mockStream.mockReturnValue(makeFakeStream());
-      const agent = createAgent({ model: mockProvider });
-
-      for await (const _ of agent.stream(USER_MESSAGE)) {
-        // consume
-      }
-
-      expect(mockStream).toHaveBeenCalledWith({
-        messages: USER_MESSAGE,
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        middlewares: [{ beforeAgentRun, afterAgentRun }],
       });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      expect(beforeAgentRun).toHaveBeenCalledTimes(1);
+      expect(afterAgentRun).toHaveBeenCalledTimes(1);
     });
 
-    it("should yield events from provider stream", async () => {
-      mockStream.mockReturnValue(makeFakeStream());
-      const agent = createAgent({ model: mockProvider });
+    it("should call beforeModel and afterModel on each step", async () => {
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "X" } }],
+      };
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
 
-      const events: StreamEvent[] = [];
-      for await (const event of agent.stream(USER_MESSAGE)) {
-        events.push(event);
-      }
-
-      expect(events).toEqual(fakeTextEvents);
-    });
-
-    it("should execute tool calls and loop in stream", async () => {
       const greetTool = defineTool({
         name: "greet",
         description: "Greet",
         parameters: z.object({ name: z.string() }),
-        invoke: async ({ name }) => `Hello, ${name}!`,
+        invoke: async ({ name }) => `Hi ${name}`,
       });
 
-      const toolCallEvents: StreamEvent[] = [
-        { type: "tool_call_start", id: "call_1", name: "greet" },
-        { type: "tool_call_delta", id: "call_1", arguments: '{"name":' },
-        { type: "tool_call_delta", id: "call_1", arguments: '"Alice"}' },
-        { type: "tool_call_end", id: "call_1" },
-        { type: "done", finish_reason: "tool_use", usage: { input_tokens: 10, output_tokens: 20 } },
-      ];
+      const beforeModel = mock(() => Promise.resolve());
+      const afterModel = mock(() => Promise.resolve());
 
-      const finalEvents: StreamEvent[] = [
-        { type: "text", text: "Done!" },
-        { type: "done", finish_reason: "stop", usage: { input_tokens: 30, output_tokens: 5 } },
-      ];
-
-      mockStream
-        .mockReturnValueOnce(makeFakeStream(toolCallEvents))
-        .mockReturnValueOnce(makeFakeStream(finalEvents));
-
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
         tools: [greetTool],
-        sandbox: mockSandbox,
+        middlewares: [{ beforeModel, afterModel }],
       });
 
-      const events: StreamEvent[] = [];
-      for await (const event of agent.stream(USER_MESSAGE)) {
-        events.push(event);
-      }
+      await collectMessages(agent.invoke(userMessage));
 
-      expect(events.some((e) => e.type === "tool_result")).toBe(true);
-      const toolResult = events.find((e) => e.type === "tool_result")!;
-      expect(toolResult).toEqual({
-        type: "tool_result",
-        id: "call_1",
-        name: "greet",
-        output: "Hello, Alice!",
-      });
-
-      expect(events.some((e) => e.type === "text" && e.text === "Done!")).toBe(true);
-      expect(mockStream).toHaveBeenCalledTimes(2);
+      expect(beforeModel).toHaveBeenCalledTimes(2);
+      expect(afterModel).toHaveBeenCalledTimes(2);
     });
 
-    it("should stop stream loop at maxIterations", async () => {
-      const echoTool = defineTool({
-        name: "echo",
-        description: "Echo",
-        parameters: z.object({ text: z.string() }),
-        invoke: async ({ text }) => text,
+    it("should call beforeToolUse and afterToolUse", async () => {
+      const greetTool = defineTool({
+        name: "greet",
+        description: "Greet",
+        parameters: z.object({ name: z.string() }),
+        invoke: async ({ name }) => `Hi ${name}`,
       });
 
-      const toolCallEvents: StreamEvent[] = [
-        { type: "tool_call_start", id: "c1", name: "echo" },
-        { type: "tool_call_delta", id: "c1", arguments: '{"text":"x"}' },
-        { type: "tool_call_end", id: "c1" },
-        { type: "done", finish_reason: "tool_use", usage: { input_tokens: 5, output_tokens: 5 } },
-      ];
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "Y" } }],
+      };
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
 
-      mockStream.mockReturnValue(makeFakeStream(toolCallEvents));
+      const beforeToolUse = mock(() => Promise.resolve());
+      const afterToolUse = mock(() => Promise.resolve());
 
-      const agent = createAgent({
+      const agent = new Agent({
+        prompt: "",
         model: mockProvider,
-        tools: [echoTool],
-        sandbox: mockSandbox,
-        maxIterations: 2,
+        tools: [greetTool],
+        middlewares: [{ beforeToolUse, afterToolUse }],
       });
 
-      const events: StreamEvent[] = [];
-      for await (const event of agent.stream(USER_MESSAGE)) {
-        events.push(event);
-      }
+      await collectMessages(agent.invoke(userMessage));
 
-      expect(mockStream).toHaveBeenCalledTimes(2);
+      expect(beforeToolUse).toHaveBeenCalledTimes(1);
+      expect(afterToolUse).toHaveBeenCalledTimes(1);
     });
   });
 });

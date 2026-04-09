@@ -1,20 +1,33 @@
 import * as z from "zod";
-import { defineTool, type FunctionTool } from "../tool";
-import type { Sandbox } from "../../sandbox/base";
+import { defineTool } from "../tool";
 
-export function createBashTool(sandbox: Sandbox): FunctionTool {
-  return defineTool({
-    name: "bash",
-    description:
-      "Execute a bash command in a Linux sandbox environment. Use `python` to run Python code. Use this for short-lived commands only.",
-    parameters: z.object({
-      command: z
-        .string()
-        .describe("The bash command to execute. Always use absolute paths."),
-    }),
-    invoke: async ({ command }) => {
-      const output = await sandbox.exec(command);
-      return output || "(no output)";
-    },
-  });
-}
+export const bashTool = defineTool({
+  name: "bash",
+  description:
+    "Execute a bash command in the local environment. Use this for short-lived commands only.",
+  parameters: z.object({
+    command: z
+      .string()
+      .describe("The bash command to execute."),
+  }),
+  invoke: async ({ command }) => {
+    const proc = Bun.spawn(["bash", "-c", command], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+
+    const exitCode = await proc.exited;
+    const output = stdout + (stderr ? `\n${stderr}` : "");
+
+    if (exitCode !== 0 && !output.trim()) {
+      return `(exit code ${exitCode})`;
+    }
+
+    return output.trim() || "(no output)";
+  },
+});

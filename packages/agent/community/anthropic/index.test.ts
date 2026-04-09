@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
+import * as z from "zod";
 import { AnthropicProvider } from "./index";
-import { BaseProvider } from "../../types/provider/base";
-import type { BaseInvokeParams } from "../../types/provider/base";
-import type { AssistantMessage, StreamEvent, Message } from "../../types/messages";
+import { LLMProvider } from "../../types/provider";
+import type { ModelInvokeParams } from "../../types/provider";
+import type { AssistantMessage, Message } from "../../types/messages";
+import { defineTool } from "../../tools/tool";
 
 const mockCreate = mock();
 
 mock.module("@anthropic-ai/sdk", () => ({
-  Anthropic: function () {
+  default: function () {
     return { messages: { create: mockCreate } };
   },
 }));
@@ -30,9 +32,8 @@ const fakeAnthropicMessage = {
 
 const TEST_MODEL = "claude-sonnet-4-20250514";
 
-const baseParams: BaseInvokeParams = {
+const baseParams: ModelInvokeParams = {
   messages: [{ role: "user", content: [{ type: "text", text: "Hi" }] }],
-  max_tokens: 4096,
 };
 
 describe("AnthropicProvider", () => {
@@ -40,9 +41,9 @@ describe("AnthropicProvider", () => {
     mockCreate.mockReset();
   });
 
-  it("should extend BaseProvider", () => {
+  it("should extend LLMProvider", () => {
     const provider = new AnthropicProvider(TEST_MODEL);
-    expect(provider).toBeInstanceOf(BaseProvider);
+    expect(provider).toBeInstanceOf(LLMProvider);
   });
 
   describe("invoke", () => {
@@ -55,9 +56,10 @@ describe("AnthropicProvider", () => {
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
+          max_tokens: 8192,
           stream: false,
         }),
+        expect.anything(),
       );
     });
 
@@ -98,11 +100,11 @@ describe("AnthropicProvider", () => {
       ]);
     });
 
-    it("should convert thinking block in response", async () => {
+    it("should preserve signature from thinking block in response", async () => {
       const thinkingMessage = {
         ...fakeAnthropicMessage,
         content: [
-          { type: "thinking", thinking: "Let me think about this..." },
+          { type: "thinking", thinking: "Let me think about this...", signature: "sig_abc123" },
           { type: "text", text: "Here's my answer." },
         ],
       };
@@ -112,12 +114,64 @@ describe("AnthropicProvider", () => {
       const result = await provider.invoke(baseParams);
 
       expect(result.content).toEqual([
-        { type: "thinking", thinking: "Let me think about this..." },
+        { type: "thinking", thinking: "Let me think about this...", signature: "sig_abc123" },
         { type: "text", text: "Here's my answer." },
       ]);
     });
 
-    it("should extract system message from messages", async () => {
+    it("should pass signature back when sending thinking blocks to Anthropic", async () => {
+      mockCreate.mockResolvedValue(fakeAnthropicMessage);
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      await provider.invoke({
+        ...baseParams,
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "reasoning...", signature: "sig_xyz789" },
+              { type: "text", text: "answer" },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "follow up" }] },
+        ],
+      });
+
+      const call = mockCreate.mock.calls[0]?.[0];
+      expect(call.messages[0].content[0]).toEqual({
+        type: "thinking",
+        thinking: "reasoning...",
+        signature: "sig_xyz789",
+      });
+    });
+
+    it("should fallback to empty signature when not provided", async () => {
+      mockCreate.mockResolvedValue(fakeAnthropicMessage);
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      await provider.invoke({
+        ...baseParams,
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "reasoning..." },
+              { type: "text", text: "answer" },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "follow up" }] },
+        ],
+      });
+
+      const call = mockCreate.mock.calls[0]?.[0];
+      expect(call.messages[0].content[0]).toEqual({
+        type: "thinking",
+        thinking: "reasoning...",
+        signature: "",
+      });
+    });
+
+    it("should extract system message as TextBlockParam array", async () => {
       mockCreate.mockResolvedValue(fakeAnthropicMessage);
       const provider = new AnthropicProvider(TEST_MODEL);
 
@@ -129,8 +183,8 @@ describe("AnthropicProvider", () => {
         ],
       });
 
-      const call = mockCreate.mock.calls[0][0];
-      expect(call.system).toBe("Be helpful.");
+      const call = mockCreate.mock.calls[0]?.[0];
+      expect(call.system).toEqual([{ type: "text", text: "Be helpful." }]);
       expect(call.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Hi" }] }]);
     });
 
@@ -144,9 +198,7 @@ describe("AnthropicProvider", () => {
           { role: "user", content: [{ type: "text", text: "Hi" }] },
           {
             role: "assistant",
-            content: [
-              { type: "tool_use", id: "toolu_1", name: "search", input: { q: "test" } },
-            ],
+            content: [{ type: "tool_use", id: "toolu_1", name: "search", input: { q: "test" } }],
           },
           {
             role: "tool",
@@ -155,18 +207,14 @@ describe("AnthropicProvider", () => {
         ],
       });
 
-      const call = mockCreate.mock.calls[0][0];
+      const call = mockCreate.mock.calls[0]?.[0];
       expect(call.messages[1]).toEqual({
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "toolu_1", name: "search", input: { q: "test" } },
-        ],
+        content: [{ type: "tool_use", id: "toolu_1", name: "search", input: { q: "test" } }],
       });
       expect(call.messages[2]).toEqual({
         role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "toolu_1", content: "result data" },
-        ],
+        content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "result data" }],
       });
     });
 
@@ -187,7 +235,7 @@ describe("AnthropicProvider", () => {
         ],
       });
 
-      const call = mockCreate.mock.calls[0][0];
+      const call = mockCreate.mock.calls[0]?.[0];
       expect(call.messages[0]).toEqual({
         role: "user",
         content: [
@@ -201,35 +249,33 @@ describe("AnthropicProvider", () => {
       mockCreate.mockResolvedValue(fakeAnthropicMessage);
       const provider = new AnthropicProvider(TEST_MODEL);
 
-      await provider.invoke({
-        ...baseParams,
-        tools: [
-          {
-            name: "get_weather",
-            description: "Get the weather",
-            parameters: { type: "object", properties: { city: { type: "string" } } },
-          },
-        ],
+      const weatherTool = defineTool({
+        name: "get_weather",
+        description: "Get the weather",
+        parameters: z.object({ city: z.string() }),
+        invoke: async () => "sunny",
       });
 
-      const call = mockCreate.mock.calls[0][0];
-      expect(call.tools).toEqual([
-        {
-          name: "get_weather",
-          description: "Get the weather",
-          input_schema: { type: "object", properties: { city: { type: "string" } } },
-        },
-      ]);
+      await provider.invoke({
+        ...baseParams,
+        tools: [weatherTool],
+      });
+
+      const call = mockCreate.mock.calls[0]![0];
+      expect(call.tools[0].name).toBe("get_weather");
+      expect(call.tools[0].description).toBe("Get the weather");
+      expect(call.tools[0].input_schema).toBeDefined();
     });
 
-    it("should forward extra params", async () => {
+    it("should forward extra options", async () => {
       mockCreate.mockResolvedValue(fakeAnthropicMessage);
       const provider = new AnthropicProvider(TEST_MODEL);
 
-      await provider.invoke({ ...baseParams, temperature: 0.5 });
+      await provider.invoke({ ...baseParams, options: { temperature: 0.5 } });
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({ temperature: 0.5 }),
+        expect.anything(),
       );
     });
 
@@ -238,90 +284,6 @@ describe("AnthropicProvider", () => {
       const provider = new AnthropicProvider(TEST_MODEL);
 
       await expect(provider.invoke(baseParams)).rejects.toThrow("Rate limited");
-    });
-  });
-
-  describe("stream", () => {
-    it("should convert Anthropic stream events", async () => {
-      const fakeAnthropicEvents = [
-        { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
-        { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hi" } },
-        { type: "content_block_stop", index: 0 },
-        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5 } },
-      ];
-      mockCreate.mockResolvedValue((async function* () { for (const e of fakeAnthropicEvents) yield e; })());
-      const provider = new AnthropicProvider(TEST_MODEL);
-
-      const events: StreamEvent[] = [];
-      for await (const event of provider.stream(baseParams)) {
-        events.push(event);
-      }
-
-      expect(events).toEqual([
-        { type: "text", text: "Hi" },
-        { type: "done", finish_reason: "stop", usage: { input_tokens: 0, output_tokens: 5 } },
-      ]);
-    });
-
-    it("should convert tool_use stream events", async () => {
-      const fakeAnthropicEvents = [
-        { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_1", name: "search" } },
-        { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"q":' } },
-        { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '"hi"}' } },
-        { type: "content_block_stop", index: 0 },
-        { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 10 } },
-      ];
-      mockCreate.mockResolvedValue((async function* () { for (const e of fakeAnthropicEvents) yield e; })());
-      const provider = new AnthropicProvider(TEST_MODEL);
-
-      const events: StreamEvent[] = [];
-      for await (const event of provider.stream(baseParams)) {
-        events.push(event);
-      }
-
-      expect(events).toEqual([
-        { type: "tool_call_start", id: "toolu_1", name: "search" },
-        { type: "tool_call_delta", id: "toolu_1", arguments: '{"q":' },
-        { type: "tool_call_delta", id: "toolu_1", arguments: '"hi"}' },
-        { type: "tool_call_end", id: "toolu_1" },
-        { type: "done", finish_reason: "tool_use", usage: { input_tokens: 0, output_tokens: 10 } },
-      ]);
-    });
-
-    it("should convert thinking stream events", async () => {
-      const fakeAnthropicEvents = [
-        { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } },
-        { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Hmm..." } },
-        { type: "content_block_stop", index: 0 },
-        { type: "content_block_start", index: 1, content_block: { type: "text", text: "" } },
-        { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Answer" } },
-        { type: "content_block_stop", index: 1 },
-        { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 15 } },
-      ];
-      mockCreate.mockResolvedValue((async function* () { for (const e of fakeAnthropicEvents) yield e; })());
-      const provider = new AnthropicProvider(TEST_MODEL);
-
-      const events: StreamEvent[] = [];
-      for await (const event of provider.stream(baseParams)) {
-        events.push(event);
-      }
-
-      expect(events).toEqual([
-        { type: "thinking", text: "Hmm..." },
-        { type: "text", text: "Answer" },
-        { type: "done", finish_reason: "stop", usage: { input_tokens: 0, output_tokens: 15 } },
-      ]);
-    });
-
-    it("should call client.messages.create with stream: true", async () => {
-      mockCreate.mockResolvedValue((async function* () {})());
-      const provider = new AnthropicProvider(TEST_MODEL);
-
-      for await (const _ of provider.stream(baseParams)) {}
-
-      expect(mockCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ stream: true }),
-      );
     });
   });
 });

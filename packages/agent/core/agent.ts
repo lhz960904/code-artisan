@@ -1,192 +1,221 @@
-import * as z from "zod";
-import type { Message, AssistantMessage, ToolMessage, StreamEvent, ToolUseContent, ToolResultContent } from "../types/messages";
-import type { BaseInvokeParams } from "../types/provider/base";
-import { BaseProvider } from "../types/provider/base";
-import type { CreateAgentParams, AgentContext } from "../types";
-import type { FunctionTool } from "../tools/tool";
-import { LocalSandbox } from "../sandbox/local/index";
+import type { Message, AssistantMessage, ToolMessage, ToolUseContent, UserMessage, NonSystemMessage } from "../types/messages";
+import { LLMProvider } from "../types/provider";
+import type { AgentOptions, AgentContext, AgentMiddleware } from "../types";
+import type { Tool } from "../tools/tool";
 
 const DEFAULT_MAX_ITERATIONS = 100;
-const MAX_OUTPUT_CHARS = 12000;
-const HEAD_RATIO = 0.8;
-const TAIL_RATIO = 0.2;
-
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
-
-function truncateOutput(output: string, maxChars = MAX_OUTPUT_CHARS): string {
-  if (output.length <= maxChars) return output;
-  const headChars = Math.floor(maxChars * HEAD_RATIO);
-  const tailChars = Math.floor(maxChars * TAIL_RATIO);
-  const head = output.slice(0, headChars);
-  const tail = output.slice(-tailChars);
-  const omitted = output.length - headChars - tailChars;
-  return `${head}\n\n[... ${omitted} characters omitted (${output.length} total) ...]\n\n${tail}`;
-}
-
-function hasToolUse(msg: AssistantMessage): boolean {
-  return msg.content.some((c) => c.type === "tool_use");
-}
-
-function getToolUseBlocks(msg: AssistantMessage): ToolUseContent[] {
-  return msg.content.filter((c): c is ToolUseContent => c.type === "tool_use");
-}
 
 export class Agent {
-  private provider: BaseProvider;
-  private toolDefs: ToolDefinition[] | undefined;
-  private toolMap: Map<string, FunctionTool>;
-  private context: AgentContext;
-  private maxIterations: number;
+  private model: LLMProvider;
+  private tools: Tool[];
+  private middlewares: AgentMiddleware[];
+  private maxSteps: number;
+  private agentContext: AgentContext;
+  private systemPrompt: string;
+  private messages: Message[] = [];
 
-  constructor(params: CreateAgentParams) {
-    this.provider = params.model;
-    this.maxIterations = params.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+  private _running: boolean = false;
+  private _abortController: AbortController | null = null;
 
-    const sandbox = params.sandbox ?? new LocalSandbox();
-    this.context = { sandbox };
+  constructor(params: AgentOptions) {
+    this.systemPrompt = params.prompt;
+    this.model = params.model;
+    this.tools = params.tools ?? [];
+    this.middlewares = params.middlewares ?? [];
+    this.maxSteps = params.maxSteps ?? DEFAULT_MAX_ITERATIONS;
 
-    this.toolMap = new Map();
-    if (params.tools?.length) {
-      this.toolDefs = params.tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: z.toJSONSchema(t.parameters) as Record<string, unknown>,
-      }));
-      for (const t of params.tools) {
-        this.toolMap.set(t.name, t);
-      }
-    }
+    this.agentContext = {
+      prompt: this.systemPrompt,
+      messages: this.messages,
+      tools: this.tools,
+    };
   }
 
-  async invoke(messages: Message[], options?: Omit<Partial<BaseInvokeParams>, "messages">): Promise<AssistantMessage> {
-    let currentMessages = [...messages];
-    let lastResponse: AssistantMessage | undefined;
-
-    for (let i = 0; i < this.maxIterations; i++) {
-      lastResponse = await this.provider.invoke({
-        messages: currentMessages,
-        ...(this.toolDefs ? { tools: this.toolDefs } : {}),
-        ...options,
-      });
-
-      if (!hasToolUse(lastResponse)) {
-        return lastResponse;
-      }
-
-      if (i === this.maxIterations - 1) {
-        return lastResponse;
-      }
-
-      const toolResults = await this.executeToolCalls(lastResponse);
-
-      currentMessages = [...currentMessages, lastResponse, ...toolResults];
-    }
-
-    return lastResponse!;
+  private _appendMessage(message: NonSystemMessage) {
+    this.messages.push(message);
   }
 
-  async *stream(
-    messages: Message[],
-    options?: Omit<Partial<BaseInvokeParams>, "messages">,
-  ): AsyncIterable<StreamEvent> {
-    let currentMessages = [...messages];
+  async *invoke(message: UserMessage): AsyncGenerator<AssistantMessage | ToolMessage> {
+    if (this._running) {
+      throw new Error("Agent is already running");
+    }
+    this._abortController = new AbortController();
+    this._appendMessage(message);
+    await this._beforeAgentRun();
+    this._running = true;
+    try {
+      for (let step = 1; step <= this.maxSteps; step++) {
+        this._abortController.signal.throwIfAborted();
+        await this._beforeAgentStep(step);
+        const assistantMessage = await this._think();
+        yield assistantMessage;
 
-    for (let i = 0; i < this.maxIterations; i++) {
-      const pendingToolCalls: Map<string, { name: string; arguments: string }> = new Map();
-      let finishReason: string | undefined;
-
-      for await (const event of this.provider.stream({
-        messages: currentMessages,
-        ...(this.toolDefs ? { tools: this.toolDefs } : {}),
-        ...options,
-      })) {
-        if (event.type === "tool_call_start") {
-          pendingToolCalls.set(event.id, { name: event.name, arguments: "" });
-        } else if (event.type === "tool_call_delta") {
-          const tc = pendingToolCalls.get(event.id);
-          if (tc) tc.arguments += event.arguments;
-        } else if (event.type === "done") {
-          finishReason = event.finish_reason;
+        const toolUses = this._extractToolUses(assistantMessage);
+        if (toolUses.length === 0) {
+          await this._afterAgentRun();
+          return;
         }
 
-        yield event;
+        yield* this._act(toolUses);
+        await this._afterAgentStep(step);
       }
-
-      if (!pendingToolCalls.size || finishReason !== "tool_use") {
-        return;
-      }
-
-      if (i === this.maxIterations - 1) {
-        return;
-      }
-
-      // Build AssistantMessage with ToolUseContent blocks
-      const assistantMsg: AssistantMessage = {
-        role: "assistant",
-        content: [...pendingToolCalls.entries()].map(([id, { name, arguments: args }]) => {
-          let input: Record<string, unknown> = {};
-          try { input = JSON.parse(args); } catch {}
-          return { type: "tool_use" as const, id, name, input };
-        }),
-      };
-
-      // Execute tools and build ToolMessages
-      const toolResults: ToolMessage[] = [];
-      for (const tc of getToolUseBlocks(assistantMsg)) {
-        const output = await this.executeSingleTool(tc.name, tc.input);
-        const msg: ToolMessage = {
-          role: "tool",
-          content: [{ type: "tool_result", tool_use_id: tc.id, content: output }],
-        };
-        toolResults.push(msg);
-        yield { type: "tool_result", id: tc.id, name: tc.name, output };
-      }
-
-      currentMessages = [...currentMessages, assistantMsg, ...toolResults];
+      throw new Error("Maximum number of steps reached");
+    } finally {
+      this._running = false;
+      this._abortController = null;
     }
   }
 
-  private async executeToolCalls(response: AssistantMessage): Promise<ToolMessage[]> {
-    const results: ToolMessage[] = [];
+  /** model invocation */
+  private async _think(): Promise<AssistantMessage> {
+    await this._beforeModel();
+    const message = await this.model.invoke({
+      messages: this.messages,
+      tools: this.tools,
+      signal: this._abortController?.signal,
+    });
+    this._appendMessage(message);
+    await this._afterModel(message);
+    return message;
+  }
 
-    for (const tc of getToolUseBlocks(response)) {
-      const output = await this.executeSingleTool(tc.name, tc.input);
-      results.push({
+  /** tool use execution */
+  private async *_act(toolUses: ToolUseContent[]): AsyncGenerator<ToolMessage> {
+    const signal = this._abortController?.signal;
+    // execute tool uses concurrently
+    const pending = toolUses.map(async (toolUse, index) => {
+      try {
+        const tool = this.tools?.find((t) => t.name === toolUse.name);
+        if (!tool) throw new Error(`Tool ${toolUse.name} not found`);
+        await this._beforeToolUse(toolUse);
+        const result = await tool.invoke(toolUse.input, signal);
+        await this._afterToolUse(toolUse, result);
+        return { index, toolUseId: toolUse.id, result };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { index, toolUseId: toolUse.id, result: `Error: ${message}` };
+      }
+    });
+
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          if (signal.aborted) {
+            reject(signal.reason);
+            return;
+          }
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        })
+      : null;
+
+    const remaining = new Set(pending.map((_, i) => i));
+    while (remaining.size > 0) {
+      const candidates = [...remaining].map((i) => pending[i]);
+      const resolved = (await (abortPromise ? Promise.race([...candidates, abortPromise]) : Promise.race(candidates)))!;
+      remaining.delete(resolved.index);
+
+      const toolMessage: ToolMessage = {
         role: "tool",
-        content: [{ type: "tool_result", tool_use_id: tc.id, content: output }],
-      });
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: resolved.toolUseId,
+            content: stringifyToolResult(resolved.result),
+          },
+        ],
+      };
+      this._appendMessage(toolMessage);
+      yield toolMessage;
     }
-
-    return results;
   }
 
-  private async executeSingleTool(name: string, rawInput: unknown): Promise<string> {
-    const tool = this.toolMap.get(name);
-    if (!tool) {
-      return `Tool "${name}" not found. Available tools: ${[...this.toolMap.keys()].join(", ")}`;
-    }
+  private _extractToolUses(message: AssistantMessage): ToolUseContent[] {
+    return message.content.filter((content): content is ToolUseContent => content.type === "tool_use");
+  }
 
-    const parsed = tool.parameters.safeParse(rawInput);
-    if (!parsed.success) {
-      const issues = parsed.error.issues.map((i: { message: string }) => i.message).join(", ");
-      return `Validation error: ${issues}`;
+  private async _beforeAgentRun() {
+    for (const middleware of this.middlewares) {
+      if (!middleware.beforeAgentRun) continue;
+      const result = await middleware.beforeAgentRun({ agentContext: this.agentContext });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
     }
+  }
 
-    try {
-      const result = await tool.invoke(parsed.data);
-      const output = typeof result === "string" ? result : JSON.stringify(result);
-      return truncateOutput(output);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return `Tool error: ${message}`;
+  private async _afterAgentRun() {
+    for (const middleware of this.middlewares) {
+      if (!middleware.afterAgentRun) continue;
+      const result = await middleware.afterAgentRun({ agentContext: this.agentContext });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
+    }
+  }
+
+  private async _beforeAgentStep(step: number) {
+    for (const middleware of this.middlewares) {
+      if (!middleware.beforeAgentStep) continue;
+      const result = await middleware.beforeAgentStep({ agentContext: this.agentContext, step });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
+    }
+  }
+
+  private async _afterAgentStep(step: number) {
+    for (const middleware of this.middlewares) {
+      if (!middleware.afterAgentStep) continue;
+      const result = await middleware.afterAgentStep({ agentContext: this.agentContext, step });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
+    }
+  }
+
+  private async _beforeModel() {
+    for (const middleware of this.middlewares) {
+      if (!middleware.beforeModel) continue;
+      const result = await middleware.beforeModel({ agentContext: this.agentContext });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
+    }
+  }
+
+  private async _afterModel(message: AssistantMessage) {
+    for (const middleware of this.middlewares) {
+      if (!middleware.afterModel) continue;
+      const result = await middleware.afterModel({ agentContext: this.agentContext, message });
+      if (result) {
+        Object.assign(message, result);
+      }
+    }
+  }
+
+  private async _beforeToolUse(toolUse: ToolUseContent) {
+    for (const middleware of this.middlewares) {
+      if (!middleware.beforeToolUse) continue;
+      const result = await middleware.beforeToolUse({ agentContext: this.agentContext, toolUse });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
+    }
+  }
+
+  private async _afterToolUse(toolUse: ToolUseContent, toolResult: unknown) {
+    for (const middleware of this.middlewares) {
+      if (!middleware.afterToolUse) continue;
+      const result = await middleware.afterToolUse({ agentContext: this.agentContext, toolUse, toolResult });
+      if (result) {
+        Object.assign(this.agentContext, result);
+      }
     }
   }
 }
 
-export function createAgent(params: CreateAgentParams): Agent {
-  return new Agent(params);
+function stringifyToolResult(result: unknown): string {
+  if (result === undefined) return "undefined";
+  if (result === null) return "null";
+  if (typeof result === "object") return JSON.stringify(result);
+  return String(result);
 }
