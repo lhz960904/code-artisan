@@ -35,15 +35,15 @@ jobs:
 
       - name: Type check (backend)
         working-directory: packages/backend
-        run: npx tsc --noEmit
+        run: pnpm exec tsc --noEmit
 
       - name: Type check (frontend)
         working-directory: packages/frontend
-        run: npx tsc -b --noEmit
+        run: pnpm exec tsc -b --noEmit
 
       - name: Unit tests
         working-directory: packages/backend
-        run: npx vitest run
+        run: pnpm exec vitest run
 
       - name: Build backend
         working-directory: packages/backend
