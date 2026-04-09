@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import * as z from "zod";
-import { Agent } from "./agent";
-import { defineTool } from "../tools/tool";
-import type { AssistantMessage, ToolMessage, UserMessage, NonSystemMessage } from "../types/messages";
-import type { ModelInvokeParams } from "../types/provider";
-import { LLMProvider } from "../types/provider";
+import { Agent } from "../agent";
+import { defineTool } from "../../tools/tool";
+import type { AssistantMessage, ToolMessage, UserMessage, NonSystemMessage } from "../../types/messages";
+import type { ModelInvokeParams } from "../../types/provider";
+import { LLMProvider } from "../../types/provider";
 
 const mockInvoke = mock();
 
@@ -87,7 +87,12 @@ describe("Agent", () => {
 
     it("should throw if invoked while already running", async () => {
       let resolveProvider!: (v: AssistantMessage) => void;
-      mockInvoke.mockImplementation(() => new Promise((r) => { resolveProvider = r; }));
+      mockInvoke.mockImplementation(
+        () =>
+          new Promise((r) => {
+            resolveProvider = r;
+          }),
+      );
       const agent = new Agent({ prompt: "", model: mockProvider });
 
       const gen = agent.invoke(userMessage);
@@ -317,6 +322,89 @@ describe("Agent", () => {
 
       expect(beforeModel).toHaveBeenCalledTimes(2);
       expect(afterModel).toHaveBeenCalledTimes(2);
+    });
+
+    it("should use agentContext.systemPrompt modified by middleware", async () => {
+      mockInvoke.mockResolvedValue(fakeResponse);
+      const agent = new Agent({
+        prompt: "original prompt",
+        model: mockProvider,
+        middlewares: [
+          {
+            beforeModel: async ({ agentContext }) => ({
+              systemPrompt: agentContext.systemPrompt + "\ninjected by middleware",
+            }),
+          },
+        ],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
+      const systemMsg = call.messages[0];
+      expect(systemMsg?.role).toBe("system");
+      expect((systemMsg as any).content[0].text).toContain("injected by middleware");
+    });
+
+    it("should use agentContext.tools modified by middleware for model invocation", async () => {
+      const injectedTool = defineTool({
+        name: "injected",
+        description: "Injected tool",
+        parameters: z.object({}),
+        invoke: async () => "injected result",
+      });
+
+      mockInvoke.mockResolvedValue(fakeResponse);
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        middlewares: [
+          {
+            beforeModel: async () => ({
+              tools: [injectedTool],
+            }),
+          },
+        ],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
+      expect(call.tools).toHaveLength(1);
+      expect(call.tools?.[0]?.name).toBe("injected");
+    });
+
+    it("should use agentContext.tools modified by middleware for tool lookup", async () => {
+      const dynamicTool = defineTool({
+        name: "dynamic",
+        description: "Dynamically added",
+        parameters: z.object({}),
+        invoke: async () => "dynamic result",
+      });
+
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "dynamic", input: {} }],
+      };
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [],
+        middlewares: [
+          {
+            beforeAgentRun: async () => ({
+              tools: [dynamicTool],
+            }),
+          },
+        ],
+      });
+
+      const messages = await collectMessages(agent.invoke(userMessage));
+
+      const toolMsg = messages[1] as ToolMessage;
+      expect(toolMsg.content[0]?.content).toBe("dynamic result");
     });
 
     it("should call beforeToolUse and afterToolUse", async () => {

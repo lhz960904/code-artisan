@@ -1,4 +1,11 @@
-import type { Message, AssistantMessage, ToolMessage, ToolUseContent, UserMessage, NonSystemMessage } from "../types/messages";
+import type {
+  Message,
+  AssistantMessage,
+  ToolMessage,
+  ToolUseContent,
+  UserMessage,
+  NonSystemMessage,
+} from "../types/messages";
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, AgentMiddleware } from "../types";
 import type { Tool } from "../tools/tool";
@@ -18,14 +25,14 @@ export class Agent {
   private _abortController: AbortController | null = null;
 
   constructor(params: AgentOptions) {
-    this.systemPrompt = params.prompt;
+    this.systemPrompt = params.prompt || "";
     this.model = params.model;
     this.tools = params.tools ?? [];
     this.middlewares = params.middlewares ?? [];
     this.maxSteps = params.maxSteps ?? DEFAULT_MAX_ITERATIONS;
 
     this.agentContext = {
-      prompt: this.systemPrompt,
+      systemPrompt: this.systemPrompt,
       messages: this.messages,
       tools: this.tools,
     };
@@ -70,13 +77,13 @@ export class Agent {
   private async _think(): Promise<AssistantMessage> {
     await this._beforeModel();
     const messages: Message[] = [];
-    if (this.systemPrompt) {
-      messages.push({ role: "system", content: [{ type: "text", text: this.systemPrompt }] });
+    if (this.agentContext.systemPrompt) {
+      messages.push({ role: "system", content: [{ type: "text", text: this.agentContext.systemPrompt }] });
     }
-    messages.push(...this.messages);
+    messages.push(...this.agentContext.messages);
     const message = await this.model.invoke({
       messages: messages,
-      tools: this.tools,
+      tools: this.agentContext.tools,
       signal: this._abortController?.signal,
     });
     this._appendMessage(message);
@@ -90,7 +97,7 @@ export class Agent {
     // execute tool uses concurrently
     const pending = toolUses.map(async (toolUse, index) => {
       try {
-        const tool = this.tools?.find((t) => t.name === toolUse.name);
+        const tool = this.agentContext.tools?.find((t) => t.name === toolUse.name);
         if (!tool) throw new Error(`Tool ${toolUse.name} not found`);
         await this._beforeToolUse(toolUse);
         const result = await tool.invoke(toolUse.input, signal);

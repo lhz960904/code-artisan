@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@e2b/code-interpreter": "^1.5.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "gray-matter": "^4.0.3",
     "openai": "^6.33.0",
     "zod": "^4.3.6"
   },

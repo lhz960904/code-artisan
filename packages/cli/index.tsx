@@ -1,19 +1,9 @@
 import { render } from "ink";
-
-import {
-  Agent,
-  AnthropicProvider,
-  bashTool,
-  readFileTool,
-  writeFileTool,
-  strReplaceTool,
-  globTool,
-  grepTool,
-  lsTool,
-} from "@code-artisan/agent";
+import { createAgent, AnthropicProvider } from "@code-artisan/agent";
 
 import { App } from "./tui/app";
 import { AgentLoopProvider } from "./tui/hooks/use-agent-loop";
+import { join } from "node:path";
 
 const model = process.env.MODEL ?? "minimax-m2.5";
 
@@ -22,21 +12,10 @@ const provider = new AnthropicProvider(model, {
   baseURL: process.env.BASE_URL,
 });
 
-const agent = new Agent({
-  prompt: "You are a helpful coding assistant.",
+const agent = createAgent({
   model: provider,
-  tools: [
-    bashTool,
-    readFileTool,
-    writeFileTool,
-    strReplaceTool,
-    globTool,
-    grepTool,
-    lsTool,
-  ],
+  skillsDirs: [join(process.cwd(), "skills")],
 });
-
-console.info();
 
 render(
   <AgentLoopProvider agent={agent}>
