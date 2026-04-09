@@ -15,17 +15,25 @@ import {
 import { App } from "./tui/app";
 import { AgentLoopProvider } from "./tui/hooks/use-agent-loop";
 
-const model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+const model = process.env.MODEL ?? "minimax-m2.5";
 
 const provider = new AnthropicProvider(model, {
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  baseURL: process.env.ANTHROPIC_BASE_URL,
+  apiKey: process.env.API_KEY,
+  baseURL: process.env.BASE_URL,
 });
 
 const agent = new Agent({
   prompt: "You are a helpful coding assistant.",
   model: provider,
-  tools: [bashTool, readFileTool, writeFileTool, strReplaceTool, globTool, grepTool, lsTool],
+  tools: [
+    bashTool,
+    readFileTool,
+    writeFileTool,
+    strReplaceTool,
+    globTool,
+    grepTool,
+    lsTool,
+  ],
 });
 
 console.info();

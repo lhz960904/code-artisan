@@ -69,8 +69,13 @@ export class Agent {
   /** model invocation */
   private async _think(): Promise<AssistantMessage> {
     await this._beforeModel();
+    const messages: Message[] = [];
+    if (this.systemPrompt) {
+      messages.push({ role: "system", content: [{ type: "text", text: this.systemPrompt }] });
+    }
+    messages.push(...this.messages);
     const message = await this.model.invoke({
-      messages: this.messages,
+      messages: messages,
       tools: this.tools,
       signal: this._abortController?.signal,
     });

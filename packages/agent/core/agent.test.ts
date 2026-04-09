@@ -40,6 +40,21 @@ describe("Agent", () => {
   // --- invoke without tools ---
 
   describe("invoke (no tools)", () => {
+    it("should prepend system prompt before conversation messages", async () => {
+      mockInvoke.mockResolvedValue(fakeResponse);
+      const agent = new Agent({ prompt: "You are helpful", model: mockProvider });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
+      expect(call.messages[0]).toEqual({
+        role: "system",
+        content: [{ type: "text", text: "You are helpful" }],
+      });
+      expect(call.messages[1]).toEqual(userMessage);
+    });
+
     it("should yield a single assistant message", async () => {
       mockInvoke.mockResolvedValue(fakeResponse);
       const agent = new Agent({ prompt: "", model: mockProvider });
