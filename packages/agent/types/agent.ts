@@ -28,11 +28,24 @@ export interface AgentOptions {
  */
 export interface AgentContext {
   /** The system prompt to use to invoke the agent. */
-  systemPrompt: string;
+  prompt: string;
   /** The messages to use to invoke the agent. */
   messages: Message[];
   /** The tools to use to invoke the agent. */
   tools?: Tool[];
   /** The skills to use to invoke the agent. */
   skills?: SkillFrontmatter[];
+}
+
+/**
+ * Ephemeral context created fresh from {@link AgentContext} for each model invocation.
+ * Discarded after the model call completes, preventing accumulation across steps.
+ */
+export interface ModelContext {
+  /** System prompt snapshot for this invocation. */
+  prompt: string;
+  /** Message history snapshot for this invocation. */
+  messages: Message[];
+  /** Tool definitions snapshot for this invocation. */
+  tools?: Tool[];
 }

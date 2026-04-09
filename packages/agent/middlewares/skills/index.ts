@@ -46,11 +46,11 @@ export function createSkillsMiddleware(skillsDirs: string[]): AgentMiddleware {
       };
     },
 
-    beforeModel: async ({ agentContext }) => {
+    beforeModel: async ({ agentContext, modelContext }) => {
       if (agentContext.skills && agentContext.skills.length > 0) {
         return {
-          systemPrompt:
-            agentContext.systemPrompt +
+          prompt:
+            modelContext.prompt +
             `\n
 <skill_system>
 You have access to skills that provide optimized workflows for specific tasks. Each skill contains best practices, frameworks, and references to additional resources.

@@ -3,7 +3,7 @@ import { createSkillsMiddleware } from "../index";
 import { join } from "node:path";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import type { AgentContext } from "../../../types/agent";
+import type { AgentContext, ModelContext } from "../../../types/agent";
 
 let tempDir: string;
 
@@ -119,41 +119,53 @@ describe("createSkillsMiddleware", () => {
     it("should append skill_system prompt when skills are present", async () => {
       const skills = [{ name: "test-skill", description: "Test", path: "/fake/path" }];
       const agentContext: AgentContext = {
-        systemPrompt: "You are helpful.",
+        prompt: "You are helpful.",
         messages: [],
         skills,
       };
+      const modelContext: ModelContext = {
+        prompt: agentContext.prompt,
+        messages: [],
+      };
 
       const mw = createSkillsMiddleware([]);
-      const result = await mw.beforeModel!({ agentContext });
+      const result = await mw.beforeModel!({ agentContext, modelContext });
 
-      expect(result?.systemPrompt).toContain("You are helpful.");
-      expect(result?.systemPrompt).toContain("<skill_system>");
-      expect(result?.systemPrompt).toContain("test-skill");
-      expect(result?.systemPrompt).toContain("</skill_system>");
+      expect(result?.prompt).toContain("You are helpful.");
+      expect(result?.prompt).toContain("<skill_system>");
+      expect(result?.prompt).toContain("test-skill");
+      expect(result?.prompt).toContain("</skill_system>");
     });
 
     it("should not modify prompt when skills array is empty", async () => {
       const agentContext: AgentContext = {
-        systemPrompt: "You are helpful.",
+        prompt: "You are helpful.",
         messages: [],
         skills: [],
       };
+      const modelContext: ModelContext = {
+        prompt: agentContext.prompt,
+        messages: [],
+      };
 
       const mw = createSkillsMiddleware([]);
-      const result = await mw.beforeModel!({ agentContext });
+      const result = await mw.beforeModel!({ agentContext, modelContext });
 
       expect(result).toBeUndefined();
     });
 
     it("should not modify prompt when skills is undefined", async () => {
       const agentContext: AgentContext = {
-        systemPrompt: "You are helpful.",
+        prompt: "You are helpful.",
+        messages: [],
+      };
+      const modelContext: ModelContext = {
+        prompt: agentContext.prompt,
         messages: [],
       };
 
       const mw = createSkillsMiddleware([]);
-      const result = await mw.beforeModel!({ agentContext });
+      const result = await mw.beforeModel!({ agentContext, modelContext });
 
       expect(result).toBeUndefined();
     });

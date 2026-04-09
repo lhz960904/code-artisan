@@ -324,15 +324,15 @@ describe("Agent", () => {
       expect(afterModel).toHaveBeenCalledTimes(2);
     });
 
-    it("should use agentContext.systemPrompt modified by middleware", async () => {
+    it("should use modelContext.prompt modified by beforeModel", async () => {
       mockInvoke.mockResolvedValue(fakeResponse);
       const agent = new Agent({
         prompt: "original prompt",
         model: mockProvider,
         middlewares: [
           {
-            beforeModel: async ({ agentContext }) => ({
-              systemPrompt: agentContext.systemPrompt + "\ninjected by middleware",
+            beforeModel: async ({ modelContext }) => ({
+              prompt: modelContext.prompt + "\ninjected by middleware",
             }),
           },
         ],
@@ -346,7 +346,7 @@ describe("Agent", () => {
       expect((systemMsg as any).content[0].text).toContain("injected by middleware");
     });
 
-    it("should use agentContext.tools modified by middleware for model invocation", async () => {
+    it("should use modelContext.tools modified by beforeModel for model invocation", async () => {
       const injectedTool = defineTool({
         name: "injected",
         description: "Injected tool",
@@ -372,6 +372,44 @@ describe("Agent", () => {
       const call = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
       expect(call.tools).toHaveLength(1);
       expect(call.tools?.[0]?.name).toBe("injected");
+    });
+
+    it("should not accumulate beforeModel modifications across steps", async () => {
+      const greetTool = defineTool({
+        name: "greet",
+        description: "Greet",
+        parameters: z.object({ name: z.string() }),
+        invoke: async ({ name }) => `Hi ${name}`,
+      });
+
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "X" } }],
+      };
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
+
+      const agent = new Agent({
+        prompt: "base prompt",
+        model: mockProvider,
+        tools: [greetTool],
+        middlewares: [
+          {
+            beforeModel: async ({ modelContext }) => ({
+              prompt: modelContext.prompt + "\n<extra>appended</extra>",
+            }),
+          },
+        ],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      const call1 = mockInvoke.mock.calls[0]?.[0] as ModelInvokeParams;
+      const call2 = mockInvoke.mock.calls[1]?.[0] as ModelInvokeParams;
+      const prompt1 = (call1.messages[0] as any).content[0].text;
+      const prompt2 = (call2.messages[0] as any).content[0].text;
+
+      expect(prompt1).toBe("base prompt\n<extra>appended</extra>");
+      expect(prompt2).toBe(prompt1);
     });
 
     it("should use agentContext.tools modified by middleware for tool lookup", async () => {

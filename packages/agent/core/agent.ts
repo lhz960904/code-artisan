@@ -7,7 +7,7 @@ import type {
   NonSystemMessage,
 } from "../types/messages";
 import { LLMProvider } from "../types/provider";
-import type { AgentOptions, AgentContext, AgentMiddleware } from "../types";
+import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
 import type { Tool } from "../tools/tool";
 
 const DEFAULT_MAX_ITERATIONS = 100;
@@ -18,21 +18,21 @@ export class Agent {
   private middlewares: AgentMiddleware[];
   private maxSteps: number;
   private agentContext: AgentContext;
-  private systemPrompt: string;
+  private prompt: string;
   private messages: Message[] = [];
 
   private _running: boolean = false;
   private _abortController: AbortController | null = null;
 
   constructor(params: AgentOptions) {
-    this.systemPrompt = params.prompt || "";
+    this.prompt = params.prompt || "";
     this.model = params.model;
     this.tools = params.tools ?? [];
     this.middlewares = params.middlewares ?? [];
     this.maxSteps = params.maxSteps ?? DEFAULT_MAX_ITERATIONS;
 
     this.agentContext = {
-      systemPrompt: this.systemPrompt,
+      prompt: this.prompt,
       messages: this.messages,
       tools: this.tools,
     };
@@ -73,21 +73,30 @@ export class Agent {
     }
   }
 
+  private _createModelContext(): ModelContext {
+    return {
+      prompt: this.agentContext.prompt,
+      messages: [...this.agentContext.messages],
+      tools: this.agentContext.tools,
+    };
+  }
+
   /** model invocation */
   private async _think(): Promise<AssistantMessage> {
-    await this._beforeModel();
+    const modelContext = this._createModelContext();
+    await this._beforeModel(modelContext);
     const messages: Message[] = [];
-    if (this.agentContext.systemPrompt) {
-      messages.push({ role: "system", content: [{ type: "text", text: this.agentContext.systemPrompt }] });
+    if (modelContext.prompt) {
+      messages.push({ role: "system", content: [{ type: "text", text: modelContext.prompt }] });
     }
-    messages.push(...this.agentContext.messages);
+    messages.push(...modelContext.messages);
     const message = await this.model.invoke({
       messages: messages,
-      tools: this.agentContext.tools,
+      tools: modelContext.tools,
       signal: this._abortController?.signal,
     });
     this._appendMessage(message);
-    await this._afterModel(message);
+    await this._afterModel(modelContext, message);
     return message;
   }
 
@@ -184,20 +193,20 @@ export class Agent {
     }
   }
 
-  private async _beforeModel() {
+  private async _beforeModel(modelContext: ModelContext) {
     for (const middleware of this.middlewares) {
       if (!middleware.beforeModel) continue;
-      const result = await middleware.beforeModel({ agentContext: this.agentContext });
+      const result = await middleware.beforeModel({ agentContext: this.agentContext, modelContext });
       if (result) {
-        Object.assign(this.agentContext, result);
+        Object.assign(modelContext, result);
       }
     }
   }
 
-  private async _afterModel(message: AssistantMessage) {
+  private async _afterModel(modelContext: ModelContext, message: AssistantMessage) {
     for (const middleware of this.middlewares) {
       if (!middleware.afterModel) continue;
-      const result = await middleware.afterModel({ agentContext: this.agentContext, message });
+      const result = await middleware.afterModel({ agentContext: this.agentContext, modelContext, message });
       if (result) {
         Object.assign(message, result);
       }

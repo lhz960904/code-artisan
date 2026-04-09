@@ -1,6 +1,6 @@
 import type { AssistantMessage, ToolUseContent } from "./messages";
 
-import type { AgentContext } from "./agent";
+import type { AgentContext, ModelContext } from "./agent";
 
 /**
  * Middleware hooks that let you observe and/or mutate an {@link Agent}'s run.
@@ -15,14 +15,18 @@ import type { AgentContext } from "./agent";
  * All hooks are optional.
  */
 export type BeforeModelParams = {
-  /** The agent context for this run (shared, mutable). */
+  /** The persistent agent context (read-only reference for middleware). */
   agentContext: AgentContext;
+  /** Ephemeral model context for this invocation (mutable, discarded after call). */
+  modelContext: ModelContext;
 };
 
 export type AfterModelParams = {
-  /** The agent context for this run (shared, mutable). */
+  /** The persistent agent context (read-only reference for middleware). */
   agentContext: AgentContext;
-  /** The assistant message for this run (shared, mutable). */
+  /** Ephemeral model context used for this invocation. */
+  modelContext: ModelContext;
+  /** The assistant message returned by the model. */
   message: AssistantMessage;
 };
 
@@ -69,10 +73,10 @@ export type AfterToolUseParams = {
 export interface AgentMiddleware {
   /**
    * Runs immediately before the model is invoked.
-   * @param params - Hook parameters.
-   * @returns Optional model context updates to merge into `modelContext`.
+   * @param params - Hook parameters including ephemeral `modelContext`.
+   * @returns Optional updates merged into `modelContext` (not `agentContext`).
    */
-  beforeModel?: (params: BeforeModelParams) => Promise<Partial<AgentContext> | null | undefined | void>;
+  beforeModel?: (params: BeforeModelParams) => Promise<Partial<ModelContext> | null | undefined | void>;
 
   /**
    * Runs immediately after the model is invoked.
