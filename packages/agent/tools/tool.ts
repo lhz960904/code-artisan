@@ -1,5 +1,9 @@
 import type { z } from "zod";
 
+export interface ToolContext {
+  signal?: AbortSignal;
+}
+
 /**
  * A function tool that can be used to invoke a function.
  * @param P - The parameters of the tool.
@@ -13,18 +17,13 @@ export interface FunctionTool<P extends z.ZodSchema<Record<string, unknown>> = z
   /** The parameters of the tool. */
   parameters: P;
   /** The function to invoke when the tool is called. */
-  invoke: (input: z.infer<P>, signal?: AbortSignal) => Promise<R>;
+  invoke: (input: z.infer<P>, context: ToolContext) => Promise<R>;
 }
 
 export type Tool = FunctionTool;
 
 /**
  * Defines a function tool.
- * @param name - The name of the tool.
- * @param description - The description of the tool.
- * @param parameters - The parameters of the tool.
- * @param invoke - The function to invoke when the tool is called.
- * @returns The function tool.
  */
 export function defineTool<P extends z.ZodSchema<Record<string, unknown>>, R>({
   name,
@@ -35,8 +34,7 @@ export function defineTool<P extends z.ZodSchema<Record<string, unknown>>, R>({
   name: string;
   description: string;
   parameters: P;
-  // eslint-disable-next-line no-unused-vars
-  invoke: (input: z.infer<P>) => Promise<R>;
+  invoke: (input: z.infer<P>, context: ToolContext) => Promise<R>;
 }): FunctionTool<P, R> {
   return { name, description, parameters, invoke } as FunctionTool<P, R>;
 }

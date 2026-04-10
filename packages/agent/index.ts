@@ -6,7 +6,7 @@ export { AnthropicProvider } from "./community/anthropic/index";
 export type { AnthropicProviderOptions } from "./community/anthropic/index";
 
 export { defineTool } from "./tools/tool";
-export type { FunctionTool } from "./tools/tool";
+export type { FunctionTool, ToolContext } from "./tools/tool";
 export {
   bashTool,
   lsTool,

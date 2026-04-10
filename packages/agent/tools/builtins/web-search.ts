@@ -23,7 +23,7 @@ export const webSearchTool = defineTool({
       .optional()
       .describe("basic = fast snippets, advanced = deeper content."),
   }),
-  invoke: async ({ query, maxResults, searchDepth }) => {
+  invoke: async ({ query, maxResults, searchDepth }, _ctx) => {
     const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey) throw new Error("TAVILY_API_KEY environment variable is not set");
 

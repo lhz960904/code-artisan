@@ -14,7 +14,7 @@ export const globTool = defineTool({
     pattern: z.string().describe("Glob pattern to match (e.g. '**/*.ts', 'src/*.js')."),
     path: z.string().describe("The absolute path to the directory to search in."),
   }),
-  invoke: async ({ pattern, path }) => {
+  invoke: async ({ pattern, path }, _ctx) => {
     const glob = new Bun.Glob(pattern);
     const files: string[] = [];
     let truncated = false;

@@ -13,7 +13,7 @@ export const bashTool = defineTool({
       .string()
       .describe("The bash command to execute."),
   }),
-  invoke: async ({ command }) => {
+  invoke: async ({ command }, _ctx) => {
     const proc = Bun.spawn(["bash", "-c", command], {
       stdout: "pipe",
       stderr: "pipe",

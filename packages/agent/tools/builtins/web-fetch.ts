@@ -10,7 +10,7 @@ export const webFetchTool = defineTool({
       .describe("Explain why you want to fetch this URL. Always place `description` as the first parameter."),
     url: z.string().url().describe("The URL to fetch and extract content from."),
   }),
-  invoke: async ({ url }) => {
+  invoke: async ({ url }, _ctx) => {
     const apiKey = process.env.TAVILY_API_KEY;
     if (!apiKey) throw new Error("TAVILY_API_KEY environment variable is not set");
 

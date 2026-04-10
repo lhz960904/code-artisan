@@ -1,6 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import { createTodoSystem } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
+import type { ToolContext } from "../../tools/tool";
+
+const ctx: ToolContext = {};
 
 function makeModelContext(prompt = "test prompt"): ModelContext {
   return { prompt, tools: [], messages: [] };
@@ -26,7 +29,7 @@ describe("createTodoSystem (todo)", () => {
           { id: "2", content: "Task B", status: "in_progress" },
         ],
         merge: false,
-      });
+      }, ctx);
 
       expect(result).toContain("0/2 completed");
       expect(result).toContain("[ ] Task A");
@@ -42,7 +45,7 @@ describe("createTodoSystem (todo)", () => {
           { id: "2", content: "Task B", status: "completed" },
         ],
         merge: true,
-      });
+      }, ctx);
 
       expect(result).toContain("1/2 completed");
       expect(result).toContain("Task A");
@@ -59,13 +62,13 @@ describe("createTodoSystem (todo)", () => {
           { id: "2", content: "Task B", status: "pending" },
         ],
         merge: true,
-      });
+      }, ctx);
 
       // Update one item
       const result = await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "completed" }],
         merge: true,
-      });
+      }, ctx);
 
       expect(result).toContain("1/2 completed");
       expect(result).toContain("[x] Task A");
@@ -78,12 +81,12 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       const result = await tool.invoke({
         todos: [{ id: "2", content: "Task B", status: "in_progress" }],
         merge: true,
-      });
+      }, ctx);
 
       expect(result).toContain("0/2 completed");
       expect(result).toContain("Task A");
@@ -100,7 +103,7 @@ describe("createTodoSystem (todo)", () => {
           { id: "3", content: "Done", status: "completed" },
         ],
         merge: true,
-      });
+      }, ctx);
 
       expect(result).toContain("[ ] Pending");
       expect(result).toContain("[>] InProgress");
@@ -130,7 +133,7 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       const modelContext = makeModelContext();
 
@@ -153,7 +156,7 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       const modelContext = makeModelContext();
 
@@ -170,7 +173,7 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       const modelContext = makeModelContext();
       let reminderCount = 0;
@@ -195,7 +198,7 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       const modelContext = makeModelContext();
 
@@ -224,7 +227,7 @@ describe("createTodoSystem (todo)", () => {
       await tool.invoke({
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
-      });
+      }, ctx);
 
       // Simulate afterToolUse with a different tool
       await middleware.afterToolUse!({

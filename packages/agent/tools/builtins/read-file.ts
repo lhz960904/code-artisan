@@ -21,7 +21,7 @@ export const readFileTool = defineTool({
       .optional()
       .describe("Optional ending line number (1-indexed, inclusive)."),
   }),
-  invoke: async ({ path, start_line, end_line }) => {
+  invoke: async ({ path, start_line, end_line }, _ctx) => {
     let content = await Bun.file(path).text();
     if (!content) return "(empty)";
 

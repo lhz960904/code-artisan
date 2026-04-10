@@ -16,7 +16,7 @@ export const grepTool = defineTool({
       .optional()
       .describe("Optional glob pattern to filter files (e.g. '*.ts', '*.py')."),
   }),
-  invoke: async ({ pattern, path, include }) => {
+  invoke: async ({ pattern, path, include }, _ctx) => {
     const args = ["grep", "-rn", "--fixed-strings", "--max-count=500"];
     if (include) {
       args.push(`--include=${include}`);

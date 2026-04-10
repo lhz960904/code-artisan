@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import * as z from "zod";
-import { defineTool } from "../tool";
+import { defineTool, type ToolContext } from "../tool";
+
+const ctx: ToolContext = {};
 
 describe("defineTool()", () => {
   describe("definition", () => {
@@ -20,15 +22,15 @@ describe("defineTool()", () => {
   });
 
   describe("invoke()", () => {
-    it("should execute with correct input", async () => {
+    it("should execute with correct input and context", async () => {
       const t = defineTool({
         name: "greet",
         description: "Say hello",
         parameters: z.object({ name: z.string() }),
-        invoke: async ({ name }) => `Hello, ${name}!`,
+        invoke: async ({ name }, _ctx) => `Hello, ${name}!`,
       });
 
-      const result = await t.invoke({ name: "Alice" });
+      const result = await t.invoke({ name: "Alice" }, ctx);
       expect(result).toBe("Hello, Alice!");
     });
 
@@ -42,7 +44,7 @@ describe("defineTool()", () => {
         },
       });
 
-      await expect(t.invoke({})).rejects.toThrow("boom");
+      await expect(t.invoke({}, ctx)).rejects.toThrow("boom");
     });
   });
 
@@ -64,7 +66,7 @@ describe("defineTool()", () => {
         },
       });
 
-      const result = await t.invoke({ name: "Alice", age: 30 });
+      const result = await t.invoke({ name: "Alice", age: 30 }, ctx);
       expect(result).toBe("Alice is 30");
     });
   });

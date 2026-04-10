@@ -8,7 +8,7 @@ import type {
 } from "../types/messages";
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
-import type { Tool } from "../tools/tool";
+import type { Tool, ToolContext } from "../tools/tool";
 
 const DEFAULT_MAX_ITERATIONS = 100;
 
@@ -103,13 +103,14 @@ export class Agent {
   /** tool use execution */
   private async *_act(toolUses: ToolUseContent[]): AsyncGenerator<ToolMessage> {
     const signal = this._abortController?.signal;
+    const toolContext: ToolContext = { signal };
     // execute tool uses concurrently
     const pending = toolUses.map(async (toolUse, index) => {
       try {
         const tool = this.agentContext.tools?.find((t) => t.name === toolUse.name);
         if (!tool) throw new Error(`Tool ${toolUse.name} not found`);
         await this._beforeToolUse(toolUse);
-        const result = await tool.invoke(toolUse.input, signal);
+        const result = await tool.invoke(toolUse.input, toolContext);
         await this._afterToolUse(toolUse, result);
         return { index, toolUseId: toolUse.id, result };
       } catch (error) {

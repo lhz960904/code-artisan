@@ -17,7 +17,7 @@ export const writeFileTool = defineTool({
       .optional()
       .describe("Whether to append instead of overwriting."),
   }),
-  invoke: async ({ path, content, append }) => {
+  invoke: async ({ path, content, append }, _ctx) => {
     await mkdir(dirname(path), { recursive: true });
     if (append) {
       const existing = await Bun.file(path).text().catch(() => "");

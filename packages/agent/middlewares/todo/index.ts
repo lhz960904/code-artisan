@@ -101,7 +101,7 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
         .boolean()
         .describe("If true, merges into the existing list by id (existing ids updated, new ids appended). If false, replaces the entire list."),
     }),
-    invoke: async ({ todos, merge }) => {
+    invoke: async ({ todos, merge }, _ctx) => {
       if (merge) {
         for (const item of todos) {
           const idx = todoList.findIndex((t) => t.id === item.id);

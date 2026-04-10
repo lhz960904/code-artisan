@@ -17,7 +17,7 @@ export const strReplaceTool = defineTool({
       .optional()
       .describe("Whether to replace all occurrences."),
   }),
-  invoke: async ({ path, old_str, new_str, replace_all }) => {
+  invoke: async ({ path, old_str, new_str, replace_all }, _ctx) => {
     let content = await Bun.file(path).text();
 
     if (!content.includes(old_str)) {

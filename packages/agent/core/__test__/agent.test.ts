@@ -136,6 +136,35 @@ describe("Agent", () => {
       expect(call.tools?.[0]?.name).toBe("greet");
     });
 
+    it("should pass ToolContext with signal to tools", async () => {
+      let receivedSignal: AbortSignal | undefined;
+      const spyTool = defineTool({
+        name: "spy",
+        description: "Spy on context",
+        parameters: z.object({}),
+        invoke: async (_input, ctx) => {
+          receivedSignal = ctx.signal;
+          return "ok";
+        },
+      });
+
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "call_1", name: "spy", input: {} }],
+      };
+      mockInvoke.mockResolvedValueOnce(toolCallResponse).mockResolvedValueOnce(fakeResponse);
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [spyTool],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+      expect(receivedSignal).toBeDefined();
+      expect(receivedSignal).toBeInstanceOf(AbortSignal);
+    });
+
     it("should execute tool calls and loop", async () => {
       const toolCallResponse: AssistantMessage = {
         role: "assistant",

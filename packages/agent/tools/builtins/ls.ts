@@ -15,7 +15,7 @@ export const lsTool = defineTool({
       .string()
       .describe("The absolute path to the directory to list."),
   }),
-  invoke: async ({ path }) => {
+  invoke: async ({ path }, _ctx) => {
     const results: string[] = [];
 
     const entries = await readdir(path, { withFileTypes: true });
