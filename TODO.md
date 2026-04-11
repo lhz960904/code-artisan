@@ -9,8 +9,9 @@
 - [x] Agent 构建 ToolContext 传递给工具
 
 ### Agent Runner（sandbox 内 HTTP server）
-- [ ] 设计通信协议（invoke → SSE 流式返回 AssistantMessage / ToolMessage）
-- [ ] 实现 agent-runner HTTP server（POST /invoke, GET /files, GET /health）
+- [x] 设计通信协议（invoke → SSE 流式返回 AssistantMessage / ToolMessage）
+- [x] 实现 agent-runner HTTP server（POST /invoke, POST /stop, GET /health）
+- [x] mtime 文件扫描（invoke 结束后扫描变更文件，批量返回）
 - [ ] E2B sandbox 镜像（预装 bun + agent 包）
 - [ ] Server 端 sandbox 生命周期管理（创建/复用/重建）
 - [ ] 对话历史恢复（sandbox 重建后传入 history）
@@ -19,7 +20,7 @@
 - [ ] Server 变薄：转发用户消息到 sandbox /invoke
 - [ ] 收流式事件 → 写 DB + 转发 SSE 给前端
 - [ ] 适配 abort（通知 sandbox 停止）
-- [ ] 文件快照（通过 /files 接口获取）
+- [ ] 文件快照（mtime 扫描返回的 files 写入 DB）
 - [ ] 删除 `backend/src/agent/` 自建 agent 实现
 - [ ] 端到端验证
 
