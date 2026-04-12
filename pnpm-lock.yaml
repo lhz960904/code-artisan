@@ -61,6 +61,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.39.0
         version: 0.39.0
+      '@code-artisan/agent':
+        specifier: workspace:*
+        version: link:../agent
       '@code-artisan/shared':
         specifier: workspace:*
         version: link:../shared
@@ -75,7 +78,7 @@ importers:
         version: 2.100.1
       drizzle-orm:
         specifier: ^0.38.0
-        version: 0.38.4(@types/react@19.2.14)(bun-types@1.3.11)(postgres@3.4.8)(react@19.2.4)
+        version: 0.38.4(@types/react@19.2.14)(bun-types@1.3.12)(postgres@3.4.8)(react@19.2.4)
       hono:
         specifier: ^4.7.0
         version: 4.12.9
@@ -86,6 +89,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      '@types/bun':
+        specifier: latest
+        version: 1.3.12
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15
@@ -2140,6 +2146,9 @@ packages:
   '@types/bun@1.3.11':
     resolution: {integrity: sha512-5vPne5QvtpjGpsGYXiFyycfpDF2ECyPcTSsFBMa0fraoxiQyMJ3SmuQIGhzPg2WJuWxVBoxWJ2kClYTcw/4fAg==}
 
+  '@types/bun@1.3.12':
+    resolution: {integrity: sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A==}
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -2447,6 +2456,9 @@ packages:
 
   bun-types@1.3.11:
     resolution: {integrity: sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg==}
+
+  bun-types@1.3.12:
+    resolution: {integrity: sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA==}
 
   bytes@3.1.2:
     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
@@ -6128,6 +6140,10 @@ snapshots:
     dependencies:
       bun-types: 1.3.11
 
+  '@types/bun@1.3.12':
+    dependencies:
+      bun-types: 1.3.12
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -6490,6 +6506,10 @@ snapshots:
     dependencies:
       '@types/node': 22.19.15
 
+  bun-types@1.3.12:
+    dependencies:
+      '@types/node': 22.19.15
+
   bytes@3.1.2: {}
 
   cac@6.7.14: {}
@@ -6693,10 +6713,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.38.4(@types/react@19.2.14)(bun-types@1.3.11)(postgres@3.4.8)(react@19.2.4):
+  drizzle-orm@0.38.4(@types/react@19.2.14)(bun-types@1.3.12)(postgres@3.4.8)(react@19.2.4):
     optionalDependencies:
       '@types/react': 19.2.14
-      bun-types: 1.3.11
+      bun-types: 1.3.12
       postgres: 3.4.8
       react: 19.2.4
 
