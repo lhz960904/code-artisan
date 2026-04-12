@@ -9,6 +9,8 @@ import type {
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
 import type { Tool, ToolContext } from "../tools/tool";
+import type { Sandbox } from "../sandbox/types";
+import { LocalSandbox } from "../sandbox/local";
 
 const DEFAULT_MAX_ITERATIONS = 100;
 
@@ -17,6 +19,7 @@ export class Agent {
   private tools: Tool[];
   private middlewares: AgentMiddleware[];
   private maxSteps: number;
+  private sandbox: Sandbox;
   private agentContext: AgentContext;
   private prompt: string;
   private messages: Message[] = [];
@@ -30,6 +33,7 @@ export class Agent {
     this.tools = params.tools ?? [];
     this.middlewares = params.middlewares ?? [];
     this.maxSteps = params.maxSteps ?? DEFAULT_MAX_ITERATIONS;
+    this.sandbox = params.sandbox ?? new LocalSandbox();
 
     this.agentContext = {
       prompt: this.prompt,
@@ -103,7 +107,7 @@ export class Agent {
   /** tool use execution */
   private async *_act(toolUses: ToolUseContent[]): AsyncGenerator<ToolMessage> {
     const signal = this._abortController?.signal;
-    const toolContext: ToolContext = { signal };
+    const toolContext: ToolContext = { sandbox: this.sandbox, signal };
     // execute tool uses concurrently
     const pending = toolUses.map(async (toolUse, index) => {
       try {

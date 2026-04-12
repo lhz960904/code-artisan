@@ -2,8 +2,9 @@ import { describe, it, expect } from "bun:test";
 import { createTodoSystem } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
 import type { ToolContext } from "../../tools/tool";
+import { LocalSandbox } from "../../sandbox/local";
 
-const ctx: ToolContext = {};
+const ctx: ToolContext = { sandbox: new LocalSandbox() };
 
 function makeModelContext(prompt = "test prompt"): ModelContext {
   return { prompt, tools: [], messages: [] };

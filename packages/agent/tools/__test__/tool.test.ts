@@ -1,8 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import * as z from "zod";
 import { defineTool, type ToolContext } from "../tool";
+import { LocalSandbox } from "../../sandbox/local";
 
-const ctx: ToolContext = {};
+const ctx: ToolContext = { sandbox: new LocalSandbox() };
 
 describe("defineTool()", () => {
   describe("definition", () => {

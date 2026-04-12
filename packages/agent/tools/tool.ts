@@ -1,6 +1,10 @@
 import type { z } from "zod";
+import type { Sandbox } from "../sandbox/types";
 
 export interface ToolContext {
+  /** Execution environment for built-in tools (bash, file ops, etc.). */
+  sandbox: Sandbox;
+  /** Abort signal for cancellation. */
   signal?: AbortSignal;
 }
 

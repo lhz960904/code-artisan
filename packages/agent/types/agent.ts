@@ -3,6 +3,7 @@ import type { Tool } from "../tools/tool";
 import type { Message, NonSystemMessage } from "./messages";
 import type { AgentMiddleware } from "./middleware";
 import type { SkillFrontmatter } from "../middlewares/skills/skill-reader";
+import type { Sandbox } from "../sandbox/types";
 
 /**
  * The options for the ReactAgent.
@@ -20,6 +21,8 @@ export interface AgentOptions {
   middlewares?: AgentMiddleware[];
   /** The directories to load skills from. default ~/.agents/skills */
   skillsDirs?: string[];
+  /** The execution environment for built-in tools. Defaults to a new LocalSandbox. */
+  sandbox?: Sandbox;
 }
 
 /**

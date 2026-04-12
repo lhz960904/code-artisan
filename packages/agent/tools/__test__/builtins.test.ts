@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { bashTool, lsTool, readFileTool, writeFileTool, strReplaceTool, globTool, grepTool, webSearchTool, webFetchTool } from "../index";
 import { MAX_GLOB_RESULTS } from "../builtins/glob";
 import type { ToolContext } from "../tool";
+import { LocalSandbox } from "../../sandbox/local";
 
 let tempDir: string;
-const ctx: ToolContext = {};
+const ctx: ToolContext = { sandbox: new LocalSandbox() };
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agent-test-"));
