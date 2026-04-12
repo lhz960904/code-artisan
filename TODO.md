@@ -26,6 +26,12 @@
 
 ## P1 — 生产可用性
 
+### Sandbox 长驻进程支持
+- [ ] Sandbox 接口新增 `spawn()`：启动长驻进程，返回 Process 句柄（pull-based 输出读取、isAlive、kill、wait、端口暴露）
+- [ ] LocalSandbox 实现（本地端口直通 localhost）
+- [ ] E2BSandbox 实现（利用 E2B background cmd + getHost(port) 生成公网 URL）
+- [ ] 恢复 `start_server` 工具（backend 独有，依赖 `spawn` + `getPortUrl`），当前 backend 迁移期间暂时搁置
+
 ### 中间件
 - [ ] 上下文压缩 — MicroCompact（裁剪旧 tool output）+ AutoCompact（LLM 摘要压缩）
 - [ ] 循环检测 — 哈希滑动窗口，重复 tool call 警告/停止

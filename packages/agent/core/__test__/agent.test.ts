@@ -504,4 +504,140 @@ describe("Agent", () => {
       expect(afterToolUse).toHaveBeenCalledTimes(1);
     });
   });
+
+  // --- cooperative stop ---
+
+  describe("shouldStop", () => {
+    it("should exit cleanly (no throw) when a middleware sets shouldStop after a model call", async () => {
+      const greetTool = defineTool({
+        name: "greet",
+        description: "Greet",
+        parameters: z.object({ name: z.string() }),
+        invoke: async ({ name }) => `Hi ${name}`,
+      });
+
+      const toolCallResponse: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "X" } }],
+      };
+      // The mock keeps returning tool_use indefinitely — without shouldStop,
+      // the agent would loop to maxSteps and throw.
+      mockInvoke.mockResolvedValue(toolCallResponse);
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [greetTool],
+        maxSteps: 10,
+        middlewares: [
+          {
+            afterModel: async ({ agentContext }) => {
+              agentContext.shouldStop = true;
+            },
+          },
+        ],
+      });
+
+      // Should NOT throw "Maximum number of steps reached".
+      const messages = await collectMessages(agent.invoke(userMessage));
+      // One full step completed: assistant + tool result.
+      expect(messages).toHaveLength(2);
+    });
+
+    it("should call afterAgentRun when stopping cooperatively", async () => {
+      mockInvoke.mockResolvedValue({
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "X" } }],
+      } as AssistantMessage);
+
+      const greetTool = defineTool({
+        name: "greet",
+        description: "Greet",
+        parameters: z.object({ name: z.string() }),
+        invoke: async ({ name }) => `Hi ${name}`,
+      });
+
+      const afterAgentRun = mock(() => Promise.resolve());
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [greetTool],
+        maxSteps: 10,
+        middlewares: [
+          {
+            afterModel: async ({ agentContext }) => {
+              agentContext.shouldStop = true;
+            },
+            afterAgentRun,
+          },
+        ],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      expect(afterAgentRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("should finish the current step before exiting (tool executes after shouldStop is set)", async () => {
+      const toolInvoke = mock(async () => "executed");
+
+      const testTool = defineTool({
+        name: "test",
+        description: "test",
+        parameters: z.object({}),
+        invoke: toolInvoke,
+      });
+
+      mockInvoke.mockResolvedValue({
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "test", input: {} }],
+      } as AssistantMessage);
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [testTool],
+        maxSteps: 10,
+        middlewares: [
+          {
+            afterModel: async ({ agentContext }) => {
+              agentContext.shouldStop = true;
+            },
+          },
+        ],
+      });
+
+      await collectMessages(agent.invoke(userMessage));
+
+      // shouldStop was set in afterModel of step 1;
+      // the tool for step 1 MUST still execute before the agent exits.
+      expect(toolInvoke).toHaveBeenCalledTimes(1);
+    });
+
+    it("should still throw maxSteps error when shouldStop is never set", async () => {
+      const greetTool = defineTool({
+        name: "greet",
+        description: "Greet",
+        parameters: z.object({ name: z.string() }),
+        invoke: async ({ name }) => `Hi ${name}`,
+      });
+
+      mockInvoke.mockResolvedValue({
+        role: "assistant",
+        content: [{ type: "tool_use", id: "c1", name: "greet", input: { name: "X" } }],
+      } as AssistantMessage);
+
+      const agent = new Agent({
+        prompt: "",
+        model: mockProvider,
+        tools: [greetTool],
+        maxSteps: 2,
+      });
+
+      await expect(collectMessages(agent.invoke(userMessage))).rejects.toThrow(
+        "Maximum number of steps reached",
+      );
+    });
+  });
 });

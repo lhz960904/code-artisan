@@ -55,7 +55,15 @@ export class Agent {
     await this._beforeAgentRun();
     this._running = true;
     try {
+      let finished = false;
       for (let step = 1; step <= this.maxSteps; step++) {
+        // Cooperative stop — a middleware (loop detection, quota, etc.)
+        // can set agentContext.shouldStop to exit cleanly after the
+        // previous step completes, without throwing.
+        if (this.agentContext.shouldStop) {
+          finished = true;
+          break;
+        }
         this._abortController.signal.throwIfAborted();
         await this._beforeAgentStep(step);
         const assistantMessage = await this._think();
@@ -63,14 +71,17 @@ export class Agent {
 
         const toolUses = this._extractToolUses(assistantMessage);
         if (toolUses.length === 0) {
-          await this._afterAgentRun();
-          return;
+          finished = true;
+          break;
         }
 
         yield* this._act(toolUses);
         await this._afterAgentStep(step);
       }
-      throw new Error("Maximum number of steps reached");
+      if (!finished) {
+        throw new Error("Maximum number of steps reached");
+      }
+      await this._afterAgentRun();
     } finally {
       this._running = false;
       this._abortController = null;

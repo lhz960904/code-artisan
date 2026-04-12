@@ -38,6 +38,12 @@ export interface AgentContext {
   tools?: Tool[];
   /** The skills to use to invoke the agent. */
   skills?: SkillFrontmatter[];
+  /**
+   * Cooperative stop signal. Middlewares set this to true to ask the agent
+   * to exit after the current step. The Agent checks it at the top of each
+   * step and at the end of tool execution, then returns cleanly (no throw).
+   */
+  shouldStop?: boolean;
 }
 
 /**
