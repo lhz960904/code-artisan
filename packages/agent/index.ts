@@ -21,3 +21,10 @@ export {
 
 export * from "./types";
 export * from "./sandbox";
+
+export { loopDetectionMiddleware } from "./middlewares/loop-detection";
+export type { LoopDetectionOptions } from "./middlewares/loop-detection";
+export { microCompactMiddleware } from "./middlewares/micro-compact";
+export type { MicroCompactOptions } from "./middlewares/micro-compact";
+export { autoCompactMiddleware } from "./middlewares/auto-compact";
+export type { AutoCompactOptions } from "./middlewares/auto-compact";
