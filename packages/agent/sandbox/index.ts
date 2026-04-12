@@ -3,7 +3,7 @@ export type {
   ExecOptions,
   ExecResult,
   WriteFileOptions,
-  GlobFileInfo,
+  FileEntry,
   GlobResult,
   GrepMatch,
   GrepResult,

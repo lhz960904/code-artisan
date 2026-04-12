@@ -1,10 +1,11 @@
-import { mkdir, stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readdir, stat } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type {
   Sandbox,
   ExecOptions,
   ExecResult,
   WriteFileOptions,
+  FileEntry,
   GlobResult,
   GrepResult,
 } from "./types";
@@ -70,35 +71,33 @@ export class LocalSandbox implements Sandbox {
     }
   }
 
-  async listDir(path: string): Promise<string[]> {
-    const result = await this.exec(
-      `find ${path} -maxdepth 2 \\( -type f -o -type d \\) 2>/dev/null | head -500`,
-      { timeoutMs: 10_000 },
-    );
-    return result.stdout.split("\n").filter(Boolean);
+  async listDir(path: string): Promise<FileEntry[]> {
+    const LIMIT = 500;
+    const results: FileEntry[] = [];
+    const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      if (results.length >= LIMIT) break;
+      results.push({ path: e.name, is_dir: e.isDirectory() });
+      if (e.isDirectory()) {
+        const subs = await readdir(join(path, e.name), { withFileTypes: true }).catch(() => []);
+        for (const s of subs) {
+          if (results.length >= LIMIT) break;
+          results.push({ path: join(e.name, s.name), is_dir: s.isDirectory() });
+        }
+      }
+    }
+    return results;
   }
 
   async glob(pattern: string, path: string): Promise<GlobResult> {
     try {
-      const result = await this.exec(
-        `find ${path} -name '${pattern}' 2>/dev/null | head -500`,
-        { timeoutMs: 10_000 },
-      );
-      const lines = result.stdout.split("\n").filter(Boolean);
-
-      const files = await Promise.all(
-        lines.map(async (line) => {
-          const s = await stat(line).catch(() => null);
-          const relativePath = line.startsWith(path)
-            ? line.slice(path.length).replace(/^\//, "")
-            : line;
-          return {
-            path: relativePath,
-            is_dir: s?.isDirectory() ?? false,
-          };
-        }),
-      );
-
+      const glob = new Bun.Glob(pattern);
+      const files = [];
+      for await (const rel of glob.scan({ cwd: path, dot: false })) {
+        const s = await stat(join(path, rel)).catch(() => null);
+        files.push({ path: rel, is_dir: s?.isDirectory() ?? false });
+        if (files.length >= 1000) break; // safety cap; tool-level truncation is separate
+      }
       return { files };
     } catch (err) {
       return { files: [], error: String(err) };

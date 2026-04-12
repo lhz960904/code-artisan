@@ -11,7 +11,7 @@ export const readFileTool = defineTool({
     description: z
       .string()
       .describe("Explain why you want to read this file. Always place `description` as the first parameter."),
-    path: z.string().describe("The absolute path to the file to read."),
+    path: z.string().describe("The absolute path to the file to read. Must be an absolute path, not relative."),
     start_line: z
       .number()
       .optional()
@@ -21,8 +21,8 @@ export const readFileTool = defineTool({
       .optional()
       .describe("Optional ending line number (1-indexed, inclusive)."),
   }),
-  invoke: async ({ path, start_line, end_line }, _ctx) => {
-    let content = await Bun.file(path).text();
+  invoke: async ({ path, start_line, end_line }, ctx) => {
+    let content = await ctx.sandbox.readFile(path);
     if (!content) return "(empty)";
 
     if (start_line != null && end_line != null) {

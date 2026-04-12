@@ -9,7 +9,7 @@ export const strReplaceTool = defineTool({
     description: z
       .string()
       .describe("Explain why you want to make this replacement. Always place `description` as the first parameter."),
-    path: z.string().describe("The absolute path to the file."),
+    path: z.string().describe("The absolute path to the file. Must be an absolute path, not relative."),
     old_str: z.string().describe("The substring to replace."),
     new_str: z.string().describe("The new substring."),
     replace_all: z
@@ -17,8 +17,8 @@ export const strReplaceTool = defineTool({
       .optional()
       .describe("Whether to replace all occurrences."),
   }),
-  invoke: async ({ path, old_str, new_str, replace_all }, _ctx) => {
-    let content = await Bun.file(path).text();
+  invoke: async ({ path, old_str, new_str, replace_all }, ctx) => {
+    let content = await ctx.sandbox.readFile(path);
 
     if (!content.includes(old_str)) {
       return `Error: String to replace not found in file: ${path}`;
@@ -30,7 +30,7 @@ export const strReplaceTool = defineTool({
       content = content.replace(old_str, new_str);
     }
 
-    await Bun.write(path, content);
+    await ctx.sandbox.writeFile(path, content);
     return "OK";
   },
 });

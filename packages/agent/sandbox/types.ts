@@ -12,8 +12,9 @@ export interface Sandbox {
   readFile(path: string): Promise<string>;
   /** Write a text file. Creates parent directories if missing. */
   writeFile(path: string, content: string, options?: WriteFileOptions): Promise<void>;
-  /** List entries (files + directories) under a path. */
-  listDir(path: string): Promise<string[]>;
+  /** List entries (files + directories) under a path, up to 2 levels deep.
+   *  Returned paths are relative to the listed directory. */
+  listDir(path: string): Promise<FileEntry[]>;
   /** Find files matching a glob pattern. */
   glob(pattern: string, path: string): Promise<GlobResult>;
   /** Search file contents with a fixed-string pattern. */
@@ -38,13 +39,14 @@ export interface WriteFileOptions {
   append?: boolean;
 }
 
-export interface GlobFileInfo {
+export interface FileEntry {
+  /** Relative path (relative to the queried directory). */
   path: string;
   is_dir: boolean;
 }
 
 export interface GlobResult {
-  files: GlobFileInfo[];
+  files: FileEntry[];
   error?: string;
 }
 

@@ -1,6 +1,4 @@
 import * as z from "zod";
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
 import { defineTool } from "../tool";
 
 export const writeFileTool = defineTool({
@@ -10,21 +8,15 @@ export const writeFileTool = defineTool({
     description: z
       .string()
       .describe("Explain why you want to write this file. Always place `description` as the first parameter."),
-    path: z.string().describe("The absolute path to the file to write to."),
+    path: z.string().describe("The absolute path to the file to write to. Must be an absolute path, not relative."),
     content: z.string().describe("The content to write to the file."),
     append: z
       .boolean()
       .optional()
       .describe("Whether to append instead of overwriting."),
   }),
-  invoke: async ({ path, content, append }, _ctx) => {
-    await mkdir(dirname(path), { recursive: true });
-    if (append) {
-      const existing = await Bun.file(path).text().catch(() => "");
-      await Bun.write(path, existing + content);
-    } else {
-      await Bun.write(path, content);
-    }
+  invoke: async ({ path, content, append }, ctx) => {
+    await ctx.sandbox.writeFile(path, content, { append });
     return "OK";
   },
 });

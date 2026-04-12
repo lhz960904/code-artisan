@@ -10,29 +10,23 @@ export const grepTool = defineTool({
       .string()
       .describe("Explain why you want to search for this pattern. Always place `description` as the first parameter."),
     pattern: z.string().describe("The text pattern to search for (literal string, not regex)."),
-    path: z.string().describe("The absolute path to the directory to search in."),
+    path: z.string().describe("The absolute path to the directory to search in. Must be an absolute path, not relative."),
     include: z
       .string()
       .optional()
       .describe("Optional glob pattern to filter files (e.g. '*.ts', '*.py')."),
   }),
-  invoke: async ({ pattern, path, include }, _ctx) => {
-    const args = ["grep", "-rn", "--fixed-strings", "--max-count=500"];
-    if (include) {
-      args.push(`--include=${include}`);
+  invoke: async ({ pattern, path, include }, ctx) => {
+    const result = await ctx.sandbox.grep(pattern, path, include);
+    if (result.error) {
+      return `Error: ${result.error}`;
     }
-    args.push("--", pattern, path);
 
-    const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    const lines = stdout.trim().split("\n").filter(Boolean);
-
-    if (lines.length === 0) {
+    if (result.matches.length === 0) {
       return `No matches found for "${pattern}" in ${path}`;
     }
 
+    const lines = result.matches.map((m) => `${m.path}:${m.line}:${m.text}`);
     return `Found ${lines.length} matches:\n${lines.join("\n")}`;
   },
 });

@@ -4,7 +4,7 @@ import { defineTool } from "../tool";
 export const bashTool = defineTool({
   name: "bash",
   description:
-    "Execute a bash command in the local environment. Use this for short-lived commands only.",
+    "Execute a bash command in the sandbox environment. Use this for short-lived commands only.",
   parameters: z.object({
     description: z
       .string()
@@ -13,18 +13,8 @@ export const bashTool = defineTool({
       .string()
       .describe("The bash command to execute."),
   }),
-  invoke: async ({ command }, _ctx) => {
-    const proc = Bun.spawn(["bash", "-c", command], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-
-    const exitCode = await proc.exited;
+  invoke: async ({ command }, ctx) => {
+    const { stdout, stderr, exitCode } = await ctx.sandbox.exec(command);
     const output = stdout + (stderr ? `\n${stderr}` : "");
 
     if (exitCode !== 0 && !output.trim()) {
