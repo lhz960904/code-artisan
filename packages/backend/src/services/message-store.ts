@@ -1,70 +1,68 @@
 import { db } from "../db/index.js";
 import { messages, fileSnapshots } from "../db/schema.js";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type {
   Message,
-  MessageRole,
-  MessagePart,
-  ToolCallPart,
+  StoredMessage,
 } from "@code-artisan/shared";
 
+/**
+ * Persistence layer for conversation messages and workspace file snapshots.
+ *
+ * Messages are stored in the agent-package shape directly — a row
+ * carries `role` plus an opaque `content` (the role-specific content
+ * array) plus optional metadata. Rows are append-only; tool-call
+ * results arrive as separate `role: "tool"` rows.
+ */
 export class MessageStore {
   constructor(private conversationId: string) {}
 
   // --- Message CRUD ---
 
+  /**
+   * Append a new message. The row returns id + createdAt so the caller
+   * can promote the in-memory Message into a StoredMessage and stream
+   * it onward.
+   */
   async addMessage(
-    role: MessageRole,
-    parts: MessagePart[],
+    message: Message,
     metadata?: Record<string, unknown>,
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; createdAt: string }> {
     const [row] = await db
       .insert(messages)
       .values({
         conversationId: this.conversationId,
-        role,
-        parts: parts as unknown as Record<string, unknown>[],
-        metadata: metadata as Record<string, unknown>,
+        role: message.role,
+        content: message.content as unknown as Record<string, unknown>[],
+        metadata: metadata as Record<string, unknown> | undefined,
       })
-      .returning({ id: messages.id });
-    return row;
+      .returning({ id: messages.id, createdAt: messages.createdAt });
+    return {
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
-  async getMessages(): Promise<Message[]> {
+  async getMessages(): Promise<StoredMessage[]> {
     const rows = await db
       .select()
       .from(messages)
       .where(eq(messages.conversationId, this.conversationId))
       .orderBy(messages.createdAt);
 
-    return rows.map((r) => ({
-      id: r.id,
-      role: r.role as MessageRole,
-      parts: r.parts as unknown as MessagePart[],
-      metadata: (r.metadata as Record<string, unknown>) ?? undefined,
-      createdAt: r.createdAt.toISOString(),
-    }));
-  }
-
-  /** Update a specific part within a message (e.g. tool-call state progression) */
-  async updatePart(
-    messageId: string,
-    partIndex: number,
-    updates: Partial<ToolCallPart>,
-  ): Promise<void> {
-    const entries = Object.entries(updates).filter(([key]) => key !== "type");
-    if (entries.length === 0) return;
-
-    // Build nested jsonb_set using parameterized values
-    let expr = sql`parts`;
-    for (const [key, value] of entries) {
-      const jsonPath = `{${partIndex},${key}}`;
-      expr = sql`jsonb_set(${expr}, ${jsonPath}, ${JSON.stringify(value)}::jsonb)`;
-    }
-
-    await db.execute(
-      sql`UPDATE messages SET parts = ${expr} WHERE id = ${messageId}`,
-    );
+    return rows.map((r) => {
+      const base = {
+        id: r.id,
+        conversationId: r.conversationId,
+        createdAt: r.createdAt.toISOString(),
+        metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
+      };
+      return {
+        ...base,
+        role: r.role,
+        content: r.content,
+      } as unknown as StoredMessage;
+    });
   }
 
   // --- File Snapshots ---

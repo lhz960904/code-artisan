@@ -5,7 +5,6 @@ export {
   useConversationUpdate,
   useConversationDelete,
   useSendMessage,
-  useConfirmAction,
   useFileSnapshots,
   useMessages,
   fetchMessages,

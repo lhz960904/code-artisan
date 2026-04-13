@@ -1,81 +1,144 @@
-import { Sandbox as E2BSandboxSDK } from "@e2b/code-interpreter";
-import type { Sandbox } from "./types.js";
+/**
+ * E2B Sandbox implementation of @code-artisan/agent's Sandbox interface.
+ * Passed into the agent via `createAgent({ sandbox })`.
+ *
+ * Pattern B: agent loop runs server-side, tool calls are dispatched
+ * to E2B microVMs via the SDK.
+ */
+import { Sandbox as E2BSDK, FileType } from "@e2b/code-interpreter";
+import type {
+  Sandbox,
+  ExecOptions,
+  ExecResult,
+  WriteFileOptions,
+  FileEntry,
+  GlobResult,
+  GrepResult,
+} from "@code-artisan/agent";
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const LIST_DIR_LIMIT = 500;
+const GREP_MAX_LINES = 500;
+const GLOB_MAX_FILES = 500;
 
 export class E2BSandbox implements Sandbox {
-  private sdk: E2BSandboxSDK;
+  readonly sdk: E2BSDK;
 
-  constructor(sdk: E2BSandboxSDK) {
+  constructor(sdk: E2BSDK) {
     this.sdk = sdk;
   }
 
-  get id(): string {
+  get sandboxId(): string {
     return this.sdk.sandboxId;
   }
 
-  async executeCommand(
-    command: string,
-    opts?: { background?: boolean },
-  ): Promise<string> {
-    if (opts?.background) {
-      await this.sdk.commands.run(command, { background: true });
-      return "";
-    }
+  async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
     const result = await this.sdk.commands.run(command, {
-      timeoutMs: 30_000,
+      cwd: options?.cwd,
+      timeoutMs: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     });
-    if (result.stderr) {
-      return `${result.stdout}\n${result.stderr}`.trim();
-    }
-    return result.stdout;
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
   }
 
   async readFile(path: string): Promise<string> {
     return this.sdk.files.read(path);
   }
 
-  async listDir(path: string, maxDepth = 2): Promise<string[]> {
-    const ignores = [
-      "node_modules", ".git", "__pycache__", ".venv", "venv",
-      "dist", "build", ".next", ".nuxt", ".turbo", ".cache",
-      ".DS_Store", "*.egg-info", ".pytest_cache", ".mypy_cache",
-      "coverage", ".nyc_output",
-    ];
-    const excludes = ignores.map((p) => `-not -path '*/${p}/*' -not -name '${p}'`).join(" ");
-    const cmd = `find ${path} -maxdepth ${maxDepth} \\( -type f -o -type d \\) ${excludes} 2>/dev/null | head -500`;
-    const result = await this.sdk.commands.run(cmd, { timeoutMs: 10_000 });
-    return result.stdout.split("\n").filter(Boolean);
-  }
-
   async writeFile(
     path: string,
     content: string,
-    append = false,
+    options?: WriteFileOptions,
   ): Promise<void> {
-    if (append) {
-      const existing = await this.readFile(path).catch(() => "");
+    if (options?.append) {
+      const existing = await this.sdk.files.read(path).catch(() => "");
       await this.sdk.files.write(path, existing + content);
     } else {
       await this.sdk.files.write(path, content);
     }
   }
 
-  getHostUrl(port: number): string {
-    return `https://${this.sdk.getHost(port)}`;
+  async listDir(path: string): Promise<FileEntry[]> {
+    // E2B's files.list has a `depth` option — 2 matches agent's ls semantics.
+    const entries = await this.sdk.files.list(path, { depth: 2 });
+    const results: FileEntry[] = [];
+    const prefix = path.endsWith("/") ? path : `${path}/`;
+
+    for (const e of entries) {
+      if (results.length >= LIST_DIR_LIMIT) break;
+      const rel = e.path.startsWith(prefix) ? e.path.slice(prefix.length) : e.name;
+      results.push({ path: rel, is_dir: e.type === FileType.DIR });
+    }
+    return results;
   }
 
-  async close(): Promise<void> {
-    await this.sdk.kill();
+  async glob(pattern: string, path: string): Promise<GlobResult> {
+    // Simple glob: match filename pattern recursively under `path`.
+    // Path-prefix patterns (e.g. "src/**/*.ts") are approximated by the
+    // basename (*.ts) — if finer control is needed, use the bash tool.
+    // Only files are returned; directories come from listDir.
+    try {
+      const basename = pattern.split("/").pop() || pattern;
+      const escaped = basename.replace(/'/g, "'\\''");
+      const cmd = `find ${path} -type f -name '${escaped}' 2>/dev/null | head -${GLOB_MAX_FILES}`;
+      const result = await this.sdk.commands.run(cmd, { timeoutMs: 10_000 });
+      const prefix = path.endsWith("/") ? path : `${path}/`;
+      const files = result.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => ({
+          path: line.startsWith(prefix) ? line.slice(prefix.length) : line,
+          is_dir: false,
+        }));
+      return { files };
+    } catch (err) {
+      return { files: [], error: String(err) };
+    }
   }
 
-  /** Create a new E2B sandbox instance. */
+  async grep(
+    pattern: string,
+    path: string,
+    include?: string,
+  ): Promise<GrepResult> {
+    try {
+      const escapedPattern = pattern.replace(/'/g, "'\\''");
+      const includeArg = include ? `--include='${include}'` : "";
+      const cmd = `grep -rn --fixed-strings ${includeArg} '${escapedPattern}' ${path} 2>/dev/null | head -${GREP_MAX_LINES}`;
+      const result = await this.sdk.commands.run(cmd, { timeoutMs: 10_000 });
+      const lines = result.stdout.split("\n").filter(Boolean);
+
+      const prefix = path.endsWith("/") ? path : `${path}/`;
+      const matches = lines.flatMap((line) => {
+        const firstColon = line.indexOf(":");
+        const secondColon = line.indexOf(":", firstColon + 1);
+        if (firstColon < 0 || secondColon < 0) return [];
+        const filePath = line.slice(0, firstColon);
+        const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
+        const text = line.slice(secondColon + 1);
+        const relativePath = filePath.startsWith(prefix)
+          ? filePath.slice(prefix.length)
+          : filePath;
+        return [{ path: relativePath, line: lineNum, text }];
+      });
+      return { matches };
+    } catch (err) {
+      return { matches: [], error: String(err) };
+    }
+  }
+
+  /** Create a fresh E2B sandbox. */
   static async create(): Promise<E2BSandbox> {
-    const sdk = await E2BSandboxSDK.create();
+    const sdk = await E2BSDK.create();
     return new E2BSandbox(sdk);
   }
 
   /** Reconnect to an existing E2B sandbox by ID. */
   static async connect(sandboxId: string): Promise<E2BSandbox> {
-    const sdk = await E2BSandboxSDK.connect(sandboxId);
+    const sdk = await E2BSDK.connect(sandboxId);
     return new E2BSandbox(sdk);
   }
 }

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Message, Attachment } from "@code-artisan/shared";
+import type { StoredMessage, Attachment } from "@code-artisan/shared";
 import { apiFetch } from "./client";
 
 // ============================================================
@@ -8,14 +8,14 @@ import { apiFetch } from "./client";
 
 export interface ConversationResponse {
   id: string;
-  user_id: string;
+  userId: string;
   title: string | null;
   mode: string;
-  sandbox_id: string | null;
-  deploy_url: string | null;
-  agent_running: boolean;
-  created_at: string;
-  updated_at: string;
+  sandboxId: string | null;
+  deployUrl: string | null;
+  agentRunning: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FileSnapshot {
@@ -36,7 +36,7 @@ const conversations = {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  update: (id: string, updates: { title?: string; mode?: string }) =>
+  update: (id: string, updates: { title?: string }) =>
     apiFetch<ConversationResponse>(`/conversations/${id}`, {
       method: "PATCH",
       body: JSON.stringify(updates),
@@ -47,11 +47,6 @@ const conversations = {
     apiFetch<{ status: string }>(`/conversations/${id}/messages`, {
       method: "POST",
       body: JSON.stringify({ content, attachments }),
-    }),
-  confirm: (id: string, approved: boolean) =>
-    apiFetch<{ status: string }>(`/conversations/${id}/confirm`, {
-      method: "POST",
-      body: JSON.stringify({ approved }),
     }),
   files: (id: string) => apiFetch<FileSnapshot[]>(`/conversations/${id}/files`),
 };
@@ -77,12 +72,12 @@ export function useConversation(id: string) {
 }
 
 export const fetchMessages = (conversationId: string) =>
-  apiFetch<Message[]>(`/conversations/${conversationId}/messages`);
+  apiFetch<StoredMessage[]>(`/conversations/${conversationId}/messages`);
 
 export function useMessages(conversationId: string) {
   return useQuery({
     queryKey: ["conversations", conversationId, "messages"],
-    queryFn: () => apiFetch<Message[]>(`/conversations/${conversationId}/messages`),
+    queryFn: () => fetchMessages(conversationId),
     enabled: !!conversationId,
   });
 }
@@ -100,7 +95,7 @@ export function useConversationCreate() {
 export function useConversationUpdate() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string; title?: string; mode?: string }) =>
+    mutationFn: ({ id, ...updates }: { id: string; title?: string }) =>
       conversations.update(id, updates),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -121,15 +116,15 @@ export function useConversationDelete() {
 
 export function useSendMessage() {
   return useMutation({
-    mutationFn: ({ conversationId, content, attachments }: { conversationId: string; content: string; attachments?: Attachment[] }) =>
-      conversations.sendMessage(conversationId, content, attachments),
-  });
-}
-
-export function useConfirmAction() {
-  return useMutation({
-    mutationFn: ({ conversationId, approved }: { conversationId: string; approved: boolean }) =>
-      conversations.confirm(conversationId, approved),
+    mutationFn: ({
+      conversationId,
+      content,
+      attachments,
+    }: {
+      conversationId: string;
+      content: string;
+      attachments?: Attachment[];
+    }) => conversations.sendMessage(conversationId, content, attachments),
   });
 }
 
@@ -143,4 +138,3 @@ export function useFileSnapshots(conversationId: string) {
 
 /** Direct fetch for non-hook contexts (e.g. WorkspaceContext) */
 export const fetchFileSnapshots = conversations.files;
-

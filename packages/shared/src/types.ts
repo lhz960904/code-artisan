@@ -1,115 +1,54 @@
 // ============================================================
-// Part Types - atomic content units, cutting across SSE / DB / UI
+// Message types — re-exported from the agent package.
+// shared does NOT define its own message/content types anymore;
+// the backend stores and the frontend renders agent-package shape.
 // ============================================================
 
-export interface TextPart {
-  type: "text";
-  text: string;
-  status?: "streaming" | "done";
-}
+export type {
+  Message,
+  SystemMessage,
+  UserMessage,
+  AssistantMessage,
+  ToolMessage,
+  NonSystemMessage,
+  TextContent,
+  ImageURLContent,
+  ThinkingContent,
+  ToolUseContent,
+  ToolResultContent,
+  SystemMessageContent,
+  UserMessageContent,
+  AssistantMessageContent,
+  ToolMessageContent,
+} from "@code-artisan/agent";
 
-export interface ImagePart {
-  type: "image";
-  mediaType: string;
-  source: { type: "base64"; data: string } | { type: "url"; url: string };
-}
-
-export interface DocumentPart {
-  type: "document";
-  mediaType: string;
-  title?: string;
-  source: { type: "base64"; data: string } | { type: "url"; url: string } | { type: "text"; text: string };
-}
-
-export interface ThinkingPart {
-  type: "thinking";
-  thinking: string;
-  signature?: string;
-  status?: "streaming" | "done";
-}
+import type {
+  Message,
+  AssistantMessage,
+  UserMessage,
+  ToolMessage,
+  SystemMessage,
+} from "@code-artisan/agent";
 
 /**
- * state machine: partial-call → call → result / error
+ * A stored message: an agent-package Message plus the business
+ * metadata the backend/frontend need (row id, conversation link,
+ * timestamps, optional metadata).
+ *
+ * The generic narrows to one of the four role-tagged shapes when
+ * useful: `StoredMessage<AssistantMessage>` etc.
  */
-export interface ToolCallPart {
-  type: "tool-call";
-  toolCallId: string;
-  toolName: string;
-  input: Record<string, unknown>;
-  state: "partial-call" | "call" | "result" | "error";
-  output?: string;
-  approval?: "pending" | "approved" | "rejected";
-}
-
-export interface StepStartPart {
-  type: "step-start";
-  stepIndex: number;
-}
-
-export interface StepEndPart {
-  type: "step-end";
-  stepIndex: number;
-  usage?: { inputTokens: number; outputTokens: number };
-  finishReason?: string;
-  model?: string;
-}
-
-export interface ErrorPart {
-  type: "error";
-  message: string;
-}
-
-export type MessagePart = TextPart | ImagePart | DocumentPart | ThinkingPart | ToolCallPart | StepStartPart | StepEndPart | ErrorPart;
-
-// ============================================================
-// Message - composed of parts
-// ============================================================
-
-export type MessageRole = "system" | "user" | "assistant" | "tool";
-
-export interface Message {
+export type StoredMessage<M extends Message = Message> = M & {
   id: string;
-  role: MessageRole;
-  parts: MessagePart[];
-  metadata?: Record<string, unknown>;
+  conversationId: string;
   createdAt: string;
-}
+  metadata?: Record<string, unknown>;
+};
 
-// ============================================================
-// SSE Stream - discriminated union of all event types
-// ============================================================
-
-export type FinishReason = 'stop' | 'tool_calls' | 'max_tokens' | 'error' | 'abort';
-
-export type MessageStreamEvent =
-  // -- Provider: three-phase text streaming --
-  | { type: 'text-start'; id: string }
-  | { type: 'text-delta'; id: string; delta: string }
-  | { type: 'text-end'; id: string; text: string }
-
-  // -- Provider: three-phase thinking (CoT) streaming --
-  | { type: 'thinking-start'; id: string }
-  | { type: 'thinking-delta'; id: string; delta: string }
-  | { type: 'thinking-end'; id: string; signature: string; text: string }
-
-  // -- Provider: tool input streaming --
-  | { type: 'tool-input-start'; toolCallId: string; toolName: string }
-  | { type: 'tool-input-delta'; toolCallId: string; toolName: string; delta: string }
-  | { type: 'tool-input-end'; toolCallId: string; toolName: string; text: string }
-
-  // -- Provider: step lifecycle --
-  | { type: 'step-start' }
-  | { type: 'step-finish'; finishReason: FinishReason; usage: { inputTokens: number; outputTokens: number } }
-
-  // -- Agent: tool execution results --
-  | { type: 'tool-output'; toolCallId: string; toolName: string; state: 'result' | 'error'; output: string }
-  | { type: 'tool-approval'; toolCallId: string; toolName: string; approval: 'pending' | 'approved' | 'rejected' }
-
-  // -- Lifecycle & control --
-  | { type: 'stream-finish' }
-  | { type: 'error'; error: string }
-  | { type: 'abort' }
-  | { type: 'ping' };
+export type StoredSystemMessage = StoredMessage<SystemMessage>;
+export type StoredUserMessage = StoredMessage<UserMessage>;
+export type StoredAssistantMessage = StoredMessage<AssistantMessage>;
+export type StoredToolMessage = StoredMessage<ToolMessage>;
 
 // ============================================================
 // Conversation
@@ -146,6 +85,19 @@ export interface SendMessageResponse {
   conversationId: string;
   status: "started";
 }
+
+// ============================================================
+// SSE events streamed from backend → frontend during an agent run.
+// Intentionally coarse: each event carries a whole stored message
+// rather than partial deltas. Token-level streaming is a separate
+// concern (see agent package roadmap).
+// ============================================================
+
+export type AgentSseEvent =
+  | { type: "message"; message: StoredMessage }
+  | { type: "file"; files: Array<{ path: string; content: string }> }
+  | { type: "done" }
+  | { type: "error"; error: string };
 
 // ============================================================
 // MCP Types

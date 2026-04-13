@@ -18,7 +18,9 @@ export const messages = pgTable("messages", {
     .notNull()
     .references(() => conversations.id),
   role: text("role").notNull(),
-  parts: jsonb("parts").notNull(),
+  // Stores the agent-package Message's `content` field (discriminated
+  // union of content blocks). Shape depends on role — see shared types.
+  content: jsonb("content").notNull(),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

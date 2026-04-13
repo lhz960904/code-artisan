@@ -23,7 +23,8 @@
     "drizzle-orm": "^0.38.0",
     "hono": "^4.7.0",
     "postgres": "^3.4.5",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zod-from-json-schema": "^0.5.2"
   },
   "devDependencies": {
     "@types/bun": "latest",

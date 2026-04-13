@@ -1,6 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { McpTool } from "./mcp-tool.js";
+import { convertJsonSchemaToZod } from "zod-from-json-schema";
+import * as z from "zod";
+import { defineTool, type FunctionTool } from "@code-artisan/agent";
 
 export interface McpServerConfig {
   serverId: string;
@@ -9,78 +11,78 @@ export interface McpServerConfig {
   envVars: Record<string, string>;
 }
 
-export class McpTools {
+/**
+ * Connects to a set of MCP servers over stdio, lists their tools, and
+ * wraps each as an agent-package FunctionTool (ready to pass into
+ * `createAgent({ tools })`).
+ *
+ * Returns a handle with `close()` for caller-managed lifecycle — the
+ * caller (runner) decides when to tear down the stdio connections.
+ */
+export class McpToolSet {
   private clients = new Map<string, Client>();
-  private toolMap = new Map<string, { serverId: string; toolName: string }>();
+  private toolMap = new Map<
+    string,
+    { serverId: string; toolName: string }
+  >();
 
-  async initialize(servers: McpServerConfig[]): Promise<McpTool[]> {
-    const allTools: McpTool[] = [];
-
+  async initialize(servers: McpServerConfig[]): Promise<FunctionTool[]> {
+    const all: FunctionTool[] = [];
     for (const server of servers) {
       try {
         const tools = await this.connectServer(server);
-        allTools.push(...tools);
+        all.push(...tools);
       } catch (err) {
-        console.error(`[mcp] Failed to connect to ${server.serverId}:`, err);
+        console.error(`[mcp] failed to connect ${server.serverId}:`, err);
       }
     }
-
-    return allTools;
+    return all;
   }
 
-  hasTool(name: string): boolean {
-    return this.toolMap.has(name);
-  }
-
-  async callTool(fullName: string, input: Record<string, unknown>): Promise<string> {
-    const routing = this.toolMap.get(fullName);
-    if (!routing) {
-      return `Error: Unknown MCP tool: ${fullName}`;
-    }
-
-    const client = this.clients.get(routing.serverId);
-    if (!client) {
-      return `Error: MCP server ${routing.serverId} not connected`;
-    }
-
-    try {
-      const result = await client.callTool({
-        name: routing.toolName,
-        arguments: input,
-      });
-
-      if (!result.content || !Array.isArray(result.content)) {
-        return "Tool executed successfully (no output)";
-      }
-
-      const textParts: string[] = [];
-      for (const item of result.content) {
-        if (typeof item === "object" && item !== null && "text" in item) {
-          textParts.push(String(item.text));
-        } else {
-          textParts.push(String(item));
-        }
-      }
-
-      return textParts.join("\n") || "Tool executed successfully (no output)";
-    } catch (err) {
-      return `Error calling MCP tool ${fullName}: ${String(err)}`;
-    }
-  }
-
-  async cleanup(): Promise<void> {
+  async close(): Promise<void> {
     for (const [serverId, client] of this.clients) {
       try {
         await client.close();
       } catch (err) {
-        console.error(`[mcp] Error closing client for ${serverId}:`, err);
+        console.error(`[mcp] close ${serverId} error:`, err);
       }
     }
     this.clients.clear();
     this.toolMap.clear();
   }
 
-  private async connectServer(config: McpServerConfig): Promise<McpTool[]> {
+  private async callMcpTool(
+    fullName: string,
+    input: Record<string, unknown>,
+  ): Promise<string> {
+    const routing = this.toolMap.get(fullName);
+    if (!routing) return `Error: unknown MCP tool: ${fullName}`;
+    const client = this.clients.get(routing.serverId);
+    if (!client) return `Error: MCP server ${routing.serverId} not connected`;
+
+    try {
+      const result = await client.callTool({
+        name: routing.toolName,
+        arguments: input,
+      });
+      if (!result.content || !Array.isArray(result.content)) {
+        return "Tool executed successfully (no output)";
+      }
+      const parts: string[] = [];
+      for (const item of result.content) {
+        if (typeof item === "object" && item !== null && "text" in item) {
+          parts.push(String((item as { text: unknown }).text));
+        } else {
+          parts.push(String(item));
+        }
+      }
+      return parts.join("\n") || "Tool executed successfully (no output)";
+    } catch (err) {
+      return `Error calling MCP tool ${fullName}: ${String(err)}`;
+    }
+  }
+
+  private async connectServer(config: McpServerConfig): Promise<FunctionTool[]> {
     const transport = new StdioClientTransport({
       command: config.command,
       args: config.args,
@@ -89,19 +91,49 @@ export class McpTools {
 
     const client = new Client({ name: "code-artisan", version: "1.0.0" });
     await client.connect(transport);
-
     this.clients.set(config.serverId, client);
 
-    const toolsResponse = await client.listTools();
-    const tools = toolsResponse.tools || [];
+    const { tools } = await client.listTools();
 
-    const callFn = this.callTool.bind(this);
-
-    return tools.map((tool) => {
+    return (tools ?? []).map((tool) => {
       const fullName = `mcp_${config.serverId}_${tool.name}`;
-      this.toolMap.set(fullName, { serverId: config.serverId, toolName: tool.name });
+      this.toolMap.set(fullName, {
+        serverId: config.serverId,
+        toolName: tool.name,
+      });
 
-      return new McpTool(config.serverId, tool.name, tool.description || tool.name, (tool.inputSchema as Record<string, unknown>) || {}, callFn);
+      const parameters = toZodObject(tool.inputSchema);
+      const callMcpTool = this.callMcpTool.bind(this);
+
+      return defineTool({
+        name: fullName,
+        description: `[${config.serverId}] ${tool.description ?? tool.name}`,
+        parameters,
+        invoke: async (input) =>
+          callMcpTool(fullName, input as Record<string, unknown>),
+      }) as FunctionTool;
     });
+  }
+}
+
+/**
+ * MCP tools declare their input with JSON Schema. Agent's `defineTool`
+ * expects a Zod object schema (so AnthropicProvider can emit JSON
+ * Schema back via `z.toJSONSchema`). Convert once at tool load time.
+ *
+ * If conversion fails (unsupported schema feature), fall back to a
+ * permissive object that accepts any keys — the MCP server will
+ * validate the real input on call.
+ */
+function toZodObject(jsonSchema: unknown): z.ZodObject<Record<string, z.ZodTypeAny>> {
+  try {
+    const converted = convertJsonSchemaToZod(jsonSchema as Record<string, unknown>);
+    if (converted instanceof z.ZodObject) {
+      return converted as z.ZodObject<Record<string, z.ZodTypeAny>>;
+    }
+    // If the top-level schema isn't an object (rare for MCP), wrap.
+    return z.object({});
+  } catch {
+    return z.object({});
   }
 }

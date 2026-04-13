@@ -1,31 +1,36 @@
 import { EventEmitter } from "events";
-import type { MessageStreamEvent } from "@code-artisan/shared";
+import type { AgentSseEvent } from "@code-artisan/shared";
 
+/**
+ * In-process pub/sub for agent SSE events, keyed by conversationId.
+ * Runners publish; route handlers subscribe per SSE connection.
+ */
 class ConversationEventBus {
   private emitters = new Map<string, EventEmitter>();
 
   private getEmitter(conversationId: string): EventEmitter {
-    if (!this.emitters.has(conversationId)) {
-      const emitter = new EventEmitter();
+    let emitter = this.emitters.get(conversationId);
+    if (!emitter) {
+      emitter = new EventEmitter();
       emitter.setMaxListeners(20);
       this.emitters.set(conversationId, emitter);
     }
-    return this.emitters.get(conversationId)!;
+    return emitter;
   }
 
-  emitStream(conversationId: string, data: MessageStreamEvent): void {
-    this.getEmitter(conversationId).emit("stream", data);
+  emit(conversationId: string, event: AgentSseEvent): void {
+    this.getEmitter(conversationId).emit("event", event);
   }
 
   subscribe(
     conversationId: string,
-    handler: (data: MessageStreamEvent) => void,
+    handler: (event: AgentSseEvent) => void,
   ): () => void {
     const emitter = this.getEmitter(conversationId);
-    emitter.on("stream", handler);
+    emitter.on("event", handler);
     return () => {
-      emitter.off("stream", handler);
-      if (emitter.listenerCount("stream") === 0) {
+      emitter.off("event", handler);
+      if (emitter.listenerCount("event") === 0) {
         this.emitters.delete(conversationId);
       }
     };
