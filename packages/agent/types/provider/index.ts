@@ -1,6 +1,5 @@
 import type { Tool } from "../../tools/tool";
-import type { AssistantMessage, Message, ToolMessage } from "../messages";
-// import type { StreamEvent } from "../messages/stream";
+import type { AssistantMessage, Message } from "../messages";
 
 export type ModelInvokeParams = {
   messages: Message[];
@@ -10,6 +9,16 @@ export type ModelInvokeParams = {
 };
 
 export abstract class LLMProvider {
+  /**
+   * Non-streaming call. Returns the final assistant message in one shot.
+   */
   abstract invoke(params: ModelInvokeParams): Promise<AssistantMessage>;
-  // abstract stream(params: BaseInvokeParams): AsyncIterable<StreamEvent>;
+
+  /**
+   * Streaming call. Yields progressively complete `AssistantMessage`
+   * snapshots. Each yielded message is self-consistent and supersedes the
+   * previous one. The last yielded snapshot must equal what `invoke` would
+   * have returned for the same params.
+   */
+  abstract stream(params: ModelInvokeParams): AsyncGenerator<AssistantMessage>;
 }

@@ -8,8 +8,19 @@ import { LLMProvider } from "../../types/provider";
 
 const mockInvoke = mock();
 
+/**
+ * Derive a one-shot stream from `invoke`: await the full response, then
+ * yield it a single snapshot. Enough for tests that don't exercise
+ * partial-snapshot semantics.
+ */
+async function* mockStream(params: ModelInvokeParams): AsyncGenerator<AssistantMessage> {
+  const msg = (await mockInvoke(params)) as AssistantMessage;
+  yield msg;
+}
+
 const mockProvider = {
   invoke: mockInvoke,
+  stream: mockStream,
 } as unknown as LLMProvider;
 
 const userMessage: UserMessage = { role: "user", content: [{ type: "text", text: "Hello" }] };
@@ -19,12 +30,10 @@ const fakeResponse: AssistantMessage = {
   content: [{ type: "text", text: "Hi!" }],
 };
 
-async function collectMessages(gen: AsyncGenerator<AssistantMessage | ToolMessage>): Promise<NonSystemMessage[]> {
-  const messages: NonSystemMessage[] = [];
-  for await (const msg of gen) {
-    messages.push(msg);
-  }
-  return messages;
+async function collectMessages(
+  source: Promise<Array<AssistantMessage | ToolMessage>>,
+): Promise<NonSystemMessage[]> {
+  return await source;
 }
 
 describe("Agent", () => {
@@ -95,19 +104,85 @@ describe("Agent", () => {
       );
       const agent = new Agent({ prompt: "", model: mockProvider });
 
-      const gen = agent.invoke(userMessage);
+      const gen = agent.stream(userMessage);
       // Start consuming — enters the generator body and sets _running
       const pending = gen.next();
 
       // Wait a tick for the generator to reach the await
       await new Promise((r) => setTimeout(r, 0));
 
-      const gen2 = agent.invoke(userMessage);
+      const gen2 = agent.stream(userMessage);
       await expect(gen2.next()).rejects.toThrow("already running");
 
       // Resolve to clean up
       resolveProvider(fakeResponse);
       await pending;
+      // drain the first stream so it terminates cleanly
+      for await (const _ of gen) void _;
+    });
+  });
+
+  // --- streaming semantics ---
+
+  describe("stream()", () => {
+    function makeSnapshotProvider(snapshots: AssistantMessage[]) {
+      const streamMock = mock(async function* () {
+        for (const s of snapshots) yield s;
+      });
+      return {
+        provider: { invoke: mockInvoke, stream: streamMock } as unknown as LLMProvider,
+        streamMock,
+      };
+    }
+
+    it("defaults to mode: 'token' — yields partials and a final message", async () => {
+      const { provider } = makeSnapshotProvider([
+        { role: "assistant", content: [{ type: "text", text: "Hi" }] },
+        { role: "assistant", content: [{ type: "text", text: "Hi!" }] },
+      ]);
+      const agent = new Agent({ prompt: "", model: provider });
+
+      const events: Array<{ type: string; text?: string }> = [];
+      for await (const e of agent.stream(userMessage)) {
+        const first = e.message.role === "assistant" ? e.message.content[0] : undefined;
+        events.push({ type: e.type, text: first?.type === "text" ? first.text : "" });
+      }
+
+      expect(events).toEqual([
+        { type: "partial", text: "Hi" },
+        { type: "partial", text: "Hi!" },
+        { type: "message", text: "Hi!" },
+      ]);
+    });
+
+    it("mode: 'message' — suppresses partials, emits message events only", async () => {
+      const { provider, streamMock } = makeSnapshotProvider([
+        { role: "assistant", content: [{ type: "text", text: "Hi" }] },
+        { role: "assistant", content: [{ type: "text", text: "Hi!" }] },
+      ]);
+      const agent = new Agent({ prompt: "", model: provider });
+
+      const events: Array<{ type: string }> = [];
+      for await (const e of agent.stream(userMessage, { mode: "message" })) {
+        events.push({ type: e.type });
+      }
+
+      // Still calls provider.stream (message mode is a consumer-side filter)
+      expect(streamMock).toHaveBeenCalledTimes(1);
+      expect(events).toEqual([{ type: "message" }]);
+    });
+
+    it("invoke() returns a Promise<Message[]> by draining stream(mode: 'message')", async () => {
+      const { provider } = makeSnapshotProvider([
+        { role: "assistant", content: [{ type: "text", text: "Hi" }] },
+        fakeResponse,
+      ]);
+      const agent = new Agent({ prompt: "", model: provider });
+
+      const result = await agent.invoke(userMessage);
+
+      // Only the final (last) snapshot is collected as the assistant message.
+      expect(result).toEqual([fakeResponse]);
     });
   });
 

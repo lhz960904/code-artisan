@@ -1,19 +1,31 @@
+import type { AssistantMessage, ToolMessage } from "./message";
 
-import type { AssistantMessage, Message } from "./message";
-
-
-export interface Usage {
-  input_tokens: number;
-  output_tokens: number;
+/**
+ * Fired while the current assistant turn is still being generated.
+ * `message` is a complete, self-consistent snapshot of everything the model
+ * has produced so far in the current step. Each yield supersedes the last —
+ * consumers should replace by message identity, not append.
+ *
+ * A tool_use block whose input JSON is still streaming may carry a partial
+ * `input` object (falls back to `{}` until the JSON is well-formed).
+ */
+export interface AgentPartialEvent {
+  type: "partial";
+  message: AssistantMessage;
 }
 
-export type FinishReason = "stop" | "tool_use" | "max_tokens";
+/**
+ * Fired once per fully-formed message: either the final assistant message
+ * of a step, or a tool message produced locally after tool execution.
+ * `ToolMessage` is always atomic — there is no partial form of it.
+ */
+export interface AgentMessageEvent {
+  type: "message";
+  message: AssistantMessage | ToolMessage;
+}
 
-export type StreamEvent =
-  | { type: "thinking"; text: string }
-  | { type: "text"; text: string }
-  | { type: "tool_call_start"; id: string; name: string }
-  | { type: "tool_call_delta"; id: string; arguments: string }
-  | { type: "tool_call_end"; id: string }
-  | { type: "tool_result"; id: string; name: string; output: string }
-  | { type: "done"; finish_reason: FinishReason; usage: Usage };
+/**
+ * Events yielded by `Agent.stream()`. The stream ends naturally when the
+ * generator returns (= done). Errors surface by throwing from the generator.
+ */
+export type AgentEvent = AgentPartialEvent | AgentMessageEvent;

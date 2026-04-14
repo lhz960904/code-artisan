@@ -102,6 +102,99 @@ export function parseAssistantMessage(response: Anthropic.Message): AssistantMes
 }
 
 /**
+ * Accumulates Anthropic raw stream events into an ever-growing
+ * `AssistantMessage` snapshot. Callers feed events one at a time via
+ * {@link apply} and read {@link snapshot} for the latest state.
+ *
+ * Partial `tool_use.input` JSON is stored as a side-channel buffer and
+ * best-effort parsed into `input`. Until the JSON is well-formed, `input`
+ * stays `{}` so the snapshot is always safe to render.
+ */
+export class AnthropicStreamAccumulator {
+  private message: AssistantMessage = { role: "assistant", content: [] };
+  private toolInputBuffers = new Map<number, string>();
+
+  snapshot(): AssistantMessage {
+    return {
+      role: "assistant",
+      content: this.message.content.map((c) => ({ ...c })),
+      ...(this.message.usage ? { usage: { ...this.message.usage } } : {}),
+    };
+  }
+
+  apply(event: Anthropic.RawMessageStreamEvent): void {
+    if (event.type === "message_start") {
+      const u = event.message.usage;
+      if (u) {
+        this.message.usage = {
+          inputTokens: u.input_tokens,
+          outputTokens: u.output_tokens,
+        };
+      }
+      return;
+    }
+    if (event.type === "message_delta") {
+      if (event.usage) {
+        this.message.usage = {
+          inputTokens: this.message.usage?.inputTokens ?? 0,
+          outputTokens: event.usage.output_tokens,
+        };
+      }
+      return;
+    }
+    if (event.type === "content_block_start") {
+      const block = event.content_block;
+      if (block.type === "text") {
+        this.message.content[event.index] = { type: "text", text: block.text ?? "" };
+      } else if (block.type === "thinking") {
+        this.message.content[event.index] = {
+          type: "thinking",
+          thinking: block.thinking ?? "",
+          signature: block.signature,
+        };
+      } else if (block.type === "tool_use") {
+        this.toolInputBuffers.set(event.index, "");
+        this.message.content[event.index] = {
+          type: "tool_use",
+          id: block.id,
+          name: block.name,
+          input: {},
+        };
+      }
+      return;
+    }
+    if (event.type === "content_block_delta") {
+      const current = this.message.content[event.index];
+      const delta = event.delta;
+      if (!current) return;
+      if (delta.type === "text_delta" && current.type === "text") {
+        current.text += delta.text;
+      } else if (delta.type === "thinking_delta" && current.type === "thinking") {
+        current.thinking += delta.thinking;
+      } else if (delta.type === "signature_delta" && current.type === "thinking") {
+        current.signature = (current.signature ?? "") + delta.signature;
+      } else if (delta.type === "input_json_delta" && current.type === "tool_use") {
+        const buf = (this.toolInputBuffers.get(event.index) ?? "") + delta.partial_json;
+        this.toolInputBuffers.set(event.index, buf);
+        current.input = parseToolInput(buf);
+      }
+      return;
+    }
+    // content_block_stop / message_stop — nothing to accumulate
+  }
+}
+
+function parseToolInput(raw: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Converts foundation tools to Anthropic tool definitions.
  */
 export function convertToAnthropicTools(tools?: Tool[]): Anthropic.Tool[] | undefined {

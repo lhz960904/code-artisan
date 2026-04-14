@@ -51,7 +51,9 @@ export function useAgentLoop() {
         const userMessage: UserMessage = { role: "user", content: [{ type: "text", text }] };
         setMessages((prev) => [...prev, userMessage]);
 
-        for await (const message of agent.invoke(userMessage)) {
+        // Message-level streaming: each assistant/tool turn lands as it
+        // settles, no per-token churn in the terminal.
+        for await (const { message } of agent.stream(userMessage, { mode: "message" })) {
           setMessages((prev) => [...prev, message]);
         }
       } catch (error) {

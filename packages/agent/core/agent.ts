@@ -1,11 +1,4 @@
-import type {
-  Message,
-  AssistantMessage,
-  ToolMessage,
-  ToolUseContent,
-  UserMessage,
-  NonSystemMessage,
-} from "../types/messages";
+import type { Message, AssistantMessage, ToolMessage, ToolUseContent, UserMessage, NonSystemMessage, AgentEvent, AgentMessageEvent } from "../types/messages";
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
 import type { Tool, ToolContext } from "../tools/tool";
@@ -46,10 +39,28 @@ export class Agent {
     this.messages.push(message);
   }
 
-  async *invoke(message: UserMessage): AsyncGenerator<AssistantMessage | ToolMessage> {
-    if (this._running) {
-      throw new Error("Agent is already running");
+  /** Run the loop and return all assistant/tool messages as one array. */
+  async invoke(message: UserMessage): Promise<Array<AssistantMessage | ToolMessage>> {
+    const collected: Array<AssistantMessage | ToolMessage> = [];
+    for await (const { message: settled } of this.stream(message, { mode: "message" })) {
+      collected.push(settled);
     }
+    return collected;
+  }
+
+  /**
+   * Run the loop and yield events.
+   *  - `mode: "token"` (default): partial snapshots + message events
+   *  - `mode: "message"`: message events only
+   */
+  stream(message: UserMessage, options: { mode: "message" }): AsyncGenerator<AgentMessageEvent>;
+  stream(message: UserMessage, options?: { mode?: "token" }): AsyncGenerator<AgentEvent>;
+  async *stream(
+    message: UserMessage,
+    options: { mode?: "token" | "message" } = {},
+  ): AsyncGenerator<AgentEvent> {
+    const mode = options.mode ?? "token";
+    if (this._running) throw new Error("Agent is already running");
     this._abortController = new AbortController();
     this._appendMessage(message);
     await this._beforeAgentRun();
@@ -66,8 +77,9 @@ export class Agent {
         }
         this._abortController.signal.throwIfAborted();
         await this._beforeAgentStep(step);
-        const assistantMessage = await this._think();
-        yield assistantMessage;
+
+        const assistantMessage = yield* this._thinkStream(mode);
+        yield { type: "message", message: assistantMessage };
 
         const toolUses = this._extractToolUses(assistantMessage);
         if (toolUses.length === 0) {
@@ -75,12 +87,12 @@ export class Agent {
           break;
         }
 
-        yield* this._act(toolUses);
+        for await (const toolMessage of this._act(toolUses)) {
+          yield { type: "message", message: toolMessage };
+        }
         await this._afterAgentStep(step);
       }
-      if (!finished) {
-        throw new Error("Maximum number of steps reached");
-      }
+      if (!finished) throw new Error("Maximum number of steps reached");
       await this._afterAgentRun();
     } finally {
       this._running = false;
@@ -96,23 +108,38 @@ export class Agent {
     };
   }
 
-  /** model invocation */
-  private async _think(): Promise<AssistantMessage> {
-    const modelContext = this._createModelContext();
-    await this._beforeModel(modelContext);
+  private _buildModelMessages(modelContext: ModelContext): Message[] {
     const messages: Message[] = [];
     if (modelContext.prompt) {
       messages.push({ role: "system", content: [{ type: "text", text: modelContext.prompt }] });
     }
     messages.push(...modelContext.messages);
-    const message = await this.model.invoke({
-      messages: messages,
+    return messages;
+  }
+
+  /**
+   * Streaming model invocation. In `"token"` mode
+   * yields a `partial` event per provider snapshot; in `"message"` mode
+   * suppresses partials. Returns the final `AssistantMessage` either way.
+   */
+  private async *_thinkStream(mode: "token" | "message"): AsyncGenerator<AgentEvent, AssistantMessage> {
+    const modelContext = this._createModelContext();
+    await this._beforeModel(modelContext);
+
+    let lastSnapshot: AssistantMessage | null = null;
+    for await (const snapshot of this.model.stream({
+      messages: this._buildModelMessages(modelContext),
       tools: modelContext.tools,
       signal: this._abortController?.signal,
-    });
-    this._appendMessage(message);
-    await this._afterModel(modelContext, message);
-    return message;
+    })) {
+      lastSnapshot = snapshot;
+      if (mode === "token") yield { type: "partial", message: snapshot };
+    }
+    if (!lastSnapshot) throw new Error("Model produced no output");
+
+    this._appendMessage(lastSnapshot);
+    await this._afterModel(modelContext, lastSnapshot);
+    return lastSnapshot;
   }
 
   /** tool use execution */

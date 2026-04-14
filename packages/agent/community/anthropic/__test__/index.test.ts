@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import * as z from "zod";
-import { AnthropicProvider } from "./index";
-import { LLMProvider } from "../../types/provider";
-import type { ModelInvokeParams } from "../../types/provider";
-import type { AssistantMessage, Message } from "../../types/messages";
-import { defineTool } from "../../tools/tool";
+import { AnthropicProvider } from "../index";
+import { LLMProvider } from "../../../types/provider";
+import type { ModelInvokeParams } from "../../../types/provider";
+import type { AssistantMessage, Message } from "../../../types/messages";
+import { defineTool } from "../../../tools/tool";
 
 const mockCreate = mock();
 
@@ -307,6 +307,102 @@ describe("AnthropicProvider", () => {
       const result = await provider.invoke(baseParams);
 
       expect(result.usage).toBeUndefined();
+    });
+  });
+
+  describe("stream", () => {
+    async function* rawStream(events: unknown[]) {
+      for (const e of events) yield e;
+    }
+
+    it("requests stream: true and yields progressive snapshots", async () => {
+      mockCreate.mockResolvedValue(
+        rawStream([
+          {
+            type: "message_start",
+            message: {
+              id: "m1",
+              role: "assistant",
+              content: [],
+              model: TEST_MODEL,
+              stop_reason: null,
+              stop_sequence: null,
+              type: "message",
+              usage: { input_tokens: 3, output_tokens: 0 },
+            },
+          },
+          { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hi" } },
+          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "!" } },
+          { type: "content_block_stop", index: 0 },
+          {
+            type: "message_delta",
+            delta: { stop_reason: "end_turn", stop_sequence: null },
+            usage: { output_tokens: 2 },
+          },
+          { type: "message_stop" },
+        ]),
+      );
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      const snapshots: string[] = [];
+      for await (const snap of provider.stream(baseParams)) {
+        const first = snap.content[0];
+        snapshots.push(first?.type === "text" ? first.text : "");
+      }
+
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      const call = mockCreate.mock.calls[0]?.[0] as { stream?: boolean };
+      expect(call.stream).toBe(true);
+      // content_block_start + 2 deltas + message_delta = 4 yields
+      expect(snapshots).toEqual(["", "Hi", "Hi!", "Hi!"]);
+    });
+
+    it("does not yield on content_block_stop or message_stop", async () => {
+      mockCreate.mockResolvedValue(
+        rawStream([
+          { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "x" } },
+          { type: "content_block_stop", index: 0 },
+          { type: "message_stop" },
+        ]),
+      );
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      let count = 0;
+      for await (const _snap of provider.stream(baseParams)) count++;
+
+      // block_start + 1 delta = 2; stop events ignored
+      expect(count).toBe(2);
+    });
+
+    it("final snapshot matches what invoke() would return (text + tool_use)", async () => {
+      mockCreate.mockResolvedValue(
+        rawStream([
+          { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+          { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } },
+          {
+            type: "content_block_start",
+            index: 1,
+            content_block: { type: "tool_use", id: "t1", name: "greet", input: {} },
+          },
+          {
+            type: "content_block_delta",
+            index: 1,
+            delta: { type: "input_json_delta", partial_json: '{"name":"A"}' },
+          },
+        ]),
+      );
+      const provider = new AnthropicProvider(TEST_MODEL);
+
+      let last: AssistantMessage | null = null;
+      for await (const snap of provider.stream(baseParams)) last = snap;
+
+      expect(last).not.toBeNull();
+      expect(last!.content).toEqual([
+        { type: "text", text: "ok" },
+        { type: "tool_use", id: "t1", name: "greet", input: { name: "A" } },
+      ]);
     });
   });
 });

@@ -193,7 +193,10 @@ export async function runConversation(params: RunParams): Promise<void> {
     // --- Drive the loop, persist + emit each yield ---
     const nameByToolUseId = buildToolNameMap(historyForAgent);
 
-    for await (const yielded of agent.invoke(triggerMessage)) {
+    // Drive at message-level granularity: each completed turn persists
+    // and emits immediately. Switching to `mode: "token"` here is what
+    // will light up partial-snapshot SSE in a future phase.
+    for await (const { message: yielded } of agent.stream(triggerMessage, { mode: "message" })) {
       if (yielded.role === "assistant") {
         const { id, createdAt } = await store.addMessage(yielded);
         // Extend the name map with any new tool_use ids from this turn
