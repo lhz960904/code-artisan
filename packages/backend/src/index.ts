@@ -3,6 +3,8 @@ import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
 import { env } from "./env.js";
 import { errorHandler, notFoundHandler, ok } from "./http/index.js";
+import { auth } from "./auth.js";
+import { requireAuth } from "./middlewares/require-auth.js";
 import { conversationRouter } from "./routes/conversation.js";
 import { messageRouter } from "./routes/message.js";
 import { snapshotRouter } from "./routes/snapshot.js";
@@ -17,6 +19,13 @@ app.onError(errorHandler);
 app.notFound(notFoundHandler);
 
 app.get("/api/health", (c) => ok(c, { status: "ok" }));
+
+// better-auth handler — handles /api/auth/sign-in/*, /callback/*, /session, etc.
+app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// Everything below requires an authenticated session.
+app.use("/api/*", requireAuth);
+
 app.route("/api/conversation", conversationRouter);
 app.route("/api/message", messageRouter);
 app.route("/api/snapshot", snapshotRouter);

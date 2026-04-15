@@ -7,16 +7,18 @@ import { ok } from "../http/index.js";
 
 const userRouter = new Hono();
 
-// Hardcoded user for now
-const HARDCODED_USER_ID = "00000000-0000-0000-0000-000000000000";
 const DEFAULT_TOTAL_TOKENS = 1_000_000;
+
+// Get current user profile
+userRouter.get("/me", async (c) => {
+  const user = c.get("user");
+  return ok(c, { id: user.id, name: user.name, email: user.email, image: user.image });
+});
 
 // Get current user quota
 userRouter.get("/quota", async (c) => {
-  const [quota] = await db
-    .select()
-    .from(userQuotas)
-    .where(eq(userQuotas.userId, HARDCODED_USER_ID));
+  const user = c.get("user");
+  const [quota] = await db.select().from(userQuotas).where(eq(userQuotas.userId, user.id));
 
   if (!quota) {
     return ok(c, {

@@ -9,6 +9,10 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   E2B_API_KEY: z.string().min(1),
   TAVILY_API_KEY: z.string().optional(),
+  BETTER_AUTH_SECRET: z.string().min(1),
+  BETTER_AUTH_URL: z.url(),
+  GITHUB_CLIENT_ID: z.string().min(1),
+  GITHUB_CLIENT_SECRET: z.string().min(1),
 });
 
 export const env = envSchema.parse(process.env);

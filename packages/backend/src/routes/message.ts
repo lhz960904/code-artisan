@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Attachment } from "@code-artisan/shared";
 
@@ -31,6 +31,12 @@ const messageRouter = new Hono();
 // Get messages for a conversation
 messageRouter.get("/:conversationId", validate("param", conversationParamSchema), async (c) => {
   const { conversationId } = c.req.valid("param");
+  const user = c.get("user");
+  const [conversation] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id)));
+  if (!conversation) return notFound(c, "Conversation not found");
   const rows = await db
     .select()
     .from(messages)
@@ -47,12 +53,15 @@ messageRouter.post(
   async (c) => {
     const { conversationId } = c.req.valid("param");
     const { content, attachments } = c.req.valid("json");
-    // check if conversation exists
-    const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+    const user = c.get("user");
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id)));
     if (!conversation) {
       return notFound(c, "Conversation not found");
     }
-    const turnService = new AgentTurnService(conversation.id);
+    const turnService = new AgentTurnService(conversation.id, user.id);
     const userMessage = await buildUserMessage(content, attachments ?? []);
     return streamSSE(c, async (stream) => {
       const interval = setInterval(async () => {

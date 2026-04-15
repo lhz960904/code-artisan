@@ -20,14 +20,15 @@ import { eq } from "drizzle-orm";
 import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
 
-const HARDCODED_USER_ID = "00000000-0000-0000-0000-000000000000";
-
 export class AgentTurnService {
   private agent: Agent | null = null;
 
   private pendingEvents: WebAgentEvent[] = [];
 
-  constructor(private conversationId: string) {}
+  constructor(
+    private conversationId: string,
+    private userId: string,
+  ) {}
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
     await this._insertMessage(userMessage);
@@ -66,7 +67,7 @@ export class AgentTurnService {
         },
       }),
       // check quota exceeded
-      checkQuotaMiddleware(HARDCODED_USER_ID, () => {
+      checkQuotaMiddleware(this.userId, () => {
         this.pendingEvents.push({ type: "quota_exceeded" });
       }),
       // TODO: files modify persistence tracking

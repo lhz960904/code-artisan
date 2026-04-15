@@ -14,8 +14,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SETTINGS_KEY_MCP = "mcp";
-// Hardcoded user for now (same pattern as /api/user/quota)
-const HARDCODED_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 interface McpInstalledEntry {
   envVars: Record<string, string>;
@@ -57,8 +55,9 @@ settingRouter.get(
   async (c) => {
     const { search } = c.req.valid("query");
     const keyword = search?.toLowerCase();
+    const user = c.get("user");
     const registry = loadRegistry();
-    const installed = await readMcpSettings(HARDCODED_USER_ID);
+    const installed = await readMcpSettings(user.id);
 
     let result: McpServerListItem[] = registry.map((server) => ({
       ...server,
@@ -90,6 +89,7 @@ settingRouter.post(
   ),
   async (c) => {
     const { serverId, envVars } = c.req.valid("json");
+    const user = c.get("user");
 
     const registry = loadRegistry();
     const serverDef = registry.find((s) => s.id === serverId);
@@ -104,9 +104,9 @@ settingRouter.post(
       return badRequest(c, `Missing required parameters: ${missingVars.join(", ")}`);
     }
 
-    const current = await readMcpSettings(HARDCODED_USER_ID);
+    const current = await readMcpSettings(user.id);
     current[serverId] = { envVars, installedAt: new Date().toISOString() };
-    await writeMcpSettings(HARDCODED_USER_ID, current);
+    await writeMcpSettings(user.id, current);
 
     return created(c, { serverId });
   },
@@ -118,10 +118,11 @@ settingRouter.delete(
   validate("param", z.object({ serverId: z.string().min(1) })),
   async (c) => {
     const { serverId } = c.req.valid("param");
-    const current = await readMcpSettings(HARDCODED_USER_ID);
+    const user = c.get("user");
+    const current = await readMcpSettings(user.id);
     if (!current[serverId]) return notFound(c, "Server not installed");
     delete current[serverId];
-    await writeMcpSettings(HARDCODED_USER_ID, current);
+    await writeMcpSettings(user.id, current);
     return ok(c, { serverId });
   },
 );
@@ -134,12 +135,13 @@ settingRouter.patch(
   async (c) => {
     const { serverId } = c.req.valid("param");
     const { envVars } = c.req.valid("json");
+    const user = c.get("user");
 
-    const current = await readMcpSettings(HARDCODED_USER_ID);
+    const current = await readMcpSettings(user.id);
     const entry = current[serverId];
     if (!entry) return notFound(c, "Server not installed");
     current[serverId] = { ...entry, envVars };
-    await writeMcpSettings(HARDCODED_USER_ID, current);
+    await writeMcpSettings(user.id, current);
     return ok(c, { serverId });
   },
 );

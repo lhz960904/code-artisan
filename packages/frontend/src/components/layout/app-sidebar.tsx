@@ -3,6 +3,7 @@ import { Plus, Home, Trash2, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useConversations, useConversationCreate, useConversationDelete } from "@/lib/apis";
+import { UserProfile } from "./user-profile";
 
 export function AppSidebar() {
   const navigate = useNavigate();
@@ -77,6 +78,8 @@ export function AppSidebar() {
           ))}
         </div>
       </ScrollArea>
+
+      <UserProfile />
     </div>
   );
 }
