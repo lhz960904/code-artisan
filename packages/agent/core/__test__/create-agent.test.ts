@@ -3,12 +3,38 @@ import * as z from "zod";
 import { createAgent } from "../index";
 import { defineTool } from "../../tools/tool";
 import { LLMProvider } from "../../types/provider";
+import { LocalSandbox } from "../../sandbox/local";
+import type { Sandbox } from "../../sandbox/types";
 
 const mockProvider = {
   invoke: mock(),
 } as unknown as LLMProvider;
 
+function createMockSandbox(): Sandbox {
+  return {} as unknown as Sandbox;
+}
+
 describe("createAgent", () => {
+  it("should pass through options.sandbox to the Agent (e.g. E2B)", () => {
+    const sandbox = createMockSandbox();
+    const agent = createAgent({
+      prompt: "test",
+      model: mockProvider,
+      skillsDirs: [],
+      sandbox,
+    });
+    expect((agent as any).sandbox).toBe(sandbox);
+  });
+
+  it("should use LocalSandbox when sandbox is omitted", () => {
+    const agent = createAgent({
+      prompt: "test",
+      model: mockProvider,
+      skillsDirs: [],
+    });
+    expect((agent as any).sandbox).toBeInstanceOf(LocalSandbox);
+  });
+
   it("should allow user tools to override built-in tools by name", () => {
     const customBash = defineTool({
       name: "bash",
