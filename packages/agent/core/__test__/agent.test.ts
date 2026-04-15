@@ -186,6 +186,46 @@ describe("Agent", () => {
     });
   });
 
+  // --- abort (backend / external stop) ---
+
+  describe("abort API", () => {
+    it("abort() is a no-op when idle", () => {
+      const agent = new Agent({ prompt: "", model: mockProvider });
+      expect(() => agent.abort()).not.toThrow();
+    });
+
+    it("abort() aborts the in-flight provider stream with the given reason", async () => {
+      let captured: AbortSignal | undefined;
+      const stream = mock(async function* (params: ModelInvokeParams) {
+        captured = params.signal;
+        await new Promise<void>((_, reject) => {
+          const s = params.signal;
+          if (!s) return reject(new Error("missing signal"));
+          s.addEventListener("abort", () => reject(s.reason), { once: true });
+        });
+        yield fakeResponse;
+      });
+      const provider = { invoke: mockInvoke, stream } as unknown as LLMProvider;
+      const agent = new Agent({ prompt: "", model: provider });
+
+      const iter = agent.stream(userMessage);
+      const done = iter.next();
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(captured).toBeDefined();
+
+      agent.abort("backend-stop");
+      await expect(done).rejects.toBe("backend-stop");
+    });
+
+    it("abort() after a completed stream does not throw", async () => {
+      mockInvoke.mockResolvedValue(fakeResponse);
+      const agent = new Agent({ prompt: "", model: mockProvider });
+      for await (const _ of agent.stream(userMessage, { mode: "message" })) void _;
+      expect(() => agent.abort()).not.toThrow();
+    });
+  });
+
   // --- invoke with tools ---
 
   describe("invoke (with tools)", () => {

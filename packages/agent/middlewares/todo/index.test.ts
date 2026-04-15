@@ -1,17 +1,23 @@
 import { describe, it, expect } from "bun:test";
 import { createTodoSystem } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
+import type { LLMProvider } from "../../types/provider";
 import type { ToolContext } from "../../tools/tool";
 import { LocalSandbox } from "../../sandbox/local";
 
 const ctx: ToolContext = { sandbox: new LocalSandbox() };
+
+const noopModel = {
+  invoke: async () => ({ role: "assistant" as const, content: [{ type: "text" as const, text: "" }] }),
+  stream: async function* () {},
+} as unknown as LLMProvider;
 
 function makeModelContext(prompt = "test prompt"): ModelContext {
   return { prompt, tools: [], messages: [] };
 }
 
 function makeAgentContext(): AgentContext {
-  return { prompt: "", tools: [], messages: [] };
+  return { prompt: "", tools: [], messages: [], model: noopModel };
 }
 
 describe("createTodoSystem (todo)", () => {

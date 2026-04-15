@@ -90,4 +90,19 @@ describe("createAgent", () => {
     expect(toolNames).toContain("my_custom_tool");
     expect(toolNames).toContain("bash");
   });
+
+  it("should seed initMessages into the agent transcript", () => {
+    const initMessages = [
+      { role: "user" as const, content: [{ type: "text" as const, text: "hi" }] },
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "hello" }] },
+    ];
+    const agent = createAgent({
+      prompt: "sys",
+      model: mockProvider,
+      skillsDirs: [],
+      initMessages,
+    });
+    const internal = (agent as any).messages;
+    expect(internal).toEqual(initMessages);
+  });
 });

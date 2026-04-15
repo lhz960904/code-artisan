@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
 import { env } from "./env.js";
-import { errorHandler, notFoundHandler } from "./http/index.js";
+import { errorHandler, notFoundHandler, ok } from "./http/index.js";
 import { conversationRouter } from "./routes/conversation.js";
 import { messageRouter } from "./routes/message.js";
 import { snapshotRouter } from "./routes/snapshot.js";
@@ -16,7 +16,7 @@ app.use("*", logger());
 app.onError(errorHandler);
 app.notFound(notFoundHandler);
 
-app.get("/api/health", (c) => c.json({ status: "ok" }));
+app.get("/api/health", (c) => ok(c, { status: "ok" }));
 app.route("/api/conversation", conversationRouter);
 app.route("/api/message", messageRouter);
 app.route("/api/snapshot", snapshotRouter);
@@ -31,7 +31,10 @@ app.get("*", serveStatic({ root: "./dist/public", path: "index.html" }));
 
 console.log(`Server running on http://localhost:${env.PORT}`);
 
+const BUN_IDLE_TIMEOUT_SEC = 120;
+
 export default {
   port: env.PORT,
   fetch: app.fetch,
+  idleTimeout: BUN_IDLE_TIMEOUT_SEC,
 };

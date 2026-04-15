@@ -2,6 +2,12 @@ import { describe, it, expect } from "bun:test";
 import { microCompactMiddleware } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
 import type { AssistantMessage, Message, ToolMessage } from "../../types/messages";
+import type { LLMProvider } from "../../types/provider";
+
+const noopModel = {
+  invoke: async () => ({ role: "assistant" as const, content: [{ type: "text" as const, text: "" }] }),
+  stream: async function* () {},
+} as unknown as LLMProvider;
 
 function makeModelContext(): ModelContext {
   return { prompt: "", messages: [], tools: [] };
@@ -27,7 +33,7 @@ describe("microCompactMiddleware", () => {
       const [a, t] = pair(`c${i}`, "greet", `output-${i}`);
       messages.push(a, t);
     }
-    const agentContext: AgentContext = { prompt: "", messages, tools: [] };
+    const agentContext: AgentContext = { prompt: "", messages, tools: [], model: noopModel };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
 
@@ -44,7 +50,7 @@ describe("microCompactMiddleware", () => {
       const [a, t] = pair(`c${i}`, "bash", `output-${i}`);
       messages.push(a, t);
     }
-    const agentContext: AgentContext = { prompt: "", messages, tools: [] };
+    const agentContext: AgentContext = { prompt: "", messages, tools: [], model: noopModel };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
 
@@ -69,6 +75,7 @@ describe("microCompactMiddleware", () => {
       prompt: "",
       messages: [a1, t1, a2, t2],
       tools: [],
+      model: noopModel,
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
@@ -84,7 +91,7 @@ describe("microCompactMiddleware", () => {
       const [a, t] = pair(`c${i}`, "x", `output-${i}`);
       messages.push(a, t);
     }
-    const agentContext: AgentContext = { prompt: "", messages, tools: [] };
+    const agentContext: AgentContext = { prompt: "", messages, tools: [], model: noopModel };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
     const stubbedOnce = (messages[1] as ToolMessage).content[0]?.content;
@@ -103,6 +110,7 @@ describe("microCompactMiddleware", () => {
         { role: "assistant", content: [{ type: "text", text: "hello" }] },
       ],
       tools: [],
+      model: noopModel,
     };
 
     // Should not throw

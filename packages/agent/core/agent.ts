@@ -31,8 +31,18 @@ export class Agent {
     this.agentContext = {
       prompt: this.prompt,
       messages: this.messages,
+      model: this.model,
       tools: this.tools,
     };
+
+    if (params.initMessages?.length) {
+      this.messages.push(...params.initMessages);
+    }
+  }
+
+  /** Request the current run to stop. No-op when no run is active. */
+  abort(reason?: unknown): void {
+    this._abortController?.abort(reason);
   }
 
   private _appendMessage(message: NonSystemMessage) {

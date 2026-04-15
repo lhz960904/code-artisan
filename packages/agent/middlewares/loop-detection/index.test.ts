@@ -2,9 +2,15 @@ import { describe, it, expect } from "bun:test";
 import { loopDetectionMiddleware } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
 import type { AssistantMessage, ToolUseContent } from "../../types/messages";
+import type { LLMProvider } from "../../types/provider";
+
+const noopModel = {
+  invoke: async () => ({ role: "assistant" as const, content: [{ type: "text" as const, text: "" }] }),
+  stream: async function* () {},
+} as unknown as LLMProvider;
 
 function makeCtx(): AgentContext {
-  return { prompt: "", messages: [], tools: [] };
+  return { prompt: "", messages: [], tools: [], model: noopModel };
 }
 
 function makeModelContext(): ModelContext {
@@ -14,7 +20,14 @@ function makeModelContext(): ModelContext {
 function assistantWithToolUses(toolUses: Array<{ id: string; name: string; input: unknown }>): AssistantMessage {
   return {
     role: "assistant",
-    content: toolUses.map((tu): ToolUseContent => ({ type: "tool_use", id: tu.id, name: tu.name, input: tu.input as Record<string, unknown> })),
+    content: toolUses.map(
+      (tu): ToolUseContent => ({
+        type: "tool_use",
+        id: tu.id,
+        name: tu.name,
+        input: tu.input as Record<string, unknown>,
+      }),
+    ),
   };
 }
 
@@ -106,9 +119,7 @@ describe("loopDetectionMiddleware", () => {
       });
     }
 
-    const warns = agentContext.messages.filter((m) =>
-      (m as any).content[0]?.text?.includes("Warning"),
-    );
+    const warns = agentContext.messages.filter((m) => (m as any).content[0]?.text?.includes("Warning"));
     expect(warns).toHaveLength(1);
   });
 
@@ -117,11 +128,31 @@ describe("loopDetectionMiddleware", () => {
     const agentContext = makeCtx();
 
     // Two repeats of 'A', then three unique calls — 'A' should fall out of window
-    await mw.afterModel!({ agentContext, modelContext: makeModelContext(), message: assistantWithToolUses([{ id: "1", name: "A", input: {} }]) });
-    await mw.afterModel!({ agentContext, modelContext: makeModelContext(), message: assistantWithToolUses([{ id: "2", name: "A", input: {} }]) });
-    await mw.afterModel!({ agentContext, modelContext: makeModelContext(), message: assistantWithToolUses([{ id: "3", name: "B", input: {} }]) });
-    await mw.afterModel!({ agentContext, modelContext: makeModelContext(), message: assistantWithToolUses([{ id: "4", name: "C", input: {} }]) });
-    await mw.afterModel!({ agentContext, modelContext: makeModelContext(), message: assistantWithToolUses([{ id: "5", name: "D", input: {} }]) });
+    await mw.afterModel!({
+      agentContext,
+      modelContext: makeModelContext(),
+      message: assistantWithToolUses([{ id: "1", name: "A", input: {} }]),
+    });
+    await mw.afterModel!({
+      agentContext,
+      modelContext: makeModelContext(),
+      message: assistantWithToolUses([{ id: "2", name: "A", input: {} }]),
+    });
+    await mw.afterModel!({
+      agentContext,
+      modelContext: makeModelContext(),
+      message: assistantWithToolUses([{ id: "3", name: "B", input: {} }]),
+    });
+    await mw.afterModel!({
+      agentContext,
+      modelContext: makeModelContext(),
+      message: assistantWithToolUses([{ id: "4", name: "C", input: {} }]),
+    });
+    await mw.afterModel!({
+      agentContext,
+      modelContext: makeModelContext(),
+      message: assistantWithToolUses([{ id: "5", name: "D", input: {} }]),
+    });
 
     // At this point window is [C, D] effectively (size 3 minus 2 pushed above); or [B, C, D].
     // Either way 'A' has rolled off, no warning should exist.

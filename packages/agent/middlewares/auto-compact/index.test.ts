@@ -1,7 +1,7 @@
 import { describe, it, expect, mock } from "bun:test";
 import { autoCompactMiddleware } from "./index";
 import type { AgentContext, ModelContext } from "../../types/agent";
-import type { AssistantMessage, Message } from "../../types/messages";
+import type { AssistantMessage, Message, UserMessage } from "../../types/messages";
 import type { LLMProvider } from "../../types/provider";
 
 function makeModelContext(): ModelContext {
@@ -17,12 +17,18 @@ function makeProvider(summary: string): { provider: LLMProvider; invoke: ReturnT
   return { provider: { invoke } as unknown as LLMProvider, invoke };
 }
 
+/** Satisfies AgentContext.model when the test never invokes the main agent LLM. */
+function unusedMainModel(): LLMProvider {
+  return {
+    invoke: mock(async () => textAssistant("unused")),
+    stream: async function* () {},
+  } as unknown as LLMProvider;
+}
+
 function bigMessages(approxTokens: number): Message[] {
   // ~4 chars per token → produce a single user msg with enough text
   const chars = approxTokens * 4;
-  return [
-    { role: "user", content: [{ type: "text", text: "x".repeat(chars) }] },
-  ];
+  return [{ role: "user", content: [{ type: "text", text: "x".repeat(chars) }] }];
 }
 
 describe("autoCompactMiddleware", () => {
@@ -34,12 +40,33 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: [{ role: "user", content: [{ type: "text", text: "short" }] }],
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
 
     expect(invoke).not.toHaveBeenCalled();
     expect(agentContext.messages).toHaveLength(1);
+  });
+
+  it("uses agentContext.model when summaryModel is omitted", async () => {
+    const { provider, invoke } = makeProvider("from main model");
+    const mw = autoCompactMiddleware({ threshold: 1_000 });
+
+    const agentContext: AgentContext = {
+      prompt: "",
+      messages: bigMessages(2_000),
+      tools: [],
+      model: provider,
+    };
+
+    await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(agentContext.messages).toHaveLength(2);
+    const firstBlock = (agentContext.messages[0] as UserMessage).content[0];
+    expect(firstBlock?.type).toBe("text");
+    expect(firstBlock && firstBlock.type === "text" ? firstBlock.text : "").toContain("from main model");
   });
 
   it("calls the summary model and replaces messages when threshold is crossed", async () => {
@@ -50,6 +77,7 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: bigMessages(2_000),
       tools: [],
+      model: unusedMainModel(),
     };
     const originalRef = agentContext.messages;
 
@@ -75,6 +103,7 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: bigMessages(2_000),
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
@@ -99,6 +128,7 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: bigMessages(2_000),
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
@@ -124,6 +154,7 @@ describe("autoCompactMiddleware", () => {
       // Small message, but custom counter says it's huge → compaction should trigger.
       messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
@@ -145,6 +176,7 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: bigMessages(10_000), // would trigger default counter, but async says 50
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });
@@ -161,6 +193,7 @@ describe("autoCompactMiddleware", () => {
       prompt: "",
       messages: bigMessages(2_000),
       tools: [],
+      model: unusedMainModel(),
     };
 
     await mw.beforeModel!({ agentContext, modelContext: makeModelContext() });

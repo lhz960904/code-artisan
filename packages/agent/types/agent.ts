@@ -23,6 +23,8 @@ export interface AgentOptions {
   skillsDirs?: string[];
   /** The execution environment for built-in tools. Defaults to a new LocalSandbox. */
   sandbox?: Sandbox;
+  /** The messages to resume from before the first `stream()` / `invoke()` call. */
+  initMessages?: NonSystemMessage[];
 }
 
 /**
@@ -34,6 +36,8 @@ export interface AgentContext {
   prompt: string;
   /** The messages to use to invoke the agent. */
   messages: Message[];
+  /** Main agent LLM (same as {@link AgentOptions.model}). Middleware may read this (e.g. auto-compact summary fallback). */
+  model: LLMProvider;
   /** The tools to use to invoke the agent. */
   tools?: Tool[];
   /** The skills to use to invoke the agent. */

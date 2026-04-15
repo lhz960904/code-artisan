@@ -1,9 +1,4 @@
-import type {
-  AssistantMessageContent,
-  SystemMessageContent,
-  ToolMessageContent,
-  UserMessageContent,
-} from "./content";
+import type { AssistantMessageContent, SystemMessageContent, ToolMessageContent, UserMessageContent } from "./content";
 
 /**
  * System prompt or policy text for the model.
@@ -13,6 +8,8 @@ export interface SystemMessage {
   role: "system";
   /** Ordered segments of system text; see {@link SystemMessageContent}. */
   content: SystemMessageContent;
+  /** Metadata stores business data or data from different llm providers */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -23,6 +20,8 @@ export interface UserMessage {
   role: "user";
   /** Text and/or image segments; see {@link UserMessageContent}. */
   content: UserMessageContent;
+  /** Metadata stores business data or data from different llm providers */
+  metadata?: Record<string, unknown>;
 }
 
 export interface TokenUsage {
@@ -40,6 +39,8 @@ export interface AssistantMessage {
   content: AssistantMessageContent;
   /** Provider-reported token usage for the request that produced this message, when available. */
   usage?: TokenUsage;
+  /** Metadata stores business data or data from different llm providers */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -50,6 +51,8 @@ export interface ToolMessage {
   role: "tool";
   /** Tool execution payloads, each referencing the originating tool call id; see {@link ToolMessageContent}. */
   content: ToolMessageContent;
+  /** Metadata stores business data or data from different llm providers */
+  metadata?: Record<string, unknown>;
 }
 
 /** A message that is not a system message. */

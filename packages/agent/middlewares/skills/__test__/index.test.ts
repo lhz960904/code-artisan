@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { AgentContext, ModelContext } from "../../../types/agent";
+import type { LLMProvider } from "../../../types/provider";
+
+const noopModel = {
+  invoke: async () => ({ role: "assistant" as const, content: [{ type: "text" as const, text: "" }] }),
+  stream: async function* () {},
+} as unknown as LLMProvider;
 
 let tempDir: string;
 
@@ -122,6 +128,7 @@ describe("createSkillsMiddleware", () => {
         prompt: "You are helpful.",
         messages: [],
         skills,
+        model: noopModel,
       };
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,
@@ -142,6 +149,7 @@ describe("createSkillsMiddleware", () => {
         prompt: "You are helpful.",
         messages: [],
         skills: [],
+        model: noopModel,
       };
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,
@@ -158,6 +166,7 @@ describe("createSkillsMiddleware", () => {
       const agentContext: AgentContext = {
         prompt: "You are helpful.",
         messages: [],
+        model: noopModel,
       };
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,

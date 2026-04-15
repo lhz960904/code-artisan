@@ -12,15 +12,14 @@ const SERIALIZE_LIMIT = 80_000;
 
 const ACK_TEXT = "Understood. Continuing with context from the summary.";
 
-const SUMMARY_SYSTEM_PROMPT =
-  "You are a conversation summarizer for coding agent sessions.";
+const SUMMARY_SYSTEM_PROMPT = "You are a conversation summarizer for coding agent sessions.";
 
 export interface AutoCompactOptions {
   /**
-   * LLMProvider used to produce the summary. Typically a cheaper/faster
-   * model than the main agent (e.g. Claude Haiku).
+   * LLM used to produce the summary (e.g. a cheaper Haiku). When omitted,
+   * `agentContext.model` from the running agent is used.
    */
-  summaryModel: LLMProvider;
+  summaryModel?: LLMProvider;
   /**
    * Token count that triggers compaction. Default 120k (conservative
    * for the built-in `chars / 4` counter). Raise this toward the model
@@ -47,8 +46,8 @@ export interface AutoCompactOptions {
 
 /**
  * AutoCompact — when the in-memory message history's estimated token
- * count crosses `threshold`, this middleware calls `summaryModel` to
- * produce a narrative summary, then replaces `agentContext.messages`
+ * count crosses `threshold`, this middleware calls `summaryModel` (or
+ * `agentContext.model` if unset) to produce a narrative summary, then replaces `agentContext.messages`
  * with a two-message pair:
  *   - user message carrying "[Conversation Summary]\n\n<summary>"
  *   - assistant acknowledgment
@@ -66,7 +65,8 @@ export function autoCompactMiddleware(options: AutoCompactOptions): AgentMiddlew
       if (estimated < threshold) return;
 
       const text = serializeForSummary(agentContext.messages);
-      const response = await summaryModel.invoke({
+      const model = summaryModel ?? agentContext.model;
+      const response = await model.invoke({
         messages: [
           { role: "system", content: [{ type: "text", text: SUMMARY_SYSTEM_PROMPT }] },
           { role: "user", content: [{ type: "text", text: buildCompactPrompt(text) }] },
@@ -130,9 +130,7 @@ function serializeForSummary(messages: Message[]): string {
       for (const c of msg.content) {
         if (c.type === "tool_result") {
           const trimmed =
-            c.content.length > SUMMARY_OUTPUT_LIMIT
-              ? c.content.slice(0, SUMMARY_OUTPUT_LIMIT) + "..."
-              : c.content;
+            c.content.length > SUMMARY_OUTPUT_LIMIT ? c.content.slice(0, SUMMARY_OUTPUT_LIMIT) + "..." : c.content;
           lines.push(`[TOOL_RESULT] ${trimmed}`);
         }
       }
@@ -144,9 +142,7 @@ function serializeForSummary(messages: Message[]): string {
   }
 
   const text = lines.join("\n");
-  return text.length > SERIALIZE_LIMIT
-    ? text.slice(0, SERIALIZE_LIMIT) + "\n[...truncated]"
-    : text;
+  return text.length > SERIALIZE_LIMIT ? text.slice(0, SERIALIZE_LIMIT) + "\n[...truncated]" : text;
 }
 
 function buildCompactPrompt(conversationText: string): string {
