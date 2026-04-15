@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   createAgent,
   AnthropicProvider,
@@ -11,12 +11,15 @@ import {
   type FunctionTool,
   type UserMessage as AgentUserMessage,
 } from "@code-artisan/agent";
-import type { StoredAssistantMessage, StoredToolMessage } from "@code-artisan/shared";
+import type {
+  AgentSseEvent,
+  StoredAssistantMessage,
+  StoredToolMessage,
+} from "@code-artisan/shared";
 
 import { env } from "../env.js";
 import { db } from "../db/index.js";
-import { conversations, mcpServers } from "../db/schema.js";
-import { eventBus } from "../services/event-bus.js";
+import { conversations, settings } from "../db/schema.js";
 import { MessageStore } from "../services/message-store.js";
 import { QuotaService } from "../services/quota.js";
 import { getSandboxPool } from "../sandbox/index.js";
@@ -62,11 +65,16 @@ export interface RunParams {
  *  - acquire/reconnect sandbox, restore files if new
  *  - configure tools (builtin + MCP) and middlewares (infra + business)
  *  - pre-step: kick off title generation (don't block)
- *  - drive agent.invoke(), persist each yielded message, emit SSE
+ *  - drive agent.invoke(), persist each yielded message, yield SSE events
  *  - post-step: persist file snapshots touched by the run
  *  - maintain agentRunning flag + sandboxId on the conversation row
+ *
+ * Yields SSE events directly to the caller (the POST /message/:id handler)
+ * so there's a single in-process stream — no pub/sub bus.
  */
-export async function runConversation(params: RunParams): Promise<void> {
+export async function* runConversation(
+  params: RunParams,
+): AsyncGenerator<AgentSseEvent, void, void> {
   const { conversationId, newUserMessageId } = params;
 
   const abortFlag = { aborted: false };
@@ -136,6 +144,7 @@ export async function runConversation(params: RunParams): Promise<void> {
     // --- Middlewares ---
     const quota = new QuotaService(conv.userId);
     const touchedPaths = new Set<string>();
+    const pendingEvents: AgentSseEvent[] = [];
 
     const middlewares: AgentMiddleware[] = [
       // Cooperative external-abort: check a shared flag before each model call.
@@ -163,11 +172,10 @@ export async function runConversation(params: RunParams): Promise<void> {
           await store.addMessage(ackAssistant);
         },
       }),
+      // Token-exceeded fires from inside the agent loop, where we can't yield
+      // directly. Buffer the event and flush it on the next iteration.
       tokenUsageMiddleware(quota, () => {
-        eventBus.emit(conversationId, {
-          type: "error",
-          error: "Token quota exceeded.",
-        });
+        pendingEvents.push({ type: "error", error: "Token quota exceeded." });
       }),
     ];
 
@@ -197,6 +205,9 @@ export async function runConversation(params: RunParams): Promise<void> {
     // and emits immediately. Switching to `mode: "token"` here is what
     // will light up partial-snapshot SSE in a future phase.
     for await (const { message: yielded } of agent.stream(triggerMessage, { mode: "message" })) {
+      // Drain any events buffered from middleware callbacks before the turn event.
+      while (pendingEvents.length) yield pendingEvents.shift()!;
+
       if (yielded.role === "assistant") {
         const { id, createdAt } = await store.addMessage(yielded);
         // Extend the name map with any new tool_use ids from this turn
@@ -209,7 +220,7 @@ export async function runConversation(params: RunParams): Promise<void> {
           conversationId,
           createdAt,
         };
-        eventBus.emit(conversationId, { type: "message", message: stored });
+        yield { type: "message", message: stored };
       } else if (yielded.role === "tool") {
         const { id, createdAt } = await store.addMessage(yielded);
         const stored: StoredToolMessage = {
@@ -218,11 +229,14 @@ export async function runConversation(params: RunParams): Promise<void> {
           conversationId,
           createdAt,
         };
-        eventBus.emit(conversationId, { type: "message", message: stored });
+        yield { type: "message", message: stored };
       }
     }
 
-    // --- Post: persist touched files, emit file event ---
+    // Flush any events buffered after the last turn (e.g., token exceeded at the end).
+    while (pendingEvents.length) yield pendingEvents.shift()!;
+
+    // --- Post: persist touched files, yield file event ---
     if (touchedPaths.size > 0) {
       const files: Array<{ path: string; content: string }> = [];
       for (const path of touchedPaths) {
@@ -235,15 +249,16 @@ export async function runConversation(params: RunParams): Promise<void> {
         }
       }
       if (files.length > 0) {
-        eventBus.emit(conversationId, { type: "file", files });
+        yield { type: "file", files };
       }
     }
 
-    eventBus.emit(conversationId, { type: "done" });
+    yield { type: "done" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[runner] conversation ${conversationId} error:`, err);
-    eventBus.emit(conversationId, { type: "error", error: message });
+    yield { type: "error", error: message };
+    yield { type: "done" };
   } finally {
     runners.delete(conversationId);
     await mcpSet.close().catch(() => {});
@@ -281,20 +296,22 @@ function buildToolNameMap(messages: Array<{ role: string; content: unknown[] }>)
 }
 
 async function loadMcpConfigs(userId: string): Promise<McpServerConfig[]> {
-  const installed = await db
-    .select()
-    .from(mcpServers)
-    .where(eq(mcpServers.userId, userId));
-  if (installed.length === 0) return [];
+  const [row] = await db
+    .select({ value: settings.value })
+    .from(settings)
+    .where(and(eq(settings.userId, userId), eq(settings.key, "mcp")));
+  const installed = (row?.value ?? {}) as Record<string, { envVars?: Record<string, string> }>;
+  const serverIds = Object.keys(installed);
+  if (serverIds.length === 0) return [];
 
   const registry = loadMcpRegistry();
-  return installed
-    .filter((s) => registry[s.serverId])
-    .map((s) => ({
-      serverId: s.serverId,
-      command: registry[s.serverId]!.command,
-      args: registry[s.serverId]!.args,
-      envVars: (s.envVars as Record<string, string>) || {},
+  return serverIds
+    .filter((serverId) => registry[serverId])
+    .map((serverId) => ({
+      serverId,
+      command: registry[serverId]!.command,
+      args: registry[serverId]!.args,
+      envVars: installed[serverId]?.envVars ?? {},
     }));
 }
 

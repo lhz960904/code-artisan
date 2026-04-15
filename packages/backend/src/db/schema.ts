@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, bigint, boolean, serial, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, uuid, text, bigint, boolean, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
 
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -45,14 +45,16 @@ export const userQuotas = pgTable("user_quotas", {
   usedTokens: bigint("used_tokens", { mode: "number" }).notNull().default(0),
 });
 
-export const mcpServers = pgTable(
-  "mcp_servers",
+// Generic per-user key-value settings. Value shape depends on key.
+// Known keys:
+//   "mcp" → Record<serverId, { envVars: Record<string, string>; installedAt: string }>
+export const settings = pgTable(
+  "settings",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull(),
-    serverId: text("server_id").notNull(),
-    envVars: jsonb("env_vars").notNull().default({}),
-    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull().default({}),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [unique().on(table.userId, table.serverId)],
+  (table) => [primaryKey({ columns: [table.userId, table.key] })],
 );

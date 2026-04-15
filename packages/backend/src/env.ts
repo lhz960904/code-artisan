@@ -2,11 +2,11 @@ import { z } from "zod";
 
 const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
-  DATABASE_URL: z.string().url(),
-  SUPABASE_URL: z.string().url(),
+  DATABASE_URL: z.url(),
+  SUPABASE_URL: z.url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_SECRET_KEY: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string(),
+  ANTHROPIC_API_KEY: z.string().min(1),
   E2B_API_KEY: z.string().min(1),
   TAVILY_API_KEY: z.string().optional(),
 });

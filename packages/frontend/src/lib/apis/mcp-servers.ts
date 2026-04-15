@@ -12,14 +12,14 @@ const mcpServersApi = {
     return apiFetch<McpServerListItem[]>(`/mcp-servers${params}`);
   },
   install: (serverId: string, envVars: Record<string, string>) =>
-    apiFetch<{ id: string }>("/mcp-servers/install", {
+    apiFetch<{ serverId: string }>("/mcp-servers/install", {
       method: "POST",
       body: JSON.stringify({ serverId, envVars }),
     }),
-  uninstall: (id: string) =>
-    apiFetch<{ success: boolean }>(`/mcp-servers/${id}`, { method: "DELETE" }),
-  update: (id: string, envVars: Record<string, string>) =>
-    apiFetch<{ success: boolean }>(`/mcp-servers/${id}`, {
+  uninstall: (serverId: string) =>
+    apiFetch<{ serverId: string }>(`/mcp-servers/${serverId}`, { method: "DELETE" }),
+  update: (serverId: string, envVars: Record<string, string>) =>
+    apiFetch<{ serverId: string }>(`/mcp-servers/${serverId}`, {
       method: "PATCH",
       body: JSON.stringify({ envVars }),
     }),
@@ -50,7 +50,7 @@ export function useInstallMcpServer() {
 export function useUninstallMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => mcpServersApi.uninstall(id),
+    mutationFn: (serverId: string) => mcpServersApi.uninstall(serverId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },
@@ -60,8 +60,8 @@ export function useUninstallMcpServer() {
 export function useUpdateMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, envVars }: { id: string; envVars: Record<string, string> }) =>
-      mcpServersApi.update(id, envVars),
+    mutationFn: ({ serverId, envVars }: { serverId: string; envVars: Record<string, string> }) =>
+      mcpServersApi.update(serverId, envVars),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
     },

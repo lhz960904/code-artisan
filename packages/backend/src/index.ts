@@ -1,42 +1,28 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
-import { eq } from "drizzle-orm";
 import { env } from "./env.js";
-import { db } from "./db/index.js";
-import { userQuotas } from "./db/schema.js";
-import { conversationsRouter } from "./routes/conversations.js";
-import { uploadRouter } from "./routes/upload.js";
-import { mcpServersRouter } from "./routes/mcp-servers.js";
+import { errorHandler, notFoundHandler } from "./http/index.js";
+import { conversationRouter } from "./routes/conversation.js";
+import { messageRouter } from "./routes/message.js";
+import { snapshotRouter } from "./routes/snapshot.js";
+import { attachmentRouter } from "./routes/attachment.js";
+import { userRouter } from "./routes/user.js";
+import { settingRouter } from "./routes/setting.js";
 
 const app = new Hono();
 
 app.use("*", logger());
+app.onError(errorHandler);
+app.notFound(notFoundHandler);
 
 app.get("/api/health", (c) => c.json({ status: "ok" }));
-app.route("/api/conversations", conversationsRouter);
-app.route("/api/upload", uploadRouter);
-app.route("/api/mcp-servers", mcpServersRouter);
-
-// Get user quota (hardcoded user for now)
-app.get("/api/quota", async (c) => {
-  const userId = "00000000-0000-0000-0000-000000000000";
-
-  const [quota] = await db
-    .select()
-    .from(userQuotas)
-    .where(eq(userQuotas.userId, userId));
-
-  if (!quota) {
-    return c.json({ totalTokens: 1000000, usedTokens: 0, remaining: 1000000 });
-  }
-
-  return c.json({
-    totalTokens: quota.totalTokens,
-    usedTokens: quota.usedTokens,
-    remaining: quota.totalTokens - quota.usedTokens,
-  });
-});
+app.route("/api/conversation", conversationRouter);
+app.route("/api/message", messageRouter);
+app.route("/api/snapshot", snapshotRouter);
+app.route("/api/attachment", attachmentRouter);
+app.route("/api/user", userRouter);
+app.route("/api/setting", settingRouter);
 
 // Serve frontend static files (production)
 app.use("*", serveStatic({ root: "./dist/public" }));

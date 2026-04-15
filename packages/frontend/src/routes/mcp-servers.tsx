@@ -178,7 +178,7 @@ function ServerCard({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => server.installedId && uninstall.mutate(server.installedId)}
+                onClick={() => uninstall.mutate(server.id)}
                 disabled={uninstall.isPending}
               >
                 <Trash2 className="mr-1 h-3.5 w-3.5" /> Uninstall
@@ -281,8 +281,7 @@ function EditDialog({
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
   async function handleSave() {
-    if (!server.installedId) return;
-    await update.mutateAsync({ id: server.installedId, envVars });
+    await update.mutateAsync({ serverId: server.id, envVars });
     onClose();
   }
 

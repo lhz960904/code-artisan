@@ -124,20 +124,6 @@ export interface McpRegistryServer {
   docUrl: string;
 }
 
-export interface McpInstalledServer {
-  id: string;
-  serverId: string;
-  envVars: Record<string, string>;
-  installedAt: string;
-  name: string;
-  author: string;
-  description: string;
-  category: string;
-  tags: string[];
-  docUrl: string;
-}
-
 export interface McpServerListItem extends McpRegistryServer {
   installed: boolean;
-  installedId?: string;
 }
