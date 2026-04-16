@@ -1,4 +1,13 @@
-import type { Message, AssistantMessage, ToolMessage, ToolUseContent, UserMessage, NonSystemMessage, AgentEvent, AgentMessageEvent } from "../types/messages";
+import type {
+  Message,
+  AssistantMessage,
+  ToolMessage,
+  ToolUseContent,
+  UserMessage,
+  NonSystemMessage,
+  AgentEvent,
+  AgentMessageEvent,
+} from "../types/messages";
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
 import type { Tool, ToolContext } from "../tools/tool";
@@ -65,10 +74,7 @@ export class Agent {
    */
   stream(message: UserMessage, options: { mode: "message" }): AsyncGenerator<AgentMessageEvent>;
   stream(message: UserMessage, options?: { mode?: "token" }): AsyncGenerator<AgentEvent>;
-  async *stream(
-    message: UserMessage,
-    options: { mode?: "token" | "message" } = {},
-  ): AsyncGenerator<AgentEvent> {
+  async *stream(message: UserMessage, options: { mode?: "token" | "message" } = {}): AsyncGenerator<AgentEvent> {
     const mode = options.mode ?? "token";
     if (this._running) throw new Error("Agent is already running");
     this._abortController = new AbortController();
@@ -83,6 +89,7 @@ export class Agent {
         // previous step completes, without throwing.
         if (this.agentContext.shouldStop) {
           finished = true;
+          this.abort();
           break;
         }
         this._abortController.signal.throwIfAborted();

@@ -40,9 +40,8 @@ export class AgentTurnService {
     }
 
     for await (const event of this.agent.stream(userMessage)) {
-      if (this.pendingEvents.length > 0) {
+      while (this.pendingEvents.length > 0) {
         yield this.pendingEvents.shift()!;
-        break;
       }
       yield event;
       if (event.type === "message") await this._insertMessage(event.message);
@@ -92,10 +91,7 @@ export class AgentTurnService {
 
     if (sandbox.sandboxId !== conversation.sandboxId) {
       // restore file snapshot
-      const snapshots = await db
-        .select()
-        .from(fileSnapshots)
-        .where(eq(fileSnapshots.conversationId, this.conversationId));
+      const snapshots = await db.select().from(fileSnapshots).where(eq(fileSnapshots.conversationId, this.conversationId));
       for (const snap of snapshots) {
         try {
           await sandbox.writeFile(snap.path, snap.content);
@@ -104,10 +100,7 @@ export class AgentTurnService {
         }
       }
       // sync sandbox id to conversation
-      await db
-        .update(conversations)
-        .set({ sandboxId: sandbox.sandboxId })
-        .where(eq(conversations.id, this.conversationId));
+      await db.update(conversations).set({ sandboxId: sandbox.sandboxId }).where(eq(conversations.id, this.conversationId));
     }
 
     return sandbox;
@@ -115,18 +108,12 @@ export class AgentTurnService {
 
   /** Insert a message to db */
   private async _insertMessage(message: Message): Promise<void> {
-    await db
-      .insert(messages)
-      .values({ conversationId: this.conversationId, role: message.role, content: message.content });
+    await db.insert(messages).values({ conversationId: this.conversationId, role: message.role, content: message.content });
   }
 
   /** Build agent messages from db */
   private async _buildAgentMessages(): Promise<Message[]> {
-    const rows = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, this.conversationId))
-      .orderBy(messages.createdAt);
+    const rows = await db.select().from(messages).where(eq(messages.conversationId, this.conversationId)).orderBy(messages.createdAt);
 
     const stored = rows.map((r) => {
       const base = {
