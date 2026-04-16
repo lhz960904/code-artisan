@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { StoredMessage, WebAgentEvent, Attachment } from "@code-artisan/shared";
-import { API_BASE } from "@/lib/apis/client";
+import type {
+  Attachment,
+  ImageURLContent,
+  StoredMessage,
+  StoredUserMessage,
+  TextContent,
+  WebAgentEvent,
+} from "@code-artisan/shared";
+import { API_BASE } from "@/api/client";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "error";
 
@@ -152,7 +159,7 @@ export function useChat(
       if (!conversationId || status === "submitted" || status === "running") return;
 
       const optId = `opt-${Date.now()}`;
-      const optContent: StoredMessage["content"] = [];
+      const optContent: Array<TextContent | ImageURLContent> = [];
       if (attachments) {
         for (const att of attachments) {
           if (att.mimeType.startsWith("image/")) {
@@ -173,9 +180,9 @@ export function useChat(
           id: optId,
           conversationId,
           role: "user",
-          content: optContent as StoredMessage["content"],
+          content: optContent,
           createdAt: new Date().toISOString(),
-        } as StoredMessage,
+        } as StoredUserMessage,
       ]);
       setStatus("submitted");
       setError(null);

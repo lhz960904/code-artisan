@@ -5,7 +5,7 @@ import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble, buildToolResultLookup } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { useMessages, fetchMessages } from "@/lib/apis";
+import { fetchConversationMessages } from "@/api/queries";
 import type {
   StoredMessage,
   StoredAssistantMessage,
@@ -16,28 +16,23 @@ import type {
 interface ChatPanelProps {
   conversationId: string;
   initialMessage?: string;
+  initialMessages: StoredMessage[];
 }
 
-export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
-  const { data: fetchedMessages } = useMessages(conversationId);
+export function ChatPanel({ conversationId, initialMessage, initialMessages }: ChatPanelProps) {
   const fileUpload = useFileUpload();
-
-  const initialMessages: StoredMessage[] | undefined = fetchedMessages?.length
-    ? fetchedMessages
-    : undefined;
 
   const updateFile = useWorkspaceStore((s) => s.updateFile);
   const deleteFile = useWorkspaceStore((s) => s.deleteFile);
   const openFile = useWorkspaceStore((s) => s.openFile);
   const appendTerminal = useWorkspaceStore((s) => s.appendTerminal);
   const setPreviewUrl = useWorkspaceStore((s) => s.setPreviewUrl);
-  const loadSnapshots = useWorkspaceStore((s) => s.loadSnapshots);
 
   const { messages, status, sendMessage: chatSendMessage } = useChat(
     conversationId,
     {
       initialMessages,
-      fetchMessages,
+      fetchMessages: fetchConversationMessages,
       onFileChange: (files) => {
         for (const f of files) {
           updateFile(f.path, f.content);
@@ -55,9 +50,8 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
   const initialSentForRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadSnapshots(conversationId);
     processedRef.current = new Set();
-  }, [conversationId, loadSnapshots]);
+  }, [conversationId]);
 
   // Auto-send initialMessage from home page navigation (once per conversation).
   useEffect(() => {

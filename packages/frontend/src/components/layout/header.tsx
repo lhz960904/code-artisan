@@ -2,28 +2,29 @@ import { Link } from "@tanstack/react-router";
 import { Code2, ExternalLink, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useConversation, useConversationUpdate, useQuota } from "@/lib/apis";
+import {
+  type ConversationResponse,
+  type QuotaResponse,
+  useConversationUpdate,
+} from "@/api";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 interface HeaderProps {
   conversationId: string;
+  conversation: ConversationResponse;
+  quota: QuotaResponse;
 }
 
-export function Header({ conversationId }: HeaderProps) {
-  const { data: conv } = useConversation(conversationId);
-  const { data: quota } = useQuota();
+export function Header({ conversationId, conversation, quota }: HeaderProps) {
   const updateConv = useConversationUpdate();
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
 
   function toggleMode() {
-    if (!conv) return;
-    const newMode = conv.mode === "yolo" ? "confirm" : "yolo";
+    const newMode = conversation.mode === "yolo" ? "confirm" : "yolo";
     updateConv.mutate({ id: conversationId, mode: newMode });
   }
 
-  const usedPercent = quota
-    ? Math.round((quota.usedTokens / quota.totalTokens) * 100)
-    : 0;
+  const usedPercent = Math.round((quota.usedTokens / quota.totalTokens) * 100);
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
@@ -34,22 +35,18 @@ export function Header({ conversationId }: HeaderProps) {
         </Link>
         <span className="text-muted-foreground">/</span>
         <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
-          {conv?.title || "Untitled"}
+          {conversation.title || "Untitled"}
         </span>
       </div>
 
       <div className="flex items-center gap-2">
-        {quota && (
-          <span className="text-[11px] text-muted-foreground tabular-nums">
-            {usedPercent}%
-          </span>
-        )}
+        <span className="text-[11px] text-muted-foreground tabular-nums">{usedPercent}%</span>
         <Badge
           variant="outline"
           className="cursor-pointer select-none gap-1 text-[10px] uppercase"
           onClick={toggleMode}
         >
-          {conv?.mode === "confirm" ? (
+          {conversation.mode === "confirm" ? (
             <><Shield className="h-3 w-3" /> Confirm</>
           ) : (
             <><Zap className="h-3 w-3" /> Yolo</>

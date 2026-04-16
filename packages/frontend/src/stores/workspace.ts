@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { fetchFileSnapshots } from "@/lib/apis";
+import type { FileSnapshot } from "@/api";
 
 interface TerminalEntry {
   command: string;
@@ -21,7 +21,7 @@ interface WorkspaceState {
   deleteFile: (path: string) => void;
   appendTerminal: (entry: TerminalEntry) => void;
   setPreviewUrl: (url: string | null) => void;
-  loadSnapshots: (conversationId: string) => Promise<void>;
+  setSnapshots: (snapshots: FileSnapshot[]) => void;
   reset: () => void;
 }
 
@@ -33,7 +33,7 @@ const freshState = () => ({
   previewUrl: null as string | null,
 });
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   ...freshState(),
 
   openFile: (path) =>
@@ -75,8 +75,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   setPreviewUrl: (url) => set({ previewUrl: url }),
 
-  loadSnapshots: async (conversationId) => {
-    const snapshots = await fetchFileSnapshots(conversationId);
+  setSnapshots: (snapshots) => {
     const fileMap = new Map<string, string>();
     for (const s of snapshots) fileMap.set(s.path, s.content);
     set({ files: fileMap });

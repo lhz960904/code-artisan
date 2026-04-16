@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Eye, Code2, Terminal as TerminalIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FileTree } from "@/components/workspace/file-tree";
@@ -11,25 +11,26 @@ type Tab = "preview" | "code" | "terminal";
 
 export function RightPanel() {
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
-  const [activeTab, setActiveTab] = useState<Tab>("code");
-
-  useEffect(() => {
-    if (previewUrl) setActiveTab("preview");
-  }, [previewUrl]);
+  const [preferredTab, setPreferredTab] = useState<Tab>("preview");
+  const activeTab: Tab = previewUrl
+    ? preferredTab
+    : preferredTab === "preview"
+      ? "code"
+      : preferredTab;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Tab Bar */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-3">
         {previewUrl && (
-          <TabBtn active={activeTab === "preview"} onClick={() => setActiveTab("preview")}>
+          <TabBtn active={activeTab === "preview"} onClick={() => setPreferredTab("preview")}>
             <Eye className="h-3.5 w-3.5" /> Preview
           </TabBtn>
         )}
-        <TabBtn active={activeTab === "code"} onClick={() => setActiveTab("code")}>
+        <TabBtn active={activeTab === "code"} onClick={() => setPreferredTab("code")}>
           <Code2 className="h-3.5 w-3.5" /> Code
         </TabBtn>
-        <TabBtn active={activeTab === "terminal"} onClick={() => setActiveTab("terminal")}>
+        <TabBtn active={activeTab === "terminal"} onClick={() => setPreferredTab("terminal")}>
           <TerminalIcon className="h-3.5 w-3.5" /> Terminal
         </TabBtn>
       </div>

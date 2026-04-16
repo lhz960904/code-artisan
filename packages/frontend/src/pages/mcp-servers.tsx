@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Search, ExternalLink, Download, Trash2, Settings } from "lucide-react";
+import { mcpServersListOptions, useInstallMcpServer, useUninstallMcpServer, useUpdateMcpServer } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,28 +13,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  useMcpServers,
-  useInstallMcpServer,
-  useUninstallMcpServer,
-  useUpdateMcpServer,
-} from "@/lib/apis";
+import { appShellRoute } from "@/pages/withSidbar";
 import type { McpServerListItem, McpEnvVar } from "@code-artisan/shared";
 
-export const Route = createFileRoute("/mcp-servers")({
+export const mcpServersRoute = createRoute({
+  getParentRoute: () => appShellRoute,
+  path: "/mcp-servers",
+  validateSearch: (search: Record<string, unknown>) => ({
+    q: typeof search.q === "string" && search.q.trim() ? search.q : undefined,
+  }),
+  loaderDeps: ({ search }) => ({ q: search.q }),
+  loader: ({ context: { queryClient }, deps }) => queryClient.ensureQueryData(mcpServersListOptions(deps.q)),
+  pendingComponent: () => <div className="p-6 text-sm text-muted-foreground">Loading MCP servers...</div>,
   component: McpServersPage,
 });
 
-function McpServersPage() {
-  const [search, setSearch] = useState("");
+export function McpServersPage() {
+  const navigate = useNavigate();
+  const { q } = mcpServersRoute.useSearch();
+  const { data: servers = [] } = useSuspenseQuery(mcpServersListOptions(q));
+
   const [tab, setTab] = useState<"marketplace" | "installed">("marketplace");
   const [installTarget, setInstallTarget] = useState<McpServerListItem | null>(null);
   const [editTarget, setEditTarget] = useState<McpServerListItem | null>(null);
 
-  const { data: servers = [], isLoading } = useMcpServers(search || undefined);
-
-  const displayServers =
-    tab === "marketplace" ? servers : servers.filter((s) => s.installed);
+  const displayServers = tab === "marketplace" ? servers : servers.filter((s) => s.installed);
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
@@ -43,7 +48,6 @@ function McpServersPage() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div className="mb-6 flex items-center gap-4 border-b border-border">
         <button
           onClick={() => setTab("marketplace")}
@@ -67,21 +71,23 @@ function McpServersPage() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="relative mb-6">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search MCP servers..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={q ?? ""}
+          onChange={(e) =>
+            navigate({
+              to: "/mcp-servers",
+              search: { q: e.target.value.trim() || undefined },
+              replace: true,
+            })
+          }
           className="pl-10"
         />
       </div>
 
-      {/* Server list */}
-      {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      ) : displayServers.length === 0 ? (
+      {displayServers.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {tab === "installed" ? "No MCP servers installed yet." : "No servers found."}
         </p>
@@ -98,21 +104,8 @@ function McpServersPage() {
         </div>
       )}
 
-      {/* Install Dialog */}
-      {installTarget && (
-        <InstallDialog
-          server={installTarget}
-          onClose={() => setInstallTarget(null)}
-        />
-      )}
-
-      {/* Edit Dialog */}
-      {editTarget && (
-        <EditDialog
-          server={editTarget}
-          onClose={() => setEditTarget(null)}
-        />
-      )}
+      {installTarget && <InstallDialog server={installTarget} onClose={() => setInstallTarget(null)} />}
+      {editTarget && <EditDialog server={editTarget} onClose={() => setEditTarget(null)} />}
     </div>
   );
 }
@@ -138,15 +131,10 @@ function ServerCard({
           <p className="text-xs text-muted-foreground">
             by {server.author} · {server.category}
           </p>
-          <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-            {server.description}
-          </p>
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{server.description}</p>
           <div className="mt-2 flex flex-wrap gap-1">
             {server.tags.slice(0, 4).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
-              >
+              <span key={tag} className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
                 {tag}
               </span>
             ))}
@@ -195,19 +183,11 @@ function ServerCard({
   );
 }
 
-function InstallDialog({
-  server,
-  onClose,
-}: {
-  server: McpServerListItem;
-  onClose: () => void;
-}) {
+function InstallDialog({ server, onClose }: { server: McpServerListItem; onClose: () => void }) {
   const install = useInstallMcpServer();
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
-  const requiredVarsFilled = server.envVars
-    .filter((v) => v.required)
-    .every((v) => envVars[v.name]?.trim());
+  const requiredVarsFilled = server.envVars.filter((v) => v.required).every((v) => envVars[v.name]?.trim());
 
   const canInstall = server.envVars.length === 0 || requiredVarsFilled;
 
@@ -244,9 +224,7 @@ function InstallDialog({
                   key={envVar.name}
                   envVar={envVar}
                   value={envVars[envVar.name] || ""}
-                  onChange={(val) =>
-                    setEnvVars((prev) => ({ ...prev, [envVar.name]: val }))
-                  }
+                  onChange={(val) => setEnvVars((prev) => ({ ...prev, [envVar.name]: val }))}
                 />
               ))}
             </div>
@@ -257,10 +235,7 @@ function InstallDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleInstall}
-            disabled={!canInstall || install.isPending}
-          >
+          <Button onClick={handleInstall} disabled={!canInstall || install.isPending}>
             <Download className="mr-1 h-3.5 w-3.5" />
             {install.isPending ? "Installing..." : "Install"}
           </Button>
@@ -270,13 +245,7 @@ function InstallDialog({
   );
 }
 
-function EditDialog({
-  server,
-  onClose,
-}: {
-  server: McpServerListItem;
-  onClose: () => void;
-}) {
+function EditDialog({ server, onClose }: { server: McpServerListItem; onClose: () => void }) {
   const update = useUpdateMcpServer();
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
@@ -299,9 +268,7 @@ function EditDialog({
               key={envVar.name}
               envVar={envVar}
               value={envVars[envVar.name] || ""}
-              onChange={(val) =>
-                setEnvVars((prev) => ({ ...prev, [envVar.name]: val }))
-              }
+              onChange={(val) => setEnvVars((prev) => ({ ...prev, [envVar.name]: val }))}
             />
           ))}
         </div>

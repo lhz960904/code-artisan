@@ -1,5 +1,5 @@
-import { API_BASE } from "./client";
 import type { Attachment } from "@code-artisan/shared";
+import { API_BASE } from "@/api/client";
 
 export async function uploadFile(file: File): Promise<Attachment> {
   const formData = new FormData();

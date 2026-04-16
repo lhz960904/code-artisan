@@ -18,7 +18,7 @@ export function UserProfile() {
 
   async function handleSignOut() {
     await signOut();
-    navigate({ to: "/login" });
+    navigate({ to: "/login", search: { redirect: "/" } });
   }
 
   return (

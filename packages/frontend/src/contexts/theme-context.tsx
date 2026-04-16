@@ -31,11 +31,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY, t);
   };
 
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolved }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ theme, setTheme, resolved }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

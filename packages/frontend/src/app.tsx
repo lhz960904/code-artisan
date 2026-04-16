@@ -1,7 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { ThemeProvider } from "@/contexts/theme-context";
-import { routeTree } from "./routeTree.gen";
+import { chatRoute } from "@/pages/chat";
+import { homeRoute } from "@/pages/home";
+import { loginRoute } from "@/pages/login";
+import { authedRoute } from "@/pages/layout/authed";
+import { rootRoute } from "@/pages/layout/root";
+import { dashboardRoute } from "./pages/dashboard";
+
+// appShellRoute.addChildren([mcpServersRoute])
+
+const routeTree = rootRoute.addChildren([loginRoute, homeRoute, authedRoute.addChildren([dashboardRoute, chatRoute])]);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,7 +21,12 @@ const queryClient = new QueryClient({
   },
 });
 
-const router = createRouter({ routeTree });
+const router = createRouter({
+  routeTree,
+  context: { queryClient },
+  defaultPreload: "intent",
+  defaultPreloadStaleTime: 0,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

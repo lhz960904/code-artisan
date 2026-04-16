@@ -1,14 +1,17 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { Plus, Home, Trash2, Plug } from "lucide-react";
+import { Plus, Home, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useConversations, useConversationCreate, useConversationDelete } from "@/lib/apis";
+import { useConversationCreate, useConversationDelete, type ConversationResponse } from "@/api";
 import { UserProfile } from "./user-profile";
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  conversations: ConversationResponse[];
+}
+
+export function AppSidebar({ conversations }: AppSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { data: conversations = [] } = useConversations();
   const createConv = useConversationCreate();
   const deleteConv = useConversationDelete();
 
@@ -29,12 +32,7 @@ export function AppSidebar() {
   return (
     <div className="flex w-60 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="p-3">
-        <Button
-          variant="outline"
-          className="w-full gap-2"
-          onClick={handleNewChat}
-          disabled={createConv.isPending}
-        >
+        <Button variant="outline" className="w-full gap-2" onClick={handleNewChat} disabled={createConv.isPending}>
           <Plus className="h-4 w-4" /> New Chat
         </Button>
       </div>
@@ -46,18 +44,17 @@ export function AppSidebar() {
         >
           <Home className="h-4 w-4" /> Home
         </Link>
-        <Link
+        {/* <Link
           to="/mcp-servers"
+          search={{ q: undefined }}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-accent [&.active]:text-accent-foreground"
         >
           <Plug className="h-4 w-4" /> MCP Servers
-        </Link>
+        </Link> */}
       </div>
 
       <ScrollArea className="flex-1 px-3">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Recent
-        </div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent</div>
         <div className="space-y-0.5">
           {conversations.map((conv) => (
             <Link

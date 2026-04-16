@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { uploadFile } from "@/lib/apis/upload";
+import { uploadFile } from "@/api";
 import type { Attachment } from "@code-artisan/shared";
 
 export interface FileAttachment {
