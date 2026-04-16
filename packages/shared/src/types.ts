@@ -53,7 +53,8 @@ export interface Attachment {
 export type WebAgentEvent =
   | AgentEvent
   | { type: "quota_exceeded" }
-  | { type: "file_update"; files: Array<{ path: string; content: string }> };
+  | { type: "file_update"; files: Array<{ path: string; content: string }> }
+  | { type: "file_delete"; paths: string[] };
 
 /**
  * ------------------------------------------------------------

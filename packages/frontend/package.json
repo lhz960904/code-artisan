@@ -12,6 +12,7 @@
   "dependencies": {
     "@code-artisan/shared": "workspace:*",
     "better-auth": "^1.2.0",
+    "zustand": "^5.0.2",
     "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
     "@tanstack/react-query": "^5.95.2",

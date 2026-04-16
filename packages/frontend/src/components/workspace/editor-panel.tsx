@@ -1,7 +1,8 @@
 import { FileCode2 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useShallow } from "zustand/react/shallow";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 function getLanguage(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -34,7 +35,15 @@ function fileName(path: string): string {
 }
 
 export function EditorPanel() {
-  const { files, openTabs, activeTab, setActiveTab, closeTab } = useWorkspace();
+  const { files, openTabs, activeTab, setActiveTab, closeTab } = useWorkspaceStore(
+    useShallow((s) => ({
+      files: s.files,
+      openTabs: s.openTabs,
+      activeTab: s.activeTab,
+      setActiveTab: s.setActiveTab,
+      closeTab: s.closeTab,
+    })),
+  );
   const content = activeTab ? files.get(activeTab) ?? "" : "";
 
   if (openTabs.length === 0) {

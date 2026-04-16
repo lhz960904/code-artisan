@@ -12,7 +12,8 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useShallow } from "zustand/react/shallow";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 interface TreeNode {
   name: string;
@@ -100,7 +101,9 @@ function getFileIcon(name: string) {
 
 function TreeItem({ node, depth }: { node: TreeNode; depth: number }) {
   const [expanded, setExpanded] = useState(true);
-  const { activeTab, openFile } = useWorkspace();
+  const { activeTab, openFile } = useWorkspaceStore(
+    useShallow((s) => ({ activeTab: s.activeTab, openFile: s.openFile })),
+  );
   const isActive = activeTab === node.path;
 
   if (node.isDir) {
@@ -143,7 +146,7 @@ function TreeItem({ node, depth }: { node: TreeNode; depth: number }) {
 }
 
 export function FileTree() {
-  const { files } = useWorkspace();
+  const files = useWorkspaceStore((s) => s.files);
   const paths = Array.from(files.keys());
   const tree = buildTree(paths);
 

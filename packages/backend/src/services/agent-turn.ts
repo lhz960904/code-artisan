@@ -16,9 +16,10 @@ import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artis
 import { getSandboxPool } from "../sandbox";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
+import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 
 export class AgentTurnService {
   private agent: Agent | null = null;
@@ -69,7 +70,17 @@ export class AgentTurnService {
       checkQuotaMiddleware(this.userId, () => {
         this.pendingEvents.push({ type: "quota_exceeded" });
       }),
-      // TODO: files modify persistence tracking
+      // track file mutations (write tools + bash); stream to web + persist
+      fileTrackerMiddleware({
+        sandbox,
+        onFileChanged: (files) => {
+          this.pendingEvents.push({ type: "file_update", files });
+        },
+        onFileDeleted: (paths) => {
+          this.pendingEvents.push({ type: "file_delete", paths });
+        },
+        onPersist: (manifest) => this._persistFileSnapshots(manifest),
+      }),
     ];
 
     return createAgent({
@@ -111,6 +122,35 @@ export class AgentTurnService {
     await db.insert(messages).values({ conversationId: this.conversationId, role: message.role, content: message.content });
   }
 
+  /**
+   * Replace this conversation's snapshots with the given manifest:
+   * upsert every entry, then delete any DB rows whose path is no longer present.
+   */
+  private async _persistFileSnapshots(manifest: Map<string, string>): Promise<void> {
+    for (const [path, content] of manifest) {
+      await db
+        .insert(fileSnapshots)
+        .values({ conversationId: this.conversationId, path, content })
+        .onConflictDoUpdate({
+          target: [fileSnapshots.conversationId, fileSnapshots.path],
+          set: { content, updatedAt: new Date() },
+        });
+    }
+    const keepPaths = Array.from(manifest.keys());
+    if (keepPaths.length > 0) {
+      await db
+        .delete(fileSnapshots)
+        .where(
+          and(
+            eq(fileSnapshots.conversationId, this.conversationId),
+            notInArray(fileSnapshots.path, keepPaths),
+          ),
+        );
+    } else {
+      await db.delete(fileSnapshots).where(eq(fileSnapshots.conversationId, this.conversationId));
+    }
+  }
+
   /** Build agent messages from db */
   private async _buildAgentMessages(): Promise<Message[]> {
     const rows = await db.select().from(messages).where(eq(messages.conversationId, this.conversationId)).orderBy(messages.createdAt);
@@ -133,16 +173,3 @@ export class AgentTurnService {
   }
 }
 
-// async upsertFileSnapshot(path: string, content: string): Promise<void> {
-//   await db
-//     .insert(fileSnapshots)
-//     .values({
-//       conversationId: this.conversationId,
-//       path,
-//       content,
-//     })
-//     .onConflictDoUpdate({
-//       target: [fileSnapshots.conversationId, fileSnapshots.path],
-//       set: { content, updatedAt: new Date() },
-//     });
-// }

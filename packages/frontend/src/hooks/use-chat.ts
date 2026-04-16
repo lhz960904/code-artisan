@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type {
   StoredMessage,
-  AgentSseEvent,
+  WebAgentEvent,
   Attachment,
 } from "@code-artisan/shared";
 
@@ -28,6 +28,8 @@ export interface UseChatOptions {
   onError?: (error: Error) => void;
   /** Called when the agent emits a file-change event. */
   onFileChange?: (files: Array<{ path: string; content: string }>) => void;
+  /** Called when the agent emits a file-delete event. */
+  onFileDelete?: (paths: string[]) => void;
 }
 
 export interface UseChatReturn {
@@ -77,7 +79,7 @@ export function useChat(
   }, [conversationId]);
 
   const handleSseEvent = useCallback(
-    (event: AgentSseEvent) => {
+    (event: WebAgentEvent) => {
       switch (event.type) {
         case "message": {
           setStatus("running");
@@ -95,8 +97,12 @@ export function useChat(
           });
           break;
         }
-        case "file": {
+        case "file_update": {
           optionsRef.current.onFileChange?.(event.files);
+          break;
+        }
+        case "file_delete": {
+          optionsRef.current.onFileDelete?.(event.paths);
           break;
         }
         case "done": {
@@ -137,7 +143,7 @@ export function useChat(
     es.onmessage = (e) => {
       if (!e.data) return;
       try {
-        const parsed = JSON.parse(e.data) as AgentSseEvent;
+        const parsed = JSON.parse(e.data) as WebAgentEvent;
         handleSseEvent(parsed);
       } catch {
         // ignore parse errors

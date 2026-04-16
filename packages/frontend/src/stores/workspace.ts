@@ -1,0 +1,86 @@
+import { create } from "zustand";
+import { fetchFileSnapshots } from "@/lib/apis";
+
+interface TerminalEntry {
+  command: string;
+  output: string;
+  error?: string;
+}
+
+interface WorkspaceState {
+  files: Map<string, string>;
+  openTabs: string[];
+  activeTab: string | null;
+  terminalHistory: TerminalEntry[];
+  previewUrl: string | null;
+
+  openFile: (path: string) => void;
+  closeTab: (path: string) => void;
+  setActiveTab: (path: string) => void;
+  updateFile: (path: string, content: string) => void;
+  deleteFile: (path: string) => void;
+  appendTerminal: (entry: TerminalEntry) => void;
+  setPreviewUrl: (url: string | null) => void;
+  loadSnapshots: (conversationId: string) => Promise<void>;
+  reset: () => void;
+}
+
+const initialState = {
+  files: new Map<string, string>(),
+  openTabs: [] as string[],
+  activeTab: null as string | null,
+  terminalHistory: [] as TerminalEntry[],
+  previewUrl: null as string | null,
+};
+
+export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+  ...initialState,
+
+  openFile: (path) =>
+    set((s) => ({
+      openTabs: s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path],
+      activeTab: path,
+    })),
+
+  closeTab: (path) =>
+    set((s) => {
+      const next = s.openTabs.filter((p) => p !== path);
+      const nextActive =
+        s.activeTab === path ? (next.length > 0 ? next[next.length - 1] : null) : s.activeTab;
+      return { openTabs: next, activeTab: nextActive };
+    }),
+
+  setActiveTab: (path) => set({ activeTab: path }),
+
+  updateFile: (path, content) =>
+    set((s) => {
+      const next = new Map(s.files);
+      next.set(path, content);
+      return { files: next };
+    }),
+
+  deleteFile: (path) =>
+    set((s) => {
+      if (!s.files.has(path)) return s;
+      const nextFiles = new Map(s.files);
+      nextFiles.delete(path);
+      const nextTabs = s.openTabs.filter((p) => p !== path);
+      const nextActive =
+        s.activeTab === path ? (nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : null) : s.activeTab;
+      return { files: nextFiles, openTabs: nextTabs, activeTab: nextActive };
+    }),
+
+  appendTerminal: (entry) =>
+    set((s) => ({ terminalHistory: [...s.terminalHistory, entry] })),
+
+  setPreviewUrl: (url) => set({ previewUrl: url }),
+
+  loadSnapshots: async (conversationId) => {
+    const snapshots = await fetchFileSnapshots(conversationId);
+    const fileMap = new Map<string, string>();
+    for (const s of snapshots) fileMap.set(s.path, s.content);
+    set({ files: fileMap });
+  },
+
+  reset: () => set(initialState),
+}));

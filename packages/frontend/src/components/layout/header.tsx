@@ -3,7 +3,7 @@ import { Code2, ExternalLink, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useConversation, useConversationUpdate, useQuota } from "@/lib/apis";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 interface HeaderProps {
   conversationId: string;
@@ -13,7 +13,7 @@ export function Header({ conversationId }: HeaderProps) {
   const { data: conv } = useConversation(conversationId);
   const { data: quota } = useQuota();
   const updateConv = useConversationUpdate();
-  const { previewUrl } = useWorkspace();
+  const previewUrl = useWorkspaceStore((s) => s.previewUrl);
 
   function toggleMode() {
     if (!conv) return;

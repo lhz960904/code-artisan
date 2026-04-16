@@ -1,8 +1,8 @@
 import { Globe, ExternalLink, RefreshCw } from "lucide-react";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 export function PreviewPanel() {
-  const { previewUrl } = useWorkspace();
+  const previewUrl = useWorkspaceStore((s) => s.previewUrl);
 
   if (!previewUrl) {
     return (

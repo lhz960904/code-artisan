@@ -1,5 +1,6 @@
+import { useEffect } from "react";
 import { createFileRoute, useRouterState } from "@tanstack/react-router";
-import { WorkspaceProvider } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 
 export const Route = createFileRoute("/chat/$conversationId")({
@@ -12,9 +13,11 @@ function ChatPage() {
     select: (s) => (s.location.state as { initialMessage?: string })?.initialMessage,
   });
 
-  return (
-    <WorkspaceProvider>
-      <WorkspaceLayout conversationId={conversationId} initialMessage={initialMessage} />
-    </WorkspaceProvider>
-  );
+  // Fresh workspace per conversation.
+  const reset = useWorkspaceStore((s) => s.reset);
+  useEffect(() => {
+    reset();
+  }, [conversationId, reset]);
+
+  return <WorkspaceLayout conversationId={conversationId} initialMessage={initialMessage} />;
 }

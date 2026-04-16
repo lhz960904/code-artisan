@@ -4,7 +4,7 @@ import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble, buildToolResultLookup } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 import { useMessages, useSendMessage, fetchMessages } from "@/lib/apis";
 import { API_BASE } from "@/lib/apis/client";
 import type {
@@ -38,8 +38,12 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
         ]
       : undefined;
 
-  const { updateFile, openFile, appendTerminal, setPreviewUrl, loadSnapshots } =
-    useWorkspace();
+  const updateFile = useWorkspaceStore((s) => s.updateFile);
+  const deleteFile = useWorkspaceStore((s) => s.deleteFile);
+  const openFile = useWorkspaceStore((s) => s.openFile);
+  const appendTerminal = useWorkspaceStore((s) => s.appendTerminal);
+  const setPreviewUrl = useWorkspaceStore((s) => s.setPreviewUrl);
+  const loadSnapshots = useWorkspaceStore((s) => s.loadSnapshots);
 
   const { messages, status, sendMessage: chatSendMessage } = useChat(
     conversationId,
@@ -53,7 +57,11 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
       onFileChange: (files) => {
         for (const f of files) {
           updateFile(f.path, f.content);
+          openFile(f.path);
         }
+      },
+      onFileDelete: (paths) => {
+        for (const p of paths) deleteFile(p);
       },
     },
   );

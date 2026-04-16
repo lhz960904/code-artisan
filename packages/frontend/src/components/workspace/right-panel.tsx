@@ -5,12 +5,12 @@ import { FileTree } from "@/components/workspace/file-tree";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { PreviewPanel } from "@/components/workspace/preview-panel";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 type Tab = "preview" | "code" | "terminal";
 
 export function RightPanel() {
-  const { previewUrl } = useWorkspace();
+  const previewUrl = useWorkspaceStore((s) => s.previewUrl);
   const [activeTab, setActiveTab] = useState<Tab>("code");
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { useWorkspace } from "@/contexts/workspace-context";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 function getTerminalColors() {
   const style = getComputedStyle(document.documentElement);
@@ -20,7 +20,7 @@ export function TerminalPanel() {
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const writtenCountRef = useRef(0);
-  const { terminalHistory } = useWorkspace();
+  const terminalHistory = useWorkspaceStore((s) => s.terminalHistory);
 
   useEffect(() => {
     if (!termRef.current) return;
