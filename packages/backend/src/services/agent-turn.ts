@@ -60,10 +60,9 @@ export class AgentTurnService {
     const middlewares: AgentMiddleware[] = [
       microCompactMiddleware(),
       autoCompactMiddleware({
-        onCompacted: async ([summaryUser, ackAssistant]) => {
-          // Persist so subsequent runs don't blow the token budget again.
-          // await store.addMessage(summaryUser, { compacted: true });
-          // await store.addMessage(ackAssistant);
+        onCompacted: async ([summaryUser]) => {
+          // next agent run messages started with compacted summary
+          await this._insertMessage({ ...summaryUser, metadata: { ...summaryUser.metadata, compacted: true } });
         },
       }),
       // check quota exceeded
@@ -138,14 +137,7 @@ export class AgentTurnService {
     }
     const keepPaths = Array.from(manifest.keys());
     if (keepPaths.length > 0) {
-      await db
-        .delete(fileSnapshots)
-        .where(
-          and(
-            eq(fileSnapshots.conversationId, this.conversationId),
-            notInArray(fileSnapshots.path, keepPaths),
-          ),
-        );
+      await db.delete(fileSnapshots).where(and(eq(fileSnapshots.conversationId, this.conversationId), notInArray(fileSnapshots.path, keepPaths)));
     } else {
       await db.delete(fileSnapshots).where(eq(fileSnapshots.conversationId, this.conversationId));
     }
@@ -172,4 +164,3 @@ export class AgentTurnService {
     return buildAgentMessages(stored);
   }
 }
-
