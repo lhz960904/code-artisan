@@ -9,17 +9,17 @@ import type { McpServerListItem } from "@code-artisan/shared";
 const mcpServersApi = {
   list: (search?: string) => {
     const params = search ? `?search=${encodeURIComponent(search)}` : "";
-    return apiFetch<McpServerListItem[]>(`/mcp-servers${params}`);
+    return apiFetch<McpServerListItem[]>(`/setting${params}`);
   },
   install: (serverId: string, envVars: Record<string, string>) =>
-    apiFetch<{ serverId: string }>("/mcp-servers/install", {
+    apiFetch<{ serverId: string }>("/setting/install", {
       method: "POST",
       body: JSON.stringify({ serverId, envVars }),
     }),
   uninstall: (serverId: string) =>
-    apiFetch<{ serverId: string }>(`/mcp-servers/${serverId}`, { method: "DELETE" }),
+    apiFetch<{ serverId: string }>(`/setting/${serverId}`, { method: "DELETE" }),
   update: (serverId: string, envVars: Record<string, string>) =>
-    apiFetch<{ serverId: string }>(`/mcp-servers/${serverId}`, {
+    apiFetch<{ serverId: string }>(`/setting/${serverId}`, {
       method: "PATCH",
       body: JSON.stringify({ envVars }),
     }),

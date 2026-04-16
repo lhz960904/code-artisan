@@ -1,34 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type {
-  StoredMessage,
-  WebAgentEvent,
-  Attachment,
-} from "@code-artisan/shared";
-
-// ============================================================
-// Types
-// ============================================================
+import type { StoredMessage, WebAgentEvent, Attachment } from "@code-artisan/shared";
+import { API_BASE } from "@/lib/apis/client";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "error";
 
 export interface UseChatOptions {
-  /** Initial messages (loaded externally). */
   initialMessages?: StoredMessage[];
-  /** SSE stream URL for this conversation. */
-  streamUrl: string;
-  /** Call the backend API to start a run. */
-  sendMessage: (
-    conversationId: string,
-    content: string,
-    attachments?: Attachment[],
-  ) => Promise<unknown>;
-  /** Refetch persisted messages after the stream settles. */
   fetchMessages: (conversationId: string) => Promise<StoredMessage[]>;
   onFinish?: () => void;
   onError?: (error: Error) => void;
-  /** Called when the agent emits a file-change event. */
   onFileChange?: (files: Array<{ path: string; content: string }>) => void;
-  /** Called when the agent emits a file-delete event. */
   onFileDelete?: (paths: string[]) => void;
 }
 
@@ -40,10 +21,6 @@ export interface UseChatReturn {
   error: Error | null;
 }
 
-// ============================================================
-// Hook
-// ============================================================
-
 export function useChat(
   conversationId: string | null,
   options: UseChatOptions,
@@ -54,12 +31,10 @@ export function useChat(
   const [status, setStatus] = useState<ChatStatus>("ready");
   const [error, setError] = useState<Error | null>(null);
 
-  const esRef = useRef<EventSource | null>(null);
-  const sendInFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  // Sync when initialMessages arrive late (TanStack Query resolves).
   useEffect(() => {
     if (options.initialMessages && options.initialMessages.length > 0) {
       setMessages((prev) => {
@@ -78,106 +53,104 @@ export function useChat(
       .catch(() => {});
   }, [conversationId]);
 
-  const handleSseEvent = useCallback(
+  // Stable id for the assistant message being streamed.
+  const streamingIdRef = useRef(`streaming-${Date.now()}`);
+
+  const handleEvent = useCallback(
     (event: WebAgentEvent) => {
       switch (event.type) {
-        case "message": {
+        case "partial": {
+          // Progressive streaming update — replace the in-flight assistant bubble.
           setStatus("running");
+          const streamId = streamingIdRef.current;
+          const stored = {
+            ...event.message,
+            id: streamId,
+            conversationId: "",
+            createdAt: new Date().toISOString(),
+          } as StoredMessage;
           setMessages((prev) => {
-            // If this message is already there (e.g. from an optimistic
-            // insert with matching id), replace; otherwise drop any
-            // optimistic ones and append.
-            const filtered = prev.filter((m) => !m.id.startsWith("opt-"));
-            if (filtered.some((m) => m.id === event.message.id)) {
-              return filtered.map((m) =>
-                m.id === event.message.id ? event.message : m,
-              );
+            const filtered = prev.filter((m) => !m.id?.startsWith("opt-"));
+            const idx = filtered.findIndex((m) => m.id === streamId);
+            if (idx >= 0) {
+              const next = [...filtered];
+              next[idx] = stored;
+              return next;
             }
-            return [...filtered, event.message];
+            return [...filtered, stored];
           });
           break;
         }
-        case "file_update": {
+        case "message": {
+          // Final complete message — replace the streaming placeholder.
+          setStatus("running");
+          const msg = event.message;
+          const id = (msg as StoredMessage).id ?? streamingIdRef.current;
+          const stored = { ...msg, id, conversationId: "", createdAt: new Date().toISOString() } as StoredMessage;
+          setMessages((prev) => {
+            const filtered = prev.filter(
+              (m) => !m.id?.startsWith("opt-") && m.id !== streamingIdRef.current,
+            );
+            return [...filtered, stored];
+          });
+          // Reset for next message in a multi-turn run.
+          streamingIdRef.current = `streaming-${Date.now()}`;
+          break;
+        }
+        case "file_update":
           optionsRef.current.onFileChange?.(event.files);
           break;
-        }
-        case "file_delete": {
+        case "file_delete":
           optionsRef.current.onFileDelete?.(event.paths);
           break;
-        }
-        case "done": {
-          setStatus("ready");
-          sendInFlightRef.current = false;
-          if (esRef.current) {
-            esRef.current.close();
-            esRef.current = null;
-          }
-          refetchMessages();
-          optionsRef.current.onFinish?.();
-          break;
-        }
-        case "error": {
-          const err = new Error(event.error);
+        case "quota_exceeded":
           setStatus("error");
-          setError(err);
-          sendInFlightRef.current = false;
-          if (esRef.current) {
-            esRef.current.close();
-            esRef.current = null;
-          }
-          optionsRef.current.onError?.(err);
+          setError(new Error("Token quota exceeded"));
           break;
-        }
       }
     },
-    [refetchMessages],
+    [],
   );
 
-  const connectSSE = useCallback(() => {
-    if (!conversationId) return;
-    if (esRef.current) esRef.current.close();
+  const readStream = useCallback(
+    async (body: ReadableStream<Uint8Array>, signal: AbortSignal) => {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-    const es = new EventSource(optionsRef.current.streamUrl);
-    esRef.current = es;
-
-    es.onmessage = (e) => {
-      if (!e.data) return;
       try {
-        const parsed = JSON.parse(e.data) as WebAgentEvent;
-        handleSseEvent(parsed);
-      } catch {
-        // ignore parse errors
-      }
-    };
+        while (!signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
 
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
-      refetchMessages();
-    };
-  }, [conversationId, handleSseEvent, refetchMessages]);
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop()!;
 
-  useEffect(() => {
-    if (!conversationId) return;
-    connectSSE();
-    return () => {
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
+          for (const part of parts) {
+            for (const line of part.split("\n")) {
+              if (!line.startsWith("data:")) continue;
+              const data = line.slice(5).trim();
+              if (!data) continue;
+              try {
+                handleEvent(JSON.parse(data) as WebAgentEvent);
+              } catch {
+                console.warn("[useChat] failed to parse SSE data:", data);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
       }
-      setStatus("ready");
-      setError(null);
-      sendInFlightRef.current = false;
-    };
-  }, [conversationId, connectSSE]);
+    },
+    [handleEvent],
+  );
 
   const sendMessage = useCallback(
     async (content: string, attachments?: Attachment[]) => {
-      if (!conversationId || sendInFlightRef.current) return;
-      sendInFlightRef.current = true;
+      if (!conversationId || status === "submitted" || status === "running") return;
 
-      // Optimistic user message — replaced once the server assigns an id
-      // and sends it back through the SSE stream.
       const optId = `opt-${Date.now()}`;
       const optContent: StoredMessage["content"] = [];
       if (attachments) {
@@ -207,28 +180,55 @@ export function useChat(
       setStatus("submitted");
       setError(null);
 
+      const abort = new AbortController();
+      abortRef.current = abort;
+
       try {
-        await optionsRef.current.sendMessage(conversationId, content, attachments);
-        connectSSE();
+        const res = await fetch(`${API_BASE}/message/${conversationId}`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, attachments }),
+          signal: abort.signal,
+        });
+
+        if (!res.ok) {
+          throw new Error(`Server error: ${res.status}`);
+        }
+        if (!res.body) {
+          throw new Error("No response body");
+        }
+
+        setStatus("running");
+        await readStream(res.body, abort.signal);
+
+        setStatus("ready");
+        refetchMessages();
+        optionsRef.current.onFinish?.();
       } catch (err) {
+        if (abort.signal.aborted) return;
         const error = err instanceof Error ? err : new Error(String(err));
         setStatus("error");
         setError(error);
-        sendInFlightRef.current = false;
         optionsRef.current.onError?.(error);
+      } finally {
+        abortRef.current = null;
       }
     },
-    [conversationId, connectSSE],
+    [conversationId, status, readStream, refetchMessages],
   );
 
   const stop = useCallback(() => {
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
+    abortRef.current?.abort();
+    abortRef.current = null;
     setStatus("ready");
-    sendInFlightRef.current = false;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [conversationId]);
 
   return { messages, status, sendMessage, stop, error };
 }

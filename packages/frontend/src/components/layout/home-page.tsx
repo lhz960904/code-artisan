@@ -1,19 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useConversationCreate, useSendMessage } from "@/lib/apis";
+import { useConversationCreate } from "@/lib/apis";
 
 export function HomePage() {
   const [input, setInput] = useState("");
   const navigate = useNavigate();
   const createConv = useConversationCreate();
-  const sendMsg = useSendMessage();
 
   async function handleSubmit() {
     const content = input.trim();
     if (!content || createConv.isPending) return;
 
     const conv = await createConv.mutateAsync();
-    await sendMsg.mutateAsync({ conversationId: conv.id, content });
     navigate({
       to: "/chat/$conversationId",
       params: { conversationId: conv.id },

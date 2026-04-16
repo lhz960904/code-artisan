@@ -25,16 +25,16 @@ interface WorkspaceState {
   reset: () => void;
 }
 
-const initialState = {
+const freshState = () => ({
   files: new Map<string, string>(),
   openTabs: [] as string[],
   activeTab: null as string | null,
   terminalHistory: [] as TerminalEntry[],
   previewUrl: null as string | null,
-};
+});
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
-  ...initialState,
+  ...freshState(),
 
   openFile: (path) =>
     set((s) => ({
@@ -82,5 +82,5 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ files: fileMap });
   },
 
-  reset: () => set(initialState),
+  reset: () => set(freshState()),
 }));

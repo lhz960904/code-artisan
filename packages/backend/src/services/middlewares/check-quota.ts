@@ -24,7 +24,7 @@ export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): A
         await db
           .update(userQuotas)
           .set({
-            usedTokens: sql`${userQuotas.usedTokens} + ${totalTokenCost * 1000}`,
+            usedTokens: sql`${userQuotas.usedTokens} + ${totalTokenCost}`,
           })
           .where(eq(userQuotas.userId, userId));
       } catch (error) {

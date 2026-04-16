@@ -18,6 +18,6 @@ export interface QuotaResponse {
 export function useQuota() {
   return useQuery({
     queryKey: ["quota"],
-    queryFn: () => apiFetch<QuotaResponse>("/quota"),
+    queryFn: () => apiFetch<QuotaResponse>("/user/quota"),
   });
 }

@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestStreamRouteImport } from './routes/test-stream'
 import { Route as McpServersRouteImport } from './routes/mcp-servers'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChatConversationIdRouteImport } from './routes/chat.$conversationId'
 
+const TestStreamRoute = TestStreamRouteImport.update({
+  id: '/test-stream',
+  path: '/test-stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const McpServersRoute = McpServersRouteImport.update({
   id: '/mcp-servers',
   path: '/mcp-servers',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mcp-servers': typeof McpServersRoute
+  '/test-stream': typeof TestStreamRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mcp-servers': typeof McpServersRoute
+  '/test-stream': typeof TestStreamRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRoutesById {
@@ -52,25 +60,45 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mcp-servers': typeof McpServersRoute
+  '/test-stream': typeof TestStreamRoute
   '/chat/$conversationId': typeof ChatConversationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/mcp-servers' | '/chat/$conversationId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/mcp-servers'
+    | '/test-stream'
+    | '/chat/$conversationId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/mcp-servers' | '/chat/$conversationId'
-  id: '__root__' | '/' | '/login' | '/mcp-servers' | '/chat/$conversationId'
+  to: '/' | '/login' | '/mcp-servers' | '/test-stream' | '/chat/$conversationId'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/mcp-servers'
+    | '/test-stream'
+    | '/chat/$conversationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   McpServersRoute: typeof McpServersRoute
+  TestStreamRoute: typeof TestStreamRoute
   ChatConversationIdRoute: typeof ChatConversationIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/test-stream': {
+      id: '/test-stream'
+      path: '/test-stream'
+      fullPath: '/test-stream'
+      preLoaderRoute: typeof TestStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mcp-servers': {
       id: '/mcp-servers'
       path: '/mcp-servers'
@@ -106,6 +134,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   McpServersRoute: McpServersRoute,
+  TestStreamRoute: TestStreamRoute,
   ChatConversationIdRoute: ChatConversationIdRoute,
 }
 export const routeTree = rootRouteImport

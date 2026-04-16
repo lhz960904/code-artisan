@@ -5,8 +5,7 @@ import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble, buildToolResultLookup } from "@/components/chat/message-bubble";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { useMessages, useSendMessage, fetchMessages } from "@/lib/apis";
-import { API_BASE } from "@/lib/apis/client";
+import { useMessages, fetchMessages } from "@/lib/apis";
 import type {
   StoredMessage,
   StoredAssistantMessage,
@@ -21,22 +20,11 @@ interface ChatPanelProps {
 
 export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
   const { data: fetchedMessages } = useMessages(conversationId);
-  const sendMsgApi = useSendMessage();
   const fileUpload = useFileUpload();
 
   const initialMessages: StoredMessage[] | undefined = fetchedMessages?.length
     ? fetchedMessages
-    : initialMessage
-      ? [
-          {
-            id: "opt-init",
-            conversationId,
-            role: "user",
-            content: [{ type: "text", text: initialMessage }],
-            createdAt: new Date().toISOString(),
-          } as StoredMessage,
-        ]
-      : undefined;
+    : undefined;
 
   const updateFile = useWorkspaceStore((s) => s.updateFile);
   const deleteFile = useWorkspaceStore((s) => s.deleteFile);
@@ -49,10 +37,6 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
     conversationId,
     {
       initialMessages,
-      streamUrl: `${API_BASE}/conversations/${conversationId}/stream`,
-      sendMessage: async (id, content, attachments) => {
-        await sendMsgApi.mutateAsync({ conversationId: id, content, attachments });
-      },
       fetchMessages,
       onFileChange: (files) => {
         for (const f of files) {
@@ -68,10 +52,25 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const processedRef = useRef(new Set<string>());
+  const initialSentForRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadSnapshots(conversationId);
+    processedRef.current = new Set();
   }, [conversationId, loadSnapshots]);
+
+  // Auto-send initialMessage from home page navigation (once per conversation).
+  useEffect(() => {
+    if (
+      initialMessage &&
+      conversationId &&
+      initialSentForRef.current !== conversationId &&
+      status === "ready"
+    ) {
+      initialSentForRef.current = conversationId;
+      chatSendMessage(initialMessage);
+    }
+  }, [initialMessage, conversationId, status, chatSendMessage]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -79,10 +78,8 @@ export function ChatPanel({ conversationId, initialMessage }: ChatPanelProps) {
     }
   }, [messages]);
 
-  // Build tool_use_id → tool_result lookup once per message change.
   const toolResultLookup = useMemo(() => buildToolResultLookup(messages), [messages]);
 
-  // Process side effects (open file in workspace, append terminal, preview URL).
   useEffect(() => {
     for (const msg of messages) {
       if (msg.id.startsWith("opt-")) continue;
@@ -162,7 +159,6 @@ function processAssistantSideEffects(
     const tu = c as ToolUseContent;
     const input = tu.input as Record<string, unknown>;
 
-    // write_file: reflect the write even before the result arrives.
     if (tu.name === "write_file" && typeof input.path === "string" && typeof input.content === "string") {
       ctx.updateFile(input.path, input.content);
       ctx.openFile(input.path);

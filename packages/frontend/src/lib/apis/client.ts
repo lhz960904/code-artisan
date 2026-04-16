@@ -14,5 +14,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new Error("Unauthorized");
   }
   if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  const json = await res.json();
+  // Backend wraps all success responses as { statusCode, data, message }.
+  return json.data !== undefined ? json.data : json;
 }

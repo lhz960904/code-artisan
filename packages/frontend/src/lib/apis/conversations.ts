@@ -25,31 +25,34 @@ export interface FileSnapshot {
 }
 
 // ============================================================
-// Fetch
+// Fetch — paths match backend route mounts:
+//   /api/conversation  → conversationRouter
+//   /api/message       → messageRouter
+//   /api/snapshot      → snapshotRouter
 // ============================================================
 
 const conversations = {
-  list: () => apiFetch<ConversationResponse[]>("/conversations"),
-  get: (id: string) => apiFetch<ConversationResponse>(`/conversations/${id}`),
+  list: () => apiFetch<ConversationResponse[]>("/conversation"),
+  get: (id: string) => apiFetch<ConversationResponse>(`/conversation/${id}`),
   create: (title?: string) =>
-    apiFetch<ConversationResponse>("/conversations", {
+    apiFetch<ConversationResponse>("/conversation", {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  update: (id: string, updates: { title?: string }) =>
-    apiFetch<ConversationResponse>(`/conversations/${id}`, {
+  update: (id: string, updates: { title?: string; mode?: string }) =>
+    apiFetch<ConversationResponse>(`/conversation/${id}`, {
       method: "PATCH",
       body: JSON.stringify(updates),
     }),
   delete: (id: string) =>
-    apiFetch<void>(`/conversations/${id}`, { method: "DELETE" }),
-  sendMessage: (id: string, content: string, attachments?: Attachment[]) =>
-    apiFetch<{ status: string }>(`/conversations/${id}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ content, attachments }),
-    }),
-  files: (id: string) => apiFetch<FileSnapshot[]>(`/conversations/${id}/files`),
+    apiFetch<void>(`/conversation/${id}`, { method: "DELETE" }),
 };
+
+export const fetchMessages = (conversationId: string) =>
+  apiFetch<StoredMessage[]>(`/message/${conversationId}`);
+
+export const fetchFileSnapshots = (conversationId: string) =>
+  apiFetch<FileSnapshot[]>(`/snapshot/${conversationId}`);
 
 // ============================================================
 // Hooks
@@ -70,9 +73,6 @@ export function useConversation(id: string) {
     enabled: !!id,
   });
 }
-
-export const fetchMessages = (conversationId: string) =>
-  apiFetch<StoredMessage[]>(`/conversations/${conversationId}/messages`);
 
 export function useMessages(conversationId: string) {
   return useQuery({
@@ -95,7 +95,7 @@ export function useConversationCreate() {
 export function useConversationUpdate() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string; title?: string }) =>
+    mutationFn: ({ id, ...updates }: { id: string; title?: string; mode?: string }) =>
       conversations.update(id, updates),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -114,27 +114,10 @@ export function useConversationDelete() {
   });
 }
 
-export function useSendMessage() {
-  return useMutation({
-    mutationFn: ({
-      conversationId,
-      content,
-      attachments,
-    }: {
-      conversationId: string;
-      content: string;
-      attachments?: Attachment[];
-    }) => conversations.sendMessage(conversationId, content, attachments),
-  });
-}
-
 export function useFileSnapshots(conversationId: string) {
   return useQuery({
     queryKey: ["conversations", conversationId, "files"],
-    queryFn: () => conversations.files(conversationId),
+    queryFn: () => fetchFileSnapshots(conversationId),
     enabled: !!conversationId,
   });
 }
-
-/** Direct fetch for non-hook contexts (e.g. WorkspaceContext) */
-export const fetchFileSnapshots = conversations.files;

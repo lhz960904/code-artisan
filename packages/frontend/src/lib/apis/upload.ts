@@ -5,8 +5,9 @@ export async function uploadFile(file: File): Promise<Attachment> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/upload`, {
+  const res = await fetch(`${API_BASE}/attachment`, {
     method: "POST",
+    credentials: "include",
     body: formData,
   });
 
