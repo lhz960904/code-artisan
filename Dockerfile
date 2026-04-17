@@ -1,16 +1,20 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 
-# Copy workspace config
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# Copy workspace config (.npmrc enables hoisted node-linker → small,
+# fast-to-commit Docker layer; pnpm's symlink farm tanks Railway build time)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/agent/package.json packages/agent/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
+# cli is a workspace member (published separately) but not deployed; keep
+# its package.json for lockfile validity, skip its deps via --filter below
+COPY packages/cli/package.json packages/cli/
 
-# Install pnpm and dependencies
+# Install pnpm and dependencies (skip cli — saves ~120 packages of ink/react/etc)
 RUN bun install -g pnpm \
-    && pnpm install --frozen-lockfile
+    && pnpm install --frozen-lockfile --filter '!@code-artisan/cli'
 
 # Install typescript globally for tsc
 RUN bun install -g typescript
