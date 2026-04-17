@@ -16,21 +16,17 @@ COPY packages/cli/package.json packages/cli/
 RUN bun install -g pnpm \
     && pnpm install --frozen-lockfile --filter '!@code-artisan/cli'
 
-# Install typescript globally for tsc
-RUN bun install -g typescript
-
 # Copy source files (agent is workspace dep of shared/backend, exports raw .ts)
 COPY packages/shared/ packages/shared/
 COPY packages/agent/ packages/agent/
 COPY packages/backend/ packages/backend/
 COPY packages/frontend/ packages/frontend/
 
-# Build agent declarations first — shared imports types from agent's
-# dist/index.d.ts (not source), so agent must be built before shared.
-RUN cd packages/agent && tsc
-
-# Build shared (tsc)
-RUN cd packages/shared && tsc
+# Use workspace-local tsc (via pnpm run) — global tsc can't resolve
+# @types/* in /app/node_modules and breaks DOM/Bun globals.
+# agent must be built before shared (shared imports its dist/.d.ts).
+RUN cd packages/agent && pnpm run build
+RUN cd packages/shared && pnpm run build
 
 # Build frontend (vite)
 RUN cd packages/frontend && pnpm run build
