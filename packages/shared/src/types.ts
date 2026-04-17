@@ -1,3 +1,5 @@
+export { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "./constants";
+
 export type {
   Message,
   SystemMessage,

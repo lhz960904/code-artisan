@@ -14,6 +14,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "@code-artisan/shared";
+
+const IGNORED_SET = new Set<string>(SANDBOX_IGNORED_DIRS);
 
 interface TreeNode {
   name: string;
@@ -24,21 +27,30 @@ interface TreeNode {
 
 function buildTree(paths: string[]): TreeNode[] {
   const root: TreeNode[] = [];
+  const prefix = SANDBOX_WORKSPACE_ROOT + "/";
 
-  for (const filePath of paths.sort()) {
-    const parts = filePath.startsWith("/") ? filePath.slice(1).split("/") : filePath.split("/");
+  for (const filePath of paths.slice().sort()) {
+    // Only render files under the workspace. Absolute paths to dotfiles
+    // in /home/user (from legacy data) or elsewhere are dropped.
+    if (!filePath.startsWith(prefix)) continue;
+    const relPath = filePath.slice(prefix.length);
+    if (!relPath) continue;
+    const parts = relPath.split("/");
+    // Defensive: skip anything that ever enters an ignored directory.
+    if (parts.some((p) => IGNORED_SET.has(p))) continue;
+
     let current = root;
-
     for (let i = 0; i < parts.length; i++) {
       const name = parts[i];
       const isLast = i === parts.length - 1;
-      const partialPath = "/" + parts.slice(0, i + 1).join("/");
+      // `path` keeps the full absolute path so openFile(...) still works.
+      const partialAbs = `${SANDBOX_WORKSPACE_ROOT}/${parts.slice(0, i + 1).join("/")}`;
 
       let existing = current.find((n) => n.name === name);
       if (!existing) {
         existing = {
           name,
-          path: isLast ? filePath : partialPath,
+          path: isLast ? filePath : partialAbs,
           isDir: !isLast,
           children: [],
         };

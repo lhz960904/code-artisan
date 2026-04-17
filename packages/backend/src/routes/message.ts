@@ -61,7 +61,7 @@ messageRouter.post(
     if (!conversation) {
       return notFound(c, "Conversation not found");
     }
-    const turnService = new AgentTurnService(conversation.id, user.id);
+    const turnService = new AgentTurnService(conversation);
     const userMessage = await buildUserMessage(content, attachments ?? []);
     return streamSSE(c, async (stream) => {
       const interval = setInterval(async () => {

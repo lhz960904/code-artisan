@@ -1,19 +1,16 @@
 import type { AgentMiddleware, Sandbox } from "@code-artisan/agent";
+import { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "@code-artisan/shared";
 
 const DEFAULT_MAX_FILE_SIZE = 500 * 1024;
-const DEFAULT_WORKSPACE_ROOT = "/home/user";
 const WRITE_TOOLS = new Set(["write_file", "str_replace"]);
+// mtime baseline file used by incremental scans (-newer marker).
+const SCAN_MARKER_PATH = "/tmp/.agent-scan-marker";
 
-// Must match the find command below. Paths starting with these prefixes
-// (relative to workspaceRoot) are ignored from scans.
+// Generated from SANDBOX_IGNORED_DIRS so the exclude list stays in sync
+// with the frontend's defensive filter. Matches any depth: `./x/dir/*`,
+// `./*/x/dir/*`, etc. — `find -path` semantics.
 const IGNORE_FIND_ARGS = [
-  "-not -path './node_modules/*'",
-  "-not -path './.git/*'",
-  "-not -path './dist/*'",
-  "-not -path './build/*'",
-  "-not -path './.next/*'",
-  "-not -path './.cache/*'",
-  "-not -path './.turbo/*'",
+  ...SANDBOX_IGNORED_DIRS.map((dir) => `-not -path './${dir}/*' -not -path './*/${dir}/*'`),
   "-not -name '*.log'",
 ].join(" ");
 
@@ -21,6 +18,12 @@ export interface FileTrackerOptions {
   sandbox: Sandbox;
   workspaceRoot?: string;
   maxFileSize?: number;
+  /**
+   * Pre-seed the baseline manifest, skipping the sandbox-side scan. Pass the
+   * known {absPath -> content} map (e.g. from just-restored snapshots) to
+   * avoid a redundant find + readFile pass on agent run start.
+   */
+  initialManifest?: Map<string, string>;
   /** Real-time: a tracked file was created or modified. */
   onFileChanged: (files: Array<{ path: string; content: string }>) => void;
   /** Real-time: a tracked file was removed. */
@@ -40,22 +43,50 @@ interface ManifestEntry {
 /**
  * Watches file changes caused by agent tools and mirrors them to the caller.
  *
- * - `write_file` / `str_replace`: known path → read once and diff.
- * - `bash`: unknown paths → rescan workspace via `find + sha256sum`, diff
- *   against manifest, emit creates/updates/deletes.
- * - `beforeAgentRun`: builds baseline manifest from current sandbox state.
+ * Strategy: remote sandboxes have no efficient inotify API, so we do
+ * snapshot-diff per tool call with two optimisations:
+ *   1. `-newer <marker>` incremental scan — unchanged files pay zero I/O,
+ *      only files mutated since the last reconcile are hashed.
+ *   2. `listAllPaths` (no hash) — cheap enumeration used solely to detect
+ *      deletions by set-difference against the manifest.
+ *
+ * - `write_file` / `str_replace`: known path → read once, diff locally.
+ * - `bash`: unknown paths → incremental rescan, diff against manifest.
+ * - `beforeAgentRun`: builds baseline manifest + plants scan marker.
  * - `afterAgentRun`: hands off the final manifest for DB persistence.
  */
 export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware {
-  const workspaceRoot = opts.workspaceRoot ?? DEFAULT_WORKSPACE_ROOT;
+  const workspaceRoot = opts.workspaceRoot ?? SANDBOX_WORKSPACE_ROOT;
   const maxFileSize = opts.maxFileSize ?? DEFAULT_MAX_FILE_SIZE;
   const manifest = new Map<string, ManifestEntry>();
 
-  async function scanHashes(sandbox: Sandbox): Promise<Map<string, string>> {
-    const cmd = `find . -type f ${IGNORE_FIND_ARGS} -size -${Math.floor(maxFileSize / 1024) + 1}k -exec sha256sum {} \\;`;
+  const sizeArg = `-size -${Math.floor(maxFileSize / 1024) + 1}k`;
+
+  /** List all current file paths (no hashing) — cheap, used to detect deletions. */
+  async function listAllPaths(sandbox: Sandbox): Promise<Set<string>> {
+    const cmd = `find . -type f ${IGNORE_FIND_ARGS} ${sizeArg}`;
     const res = await sandbox.exec(cmd, { cwd: workspaceRoot });
     if (res.exitCode !== 0) {
-      console.error("[FileTracker] scan failed:", res.stderr);
+      console.error("[FileTracker] listAllPaths failed:", res.stderr);
+      return new Set();
+    }
+    const out = new Set<string>();
+    for (const line of res.stdout.split("\n")) {
+      if (!line) continue;
+      out.add(line.startsWith("./") ? line.slice(2) : line);
+    }
+    return out;
+  }
+
+  /**
+   * Hash only files whose mtime is newer than the marker. This is the hot
+   * path of our change detection: unchanged files pay zero I/O.
+   */
+  async function scanChangedSince(sandbox: Sandbox, markerPath: string): Promise<Map<string, string>> {
+    const cmd = `find . -type f ${IGNORE_FIND_ARGS} ${sizeArg} -newer ${markerPath} -exec sha256sum {} \\;`;
+    const res = await sandbox.exec(cmd, { cwd: workspaceRoot });
+    if (res.exitCode !== 0) {
+      console.error("[FileTracker] scanChangedSince failed:", res.stderr);
       return new Map();
     }
     const out = new Map<string, string>();
@@ -63,11 +94,15 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
       const m = line.match(/^([a-f0-9]+)\s+(.+)$/);
       if (!m) continue;
       const [, hash, relPath] = m;
-      // find prints "./path"; strip the leading "./".
       const clean = relPath.startsWith("./") ? relPath.slice(2) : relPath;
       out.set(clean, hash);
     }
     return out;
+  }
+
+  /** Advance the scan marker to "now" so future -newer lookups are incremental. */
+  async function touchMarker(sandbox: Sandbox): Promise<void> {
+    await sandbox.exec(`touch ${SCAN_MARKER_PATH}`);
   }
 
   function toAbs(relPath: string): string {
@@ -80,6 +115,13 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
   }
 
   async function trackSingleFile(absPath: string): Promise<void> {
+    // Path safety: a misbehaving LLM could write outside the workspace
+    // (e.g. to /home/user/.bashrc). Don't track those — keep the manifest
+    // and DB snapshots scoped to the project.
+    if (absPath !== workspaceRoot && !absPath.startsWith(workspaceRoot + "/")) {
+      console.warn(`[FileTracker] ignoring out-of-workspace write: ${absPath}`);
+      return;
+    }
     // No size cap here on purpose: LLMs don't typically touch large vendored
     // files, and capping explicit write-tool output would silently break
     // tracking mid-run (e.g. a single source file growing past the limit).
@@ -98,49 +140,71 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
   }
 
   async function reconcileBash(): Promise<void> {
-    const next = await scanHashes(opts.sandbox);
-    const changed: string[] = [];
-    const deleted: string[] = [];
+    // Incremental: hash only files modified since last marker + enumerate
+    // current paths (no hash) to spot deletions. Runs in parallel in sandbox.
+    const [currentPaths, changedHashes] = await Promise.all([
+      listAllPaths(opts.sandbox),
+      scanChangedSince(opts.sandbox, SCAN_MARKER_PATH),
+    ]);
 
-    for (const [relPath, hash] of next) {
-      if (manifest.get(relPath)?.hash !== hash) changed.push(relPath);
-    }
-    for (const relPath of manifest.keys()) {
-      if (!next.has(relPath)) deleted.push(relPath);
-    }
-
-    // Read content for changed paths.
     const updates: Array<{ path: string; content: string }> = [];
-    for (const rel of changed) {
+    for (const [relPath, hash] of changedHashes) {
+      // sha256 matched: touch/noop; skip readFile.
+      if (manifest.get(relPath)?.hash === hash) continue;
       try {
-        const content = await opts.sandbox.readFile(toAbs(rel));
+        const content = await opts.sandbox.readFile(toAbs(relPath));
         if (content.length > maxFileSize) continue;
-        manifest.set(rel, { hash: next.get(rel)!, content });
-        updates.push({ path: toAbs(rel), content });
+        manifest.set(relPath, { hash, content });
+        updates.push({ path: toAbs(relPath), content });
       } catch (err) {
-        console.error("[FileTracker] readFile failed:", rel, err);
+        console.error("[FileTracker] readFile failed:", relPath, err);
       }
     }
-    for (const rel of deleted) manifest.delete(rel);
+
+    const deleted: string[] = [];
+    for (const relPath of manifest.keys()) {
+      if (!currentPaths.has(relPath)) {
+        manifest.delete(relPath);
+        deleted.push(relPath);
+      }
+    }
 
     if (updates.length > 0) opts.onFileChanged(updates);
     if (deleted.length > 0) opts.onFileDeleted(deleted.map(toAbs));
+
+    // Advance marker so next reconcile is truly incremental.
+    await touchMarker(opts.sandbox);
   }
 
   return {
     beforeAgentRun: async () => {
-      // Build baseline (no emissions). Captures the state restored from
-      // previous snapshots + anything present in the sandbox.
-      const hashes = await scanHashes(opts.sandbox);
-      for (const [relPath, hash] of hashes) {
+      // Fast path: caller pre-seeded the manifest (e.g. from just-restored
+      // snapshots). The sandbox state is authoritative — but we just wrote
+      // it, so a remote scan would only re-read what we already have.
+      if (opts.initialManifest && opts.initialManifest.size > 0) {
+        for (const [absPath, content] of opts.initialManifest) {
+          if (content.length > maxFileSize) continue;
+          const relPath = toRel(absPath);
+          const hash = await hashString(content);
+          manifest.set(relPath, { hash, content });
+        }
+        await touchMarker(opts.sandbox);
+        return;
+      }
+      // Cold path: enumerate sandbox files and seed the manifest. We hash
+      // locally after readFile, so no sandbox-side sha256sum is needed.
+      const paths = await listAllPaths(opts.sandbox);
+      for (const relPath of paths) {
         try {
           const content = await opts.sandbox.readFile(toAbs(relPath));
           if (content.length > maxFileSize) continue;
+          const hash = await hashString(content);
           manifest.set(relPath, { hash, content });
         } catch (err) {
           console.error("[FileTracker] baseline readFile failed:", relPath, err);
         }
       }
+      await touchMarker(opts.sandbox);
     },
 
     afterToolUse: async ({ toolUse }) => {
