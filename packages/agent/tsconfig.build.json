@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "allowImportingTsExtensions": false
+  },
+  "include": ["index.ts", "core", "types", "sandbox", "tools", "middlewares", "community"],
+  "exclude": ["node_modules", "playground", "dist", "**/*.test.ts", "**/__tests__"]
+}

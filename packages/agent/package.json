@@ -6,11 +6,12 @@
   "module": "index.ts",
   "exports": {
     ".": {
-      "import": "./index.ts",
-      "types": "./index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./index.ts"
     }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch"
