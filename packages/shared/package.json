@@ -11,5 +11,10 @@
   },
   "dependencies": {
     "@code-artisan/agent": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   }
 }
