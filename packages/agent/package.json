@@ -11,7 +11,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc",
     "check": "tsc --noEmit",
     "test": "bun test",
     "test:watch": "bun test --watch"

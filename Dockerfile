@@ -23,7 +23,7 @@ COPY packages/frontend/ packages/frontend/
 
 # Build agent declarations first — shared imports types from agent's
 # dist/index.d.ts (not source), so agent must be built before shared.
-RUN cd packages/agent && tsc -p tsconfig.build.json
+RUN cd packages/agent && tsc
 
 # Build shared (tsc)
 RUN cd packages/shared && tsc
