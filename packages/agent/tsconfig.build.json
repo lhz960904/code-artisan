@@ -8,6 +8,5 @@
     "rootDir": ".",
     "allowImportingTsExtensions": false
   },
-  "include": ["index.ts", "core", "types", "sandbox", "tools", "middlewares", "community"],
-  "exclude": ["node_modules", "playground", "dist", "**/*.test.ts", "**/__tests__"]
+  "exclude": ["node_modules", "playground", "dist", "**/*.test.ts", "**/__test__/**"]
 }
