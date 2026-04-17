@@ -1,4 +1,4 @@
-import { E2BSandbox } from "./e2b-sandbox.js";
+import { DEFAULT_SANDBOX_LIFETIME_MS, E2BSandbox } from "./e2b-sandbox.js";
 
 /**
  * Per-conversation E2B sandbox pool.
@@ -14,10 +14,14 @@ export class E2BSandboxPool {
   async acquire(existingId?: string): Promise<E2BSandbox> {
     if (existingId) {
       const cached = this.sandboxes.get(existingId);
-      if (cached) return cached;
+      if (cached) {
+        await cached.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS).catch(() => {});
+        return cached;
+      }
 
       try {
         const reconnected = await E2BSandbox.connect(existingId);
+        await reconnected.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS).catch(() => {});
         this.sandboxes.set(reconnected.sandboxId, reconnected);
         return reconnected;
       } catch {

@@ -16,7 +16,8 @@ import type {
   GrepResult,
 } from "@code-artisan/agent";
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
+const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
 const LIST_DIR_LIMIT = 500;
 const GREP_MAX_LINES = 500;
 const GLOB_MAX_FILES = 500;
@@ -35,7 +36,7 @@ export class E2BSandbox implements Sandbox {
   async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
     const result = await this.sdk.commands.run(command, {
       cwd: options?.cwd,
-      timeoutMs: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      timeoutMs: options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS,
     });
     return {
       stdout: result.stdout,
@@ -48,11 +49,7 @@ export class E2BSandbox implements Sandbox {
     return this.sdk.files.read(path);
   }
 
-  async writeFile(
-    path: string,
-    content: string,
-    options?: WriteFileOptions,
-  ): Promise<void> {
+  async writeFile(path: string, content: string, options?: WriteFileOptions): Promise<void> {
     if (options?.append) {
       const existing = await this.sdk.files.read(path).catch(() => "");
       await this.sdk.files.write(path, existing + content);
@@ -99,11 +96,7 @@ export class E2BSandbox implements Sandbox {
     }
   }
 
-  async grep(
-    pattern: string,
-    path: string,
-    include?: string,
-  ): Promise<GrepResult> {
+  async grep(pattern: string, path: string, include?: string): Promise<GrepResult> {
     try {
       const escapedPattern = pattern.replace(/'/g, "'\\''");
       const includeArg = include ? `--include='${include}'` : "";
@@ -119,9 +112,7 @@ export class E2BSandbox implements Sandbox {
         const filePath = line.slice(0, firstColon);
         const lineNum = Number.parseInt(line.slice(firstColon + 1, secondColon), 10);
         const text = line.slice(secondColon + 1);
-        const relativePath = filePath.startsWith(prefix)
-          ? filePath.slice(prefix.length)
-          : filePath;
+        const relativePath = filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath;
         return [{ path: relativePath, line: lineNum, text }];
       });
       return { matches };
@@ -130,9 +121,14 @@ export class E2BSandbox implements Sandbox {
     }
   }
 
+  /** Extend the sandbox's idle-kill timer. Resets from now, not additive. */
+  async setTimeout(timeoutMs: number): Promise<void> {
+    await this.sdk.setTimeout(timeoutMs);
+  }
+
   /** Create a fresh E2B sandbox. */
-  static async create(): Promise<E2BSandbox> {
-    const sdk = await E2BSDK.create();
+  static async create(timeoutMs: number = DEFAULT_SANDBOX_LIFETIME_MS): Promise<E2BSandbox> {
+    const sdk = await E2BSDK.create({ timeoutMs });
     return new E2BSandbox(sdk);
   }
 
@@ -142,3 +138,5 @@ export class E2BSandbox implements Sandbox {
     return new E2BSandbox(sdk);
   }
 }
+
+export { DEFAULT_SANDBOX_LIFETIME_MS };
