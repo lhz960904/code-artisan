@@ -4,6 +4,7 @@ WORKDIR /app
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/agent/package.json packages/agent/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
 
@@ -14,8 +15,9 @@ RUN bun install -g pnpm \
 # Install typescript globally for tsc
 RUN bun install -g typescript
 
-# Copy source files
+# Copy source files (agent is workspace dep of shared/backend, exports raw .ts)
 COPY packages/shared/ packages/shared/
+COPY packages/agent/ packages/agent/
 COPY packages/backend/ packages/backend/
 COPY packages/frontend/ packages/frontend/
 
