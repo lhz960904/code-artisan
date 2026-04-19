@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build agent (emit .d.ts for dependents)
+        run: pnpm --filter @code-artisan/agent build
+
       - name: Type check (shared)
         run: pnpm --filter @code-artisan/shared build
 
