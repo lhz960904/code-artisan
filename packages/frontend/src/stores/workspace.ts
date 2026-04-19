@@ -7,12 +7,15 @@ interface TerminalEntry {
   error?: string;
 }
 
+export type WorkspaceView = "preview" | "code" | "database";
+
 interface WorkspaceState {
   files: Map<string, string>;
   openTabs: string[];
   activeTab: string | null;
   terminalHistory: TerminalEntry[];
   previewUrl: string | null;
+  view: WorkspaceView;
 
   openFile: (path: string) => void;
   closeTab: (path: string) => void;
@@ -21,6 +24,7 @@ interface WorkspaceState {
   deleteFile: (path: string) => void;
   appendTerminal: (entry: TerminalEntry) => void;
   setPreviewUrl: (url: string | null) => void;
+  setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
   reset: () => void;
 }
@@ -31,6 +35,7 @@ const freshState = () => ({
   activeTab: null as string | null,
   terminalHistory: [] as TerminalEntry[],
   previewUrl: null as string | null,
+  view: "code" as WorkspaceView,
 });
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -74,6 +79,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     set((s) => ({ terminalHistory: [...s.terminalHistory, entry] })),
 
   setPreviewUrl: (url) => set({ previewUrl: url }),
+
+  setView: (view) => set({ view }),
 
   setSnapshots: (snapshots) => {
     const fileMap = new Map<string, string>();

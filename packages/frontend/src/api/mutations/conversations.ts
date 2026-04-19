@@ -8,7 +8,7 @@ const conversationsApi = {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  update: (id: string, updates: { title?: string; mode?: string }) =>
+  update: (id: string, updates: { title?: string }) =>
     apiFetch<ConversationResponse>(`/conversation/${id}`, {
       method: "PATCH",
       body: JSON.stringify(updates),
@@ -31,7 +31,7 @@ export function useConversationUpdate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string; title?: string; mode?: string }) =>
+    mutationFn: ({ id, ...updates }: { id: string; title?: string }) =>
       conversationsApi.update(id, updates),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: conversationKeys.all() });

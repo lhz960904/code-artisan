@@ -27,6 +27,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^9.0.0",
+    "react-resizable-panels": "^4",
     "react-syntax-highlighter": "^16.1.1",
     "tailwind-merge": "^3.5.0",
     "zustand": "^5.0.2"

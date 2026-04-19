@@ -1,37 +1,52 @@
-import { Header } from "@/components/layout/header";
+import { Suspense } from "react";
+import { Header, HeaderSkeleton } from "@/components/workspace/header";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { RightPanel } from "@/components/workspace/right-panel";
-import type { ConversationResponse, QuotaResponse } from "@/api";
-import type { StoredMessage } from "@code-artisan/shared";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 interface WorkspaceLayoutProps {
   conversationId: string;
-  conversation: ConversationResponse;
-  quota: QuotaResponse;
-  initialMessages: StoredMessage[];
 }
 
-export function WorkspaceLayout({
-  conversationId,
-  conversation,
-  quota,
-  initialMessages,
-}: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ conversationId }: WorkspaceLayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <Header conversationId={conversationId} conversation={conversation} quota={quota} />
+      <Suspense fallback={<HeaderSkeleton />}>
+        <Header conversationId={conversationId} />
+      </Suspense>
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex w-[400px] shrink-0 flex-col border-r border-border">
-          <div className="min-h-0 flex-1">
-            <ChatPanel
-              conversationId={conversationId}
-              initialMessages={initialMessages}
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <RightPanel />
-        </div>
+        <ResizablePanelGroup
+          orientation="horizontal"
+          id="workspace-main"
+          panelIds={["chat", "workspace"]}
+        >
+          <ResizablePanel
+            id="chat"
+            defaultSize="28%"
+            minSize="20%"
+            maxSize="50%"
+            onResize={({ inPixels }) => {
+              document.documentElement.style.setProperty(
+                "--chat-panel-width",
+                `${inPixels}px`,
+              );
+            }}
+          >
+            <ChatPanel conversationId={conversationId} />
+          </ResizablePanel>
+          <ResizableHandle className="mt-11 hover:after:bg-transparent data-[separator=active]:after:bg-transparent" />
+          <ResizablePanel id="workspace" defaultSize="72%" minSize="40%">
+            <div className="h-full py-2 pr-2">
+              <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+                <RightPanel conversationId={conversationId} />
+              </div>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
   );

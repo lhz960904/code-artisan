@@ -3,15 +3,19 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useTheme } from "@/contexts/theme-context";
 
-function getTerminalColors() {
+function getTerminalTheme() {
   const style = getComputedStyle(document.documentElement);
   const bg = style.getPropertyValue("--background").trim();
   const fg = style.getPropertyValue("--foreground").trim();
+  const selection = style.getPropertyValue("--accent").trim();
 
   return {
     background: bg ? `hsl(${bg})` : "#1e1e1e",
     foreground: fg ? `hsl(${fg})` : "#d4d4d4",
+    cursor: fg ? `hsl(${fg})` : "#d4d4d4",
+    selectionBackground: selection ? `hsl(${selection})` : "#264f78",
   };
 }
 
@@ -21,19 +25,13 @@ export function TerminalPanel() {
   const fitRef = useRef<FitAddon | null>(null);
   const writtenCountRef = useRef(0);
   const terminalHistory = useWorkspaceStore((s) => s.terminalHistory);
+  const { resolved } = useTheme();
 
   useEffect(() => {
     if (!termRef.current) return;
 
-    const colors = getTerminalColors();
-
     const term = new Terminal({
-      theme: {
-        background: colors.background,
-        foreground: colors.foreground,
-        cursor: colors.foreground,
-        selectionBackground: "#264f78",
-      },
+      theme: getTerminalTheme(),
       fontSize: 12,
       fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
       cursorBlink: false,
@@ -60,6 +58,16 @@ export function TerminalPanel() {
       writtenCountRef.current = 0;
     };
   }, []);
+
+  useEffect(() => {
+    const term = xtermRef.current;
+    if (!term) return;
+    const id = requestAnimationFrame(() => {
+      term.options.theme = getTerminalTheme();
+      term.refresh(0, term.rows - 1);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [resolved]);
 
   useEffect(() => {
     const term = xtermRef.current;

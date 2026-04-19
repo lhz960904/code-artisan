@@ -163,15 +163,17 @@ export function FileTree() {
   const tree = buildTree(paths);
 
   return (
-    <div className="p-2 text-xs">
-      <div className="mb-2 font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="text-xs">
+      <div className="sticky top-0 flex h-9 shrink-0 items-center border-b border-border bg-card px-3 font-semibold uppercase tracking-wide text-muted-foreground">
         Files
       </div>
-      {paths.length === 0 ? (
-        <div className="px-1 italic text-muted-foreground opacity-60">No files yet</div>
-      ) : (
-        tree.map((node) => <TreeItem key={node.path} node={node} depth={0} />)
-      )}
+      <div className="p-2">
+        {paths.length === 0 ? (
+          <div className="px-1 italic text-muted-foreground opacity-60">No files yet</div>
+        ) : (
+          tree.map((node) => <TreeItem key={node.path} node={node} depth={0} />)
+        )}
+      </div>
     </div>
   );
 }

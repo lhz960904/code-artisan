@@ -3,6 +3,7 @@ import Editor from "@monaco-editor/react";
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useTheme } from "@/contexts/theme-context";
 
 function getLanguage(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -44,6 +45,7 @@ export function EditorPanel() {
       closeTab: s.closeTab,
     })),
   );
+  const { resolved } = useTheme();
   const content = activeTab ? files.get(activeTab) ?? "" : "";
 
   if (openTabs.length === 0) {
@@ -58,13 +60,13 @@ export function EditorPanel() {
   return (
     <div className="flex h-full flex-col bg-background">
       {/* Tabs */}
-      <div className="flex shrink-0 overflow-x-auto border-b border-border bg-card">
+      <div className="flex h-9 shrink-0 overflow-x-auto border-b border-border bg-card">
         {openTabs.map((path) => (
           <button
             key={path}
             onClick={() => setActiveTab(path)}
             className={cn(
-              "group flex shrink-0 items-center gap-1.5 border-r border-border px-3 py-1.5 text-xs",
+              "group flex shrink-0 items-center gap-1.5 border-r border-border px-3 text-xs",
               activeTab === path
                 ? "bg-background text-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -87,7 +89,7 @@ export function EditorPanel() {
       {/* Monaco Editor */}
       <div className="flex-1">
         <Editor
-          theme="vs-dark"
+          theme={resolved === "dark" ? "vs-dark" : "vs"}
           language={activeTab ? getLanguage(activeTab) : "plaintext"}
           value={content}
           path={activeTab ?? undefined}

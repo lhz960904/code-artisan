@@ -1,88 +1,67 @@
-import { useState } from "react";
-import { Eye, Code2, Terminal as TerminalIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { FileTree } from "@/components/workspace/file-tree";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { PreviewPanel } from "@/components/workspace/preview-panel";
-import { useWorkspaceStore } from "@/stores/workspace";
+import { DatabasePanel } from "@/components/workspace/database-panel";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import { fileSnapshotsOptions } from "@/api/queries";
+import { useWorkspaceStore, type WorkspaceView } from "@/stores/workspace";
 
-type Tab = "preview" | "code" | "terminal";
+interface RightPanelProps {
+  conversationId: string;
+}
 
-export function RightPanel() {
+export function RightPanel({ conversationId }: RightPanelProps) {
+  const view = useWorkspaceStore((s) => s.view);
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
-  const [preferredTab, setPreferredTab] = useState<Tab>("preview");
-  const activeTab: Tab = previewUrl
-    ? preferredTab
-    : preferredTab === "preview"
-      ? "code"
-      : preferredTab;
+  const setSnapshots = useWorkspaceStore((s) => s.setSnapshots);
+  const { data: snapshots } = useQuery(fileSnapshotsOptions(conversationId));
+
+  useEffect(() => {
+    if (snapshots) setSnapshots(snapshots);
+  }, [snapshots, setSnapshots]);
+
+  const effective: WorkspaceView = view === "preview" && !previewUrl ? "code" : view;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Tab Bar */}
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-3">
-        {previewUrl && (
-          <TabBtn active={activeTab === "preview"} onClick={() => setPreferredTab("preview")}>
-            <Eye className="h-3.5 w-3.5" /> Preview
-          </TabBtn>
-        )}
-        <TabBtn active={activeTab === "code"} onClick={() => setPreferredTab("code")}>
-          <Code2 className="h-3.5 w-3.5" /> Code
-        </TabBtn>
-        <TabBtn active={activeTab === "terminal"} onClick={() => setPreferredTab("terminal")}>
-          <TerminalIcon className="h-3.5 w-3.5" /> Terminal
-        </TabBtn>
-      </div>
-
-      {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === "preview" && <PreviewPanel />}
-        {activeTab === "code" && <CodeView />}
-        {activeTab === "terminal" && <TerminalPanel />}
-      </div>
+    <div className="h-full overflow-hidden">
+      {effective === "preview" && <PreviewPanel />}
+      {effective === "code" && <CodeView />}
+      {effective === "database" && <DatabasePanel />}
     </div>
   );
 }
 
 function CodeView() {
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-52 shrink-0 overflow-y-auto border-r border-border bg-card">
-          <FileTree />
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <EditorPanel />
-        </div>
-      </div>
-      <div className="h-[200px] shrink-0 border-t border-border">
+    <ResizablePanelGroup orientation="vertical" id="workspace-code-vertical" panelIds={["editor-area", "terminal"]}>
+      <ResizablePanel id="editor-area" defaultSize="70%" minSize="30%">
+        <ResizablePanelGroup
+          orientation="horizontal"
+          id="workspace-code-horizontal"
+          panelIds={["file-tree", "editor"]}
+        >
+          <ResizablePanel id="file-tree" defaultSize="22%" minSize="10%" maxSize="40%">
+            <div className="h-full overflow-y-auto bg-card">
+              <FileTree />
+            </div>
+          </ResizablePanel>
+          <ResizableHandle className="w-px bg-border" />
+          <ResizablePanel id="editor" defaultSize="78%">
+            <EditorPanel />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </ResizablePanel>
+      <ResizableHandle className="aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:bg-border" />
+      <ResizablePanel id="terminal" defaultSize="30%" minSize="15%">
         <TerminalPanel />
-      </div>
-    </div>
-  );
-}
-
-function TabBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-        active
-          ? "bg-background text-foreground"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

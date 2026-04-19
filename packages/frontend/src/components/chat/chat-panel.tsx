@@ -1,24 +1,30 @@
 import { useMemo, useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble, buildToolResultLookup } from "@/components/chat/message-bubble";
 import { Sender } from "@/components/chat/sender";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
-import { fetchConversationMessages } from "@/api/queries";
+import {
+  conversationMessagesOptions,
+  fetchConversationMessages,
+} from "@/api/queries";
 import type {
-  StoredMessage,
   StoredAssistantMessage,
   ToolUseContent,
 } from "@code-artisan/shared";
 
 interface ChatPanelProps {
   conversationId: string;
-  initialMessages: StoredMessage[];
 }
 
-export function ChatPanel({ conversationId, initialMessages }: ChatPanelProps) {
+export function ChatPanel({ conversationId }: ChatPanelProps) {
+  const { data: initialMessages, isPending: messagesLoading } = useQuery(
+    conversationMessagesOptions(conversationId),
+  );
   const fileUpload = useFileUpload();
 
   const updateFile = useWorkspaceStore((s) => s.updateFile);
@@ -100,25 +106,29 @@ export function ChatPanel({ conversationId, initialMessages }: ChatPanelProps) {
   return (
     <div className="flex h-full flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-4">
-          {messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              toolResultLookup={toolResultLookup}
-            />
-          ))}
+        {messagesLoading && messages.length === 0 ? (
+          <MessageListSkeleton />
+        ) : (
+          <div className="space-y-4">
+            {messages.map((msg) => (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                toolResultLookup={toolResultLookup}
+              />
+            ))}
 
-          {isBusy && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Working...
-            </div>
-          )}
-        </div>
+            {isBusy && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Working...
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="p-3">
         <Sender
           onSubmit={handleSend}
           busy={isBusy}
@@ -175,4 +185,26 @@ function processAssistantSideEffects(
   if (msg.metadata?.previewUrl) {
     ctx.setPreviewUrl(msg.metadata.previewUrl as string);
   }
+}
+
+function MessageListSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Skeleton className="h-14 w-3/5 rounded-lg" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-4/5" />
+        <Skeleton className="h-4 w-3/5" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
+      <div className="flex justify-end">
+        <Skeleton className="h-10 w-2/5 rounded-lg" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    </div>
+  );
 }
