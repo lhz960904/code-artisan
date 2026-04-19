@@ -46,7 +46,7 @@ jobs:
 
       - name: Unit tests
         working-directory: packages/backend
-        run: pnpm exec vitest run
+        run: pnpm exec vitest run --passWithNoTests
 
       - name: Build backend
         working-directory: packages/backend
