@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { Code2, ExternalLink, Shield, Zap } from "lucide-react";
+import { ExternalLink, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Logo } from "@/components/common/logo";
 import {
   type ConversationResponse,
   type QuotaResponse,
@@ -29,8 +30,8 @@ export function Header({ conversationId, conversation, quota }: HeaderProps) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-4">
       <div className="flex items-center gap-3">
-        <Link to="/" className="flex items-center gap-1.5 text-primary hover:opacity-80">
-          <Code2 className="h-5 w-5" />
+        <Link to="/" className="flex items-center gap-1.5 hover:opacity-80">
+          <Logo className="size-5" />
           <span className="text-sm font-bold tracking-tight">CodeArtisan</span>
         </Link>
         <span className="text-muted-foreground">/</span>

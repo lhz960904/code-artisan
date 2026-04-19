@@ -1,12 +1,12 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadFile } from "@/api";
 import type { Attachment } from "@code-artisan/shared";
 
 export interface FileAttachment {
   id: string;
-  file: File;
+  file?: File;
   preview?: string;
-  status: "pending" | "uploading" | "done" | "error";
+  status: "uploading" | "done" | "error";
   result?: Attachment;
   error?: string;
 }
@@ -14,28 +14,66 @@ export interface FileAttachment {
 const MAX_FILES = 5;
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+function makeId() {
+  return `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export function useFileUpload() {
   const [files, setFiles] = useState<FileAttachment[]>([]);
+  const filesCountRef = useRef(0);
+
+  useEffect(() => {
+    filesCountRef.current = files.length;
+  }, [files]);
 
   const addFiles = useCallback((newFiles: File[]) => {
+    const remaining = MAX_FILES - filesCountRef.current;
+    if (remaining <= 0) return;
+
+    const entries: FileAttachment[] = newFiles.slice(0, remaining).map((file) => {
+      const id = makeId();
+      const preview = file.type.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : undefined;
+
+      if (file.size > MAX_SIZE) {
+        return { id, file, preview, status: "error", error: "File too large (max 10MB)" };
+      }
+      return { id, file, preview, status: "uploading" };
+    });
+
+    setFiles((prev) => [...prev, ...entries]);
+    filesCountRef.current += entries.length;
+
+    // Fire uploads outside the setState updater so StrictMode's double-run
+    // doesn't dispatch two requests per file.
+    for (const entry of entries) {
+      if (entry.status !== "uploading" || !entry.file) continue;
+      uploadFile(entry.file)
+        .then((result) => {
+          setFiles((curr) =>
+            curr.map((f) => (f.id === entry.id ? { ...f, status: "done", result } : f)),
+          );
+        })
+        .catch((err) => {
+          setFiles((curr) =>
+            curr.map((f) =>
+              f.id === entry.id
+                ? { ...f, status: "error", error: err instanceof Error ? err.message : "Upload failed" }
+                : f,
+            ),
+          );
+        });
+    }
+  }, []);
+
+  const seedUploaded = useCallback((attachments: Attachment[]) => {
     setFiles((prev) => {
       const remaining = MAX_FILES - prev.length;
-      if (remaining <= 0) return prev;
-
-      const toAdd = newFiles.slice(0, remaining).map((file): FileAttachment => {
-        const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const preview = file.type.startsWith("image/")
-          ? URL.createObjectURL(file)
-          : undefined;
-
-        if (file.size > MAX_SIZE) {
-          return { id, file, preview, status: "error", error: "File too large (max 10MB)" };
-        }
-
-        return { id, file, preview, status: "pending" };
-      });
-
-      return [...prev, ...toAdd];
+      const incoming = attachments.slice(0, Math.max(0, remaining)).map(
+        (a): FileAttachment => ({ id: makeId(), status: "done", result: a }),
+      );
+      return [...prev, ...incoming];
     });
   }, []);
 
@@ -47,45 +85,6 @@ export function useFileUpload() {
     });
   }, []);
 
-  const uploadAll = useCallback(async (): Promise<Attachment[]> => {
-    const pending = files.filter((f) => f.status === "pending");
-    const alreadyDone = files.filter((f) => f.status === "done" && f.result).map((f) => f.result!);
-
-    if (pending.length === 0) return alreadyDone;
-
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.status === "pending" ? { ...f, status: "uploading" as const } : f,
-      ),
-    );
-
-    const results: Attachment[] = [...alreadyDone];
-
-    await Promise.all(
-      pending.map(async (fa) => {
-        try {
-          const result = await uploadFile(fa.file);
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === fa.id ? { ...f, status: "done" as const, result } : f,
-            ),
-          );
-          results.push(result);
-        } catch (err) {
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === fa.id
-                ? { ...f, status: "error" as const, error: err instanceof Error ? err.message : "Upload failed" }
-                : f,
-            ),
-          );
-        }
-      }),
-    );
-
-    return results;
-  }, [files]);
-
   const clear = useCallback(() => {
     setFiles((prev) => {
       for (const f of prev) {
@@ -95,8 +94,21 @@ export function useFileUpload() {
     });
   }, []);
 
+  const attachments: Attachment[] = files
+    .filter((f) => f.status === "done" && f.result)
+    .map((f) => f.result!);
+
   const isUploading = files.some((f) => f.status === "uploading");
   const hasFiles = files.length > 0;
 
-  return { files, addFiles, removeFile, uploadAll, clear, isUploading, hasFiles };
+  return {
+    files,
+    attachments,
+    addFiles,
+    seedUploaded,
+    removeFile,
+    clear,
+    isUploading,
+    hasFiles,
+  };
 }

@@ -1,4 +1,4 @@
-import { createRoute, useRouterState } from "@tanstack/react-router";
+import { createRoute } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import {
@@ -28,9 +28,6 @@ export const chatRoute = createRoute({
 
 export function ChatPage() {
   const { conversationId } = chatRoute.useParams();
-  const initialMessage = useRouterState({
-    select: (s) => (s.location.state as { initialMessage?: string } | undefined)?.initialMessage,
-  });
 
   const { data: conversation } = useSuspenseQuery(conversationDetailOptions(conversationId));
   const { data: quota } = useSuspenseQuery(quotaOptions());
@@ -51,7 +48,6 @@ export function ChatPage() {
       conversation={conversation}
       quota={quota}
       initialMessages={messages}
-      initialMessage={initialMessage}
     />
   );
 }

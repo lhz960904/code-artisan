@@ -6,7 +6,6 @@ import type { StoredMessage } from "@code-artisan/shared";
 
 interface WorkspaceLayoutProps {
   conversationId: string;
-  initialMessage?: string;
   conversation: ConversationResponse;
   quota: QuotaResponse;
   initialMessages: StoredMessage[];
@@ -14,7 +13,6 @@ interface WorkspaceLayoutProps {
 
 export function WorkspaceLayout({
   conversationId,
-  initialMessage,
   conversation,
   quota,
   initialMessages,
@@ -27,7 +25,6 @@ export function WorkspaceLayout({
           <div className="min-h-0 flex-1">
             <ChatPanel
               conversationId={conversationId}
-              initialMessage={initialMessage}
               initialMessages={initialMessages}
             />
           </div>

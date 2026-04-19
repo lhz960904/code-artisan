@@ -15,7 +15,7 @@ const STORAGE_KEY = "code-artisan-theme";
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return (stored as Theme) || "dark";
+    return (stored as Theme) || "system";
   });
 
   const resolved = useResolved(theme);

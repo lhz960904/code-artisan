@@ -3,23 +3,22 @@ import { Loader2 } from "lucide-react";
 import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageBubble, buildToolResultLookup } from "@/components/chat/message-bubble";
-import { ChatInput } from "@/components/chat/chat-input";
+import { Sender } from "@/components/chat/sender";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { usePendingPromptStore } from "@/stores/pending-prompt";
 import { fetchConversationMessages } from "@/api/queries";
 import type {
   StoredMessage,
   StoredAssistantMessage,
-  Attachment,
   ToolUseContent,
 } from "@code-artisan/shared";
 
 interface ChatPanelProps {
   conversationId: string;
-  initialMessage?: string;
   initialMessages: StoredMessage[];
 }
 
-export function ChatPanel({ conversationId, initialMessage, initialMessages }: ChatPanelProps) {
+export function ChatPanel({ conversationId, initialMessages }: ChatPanelProps) {
   const fileUpload = useFileUpload();
 
   const updateFile = useWorkspaceStore((s) => s.updateFile);
@@ -53,18 +52,19 @@ export function ChatPanel({ conversationId, initialMessage, initialMessages }: C
     processedRef.current = new Set();
   }, [conversationId]);
 
-  // Auto-send initialMessage from home page navigation (once per conversation).
+  // Auto-send the pending prompt left by Home/Dashboard (once per conversation).
+  // Attachments were already uploaded at drop/paste time, so we just forward the IDs.
   useEffect(() => {
-    if (
-      initialMessage &&
-      conversationId &&
-      initialSentForRef.current !== conversationId &&
-      status === "ready"
-    ) {
-      initialSentForRef.current = conversationId;
-      chatSendMessage(initialMessage);
-    }
-  }, [initialMessage, conversationId, status, chatSendMessage]);
+    if (!conversationId || status !== "ready") return;
+    if (initialSentForRef.current === conversationId) return;
+    const pending = usePendingPromptStore.getState().consumeForConversation(conversationId);
+    if (!pending) return;
+    initialSentForRef.current = conversationId;
+    chatSendMessage(
+      pending.prompt,
+      pending.attachments.length > 0 ? pending.attachments : undefined,
+    );
+  }, [conversationId, status, chatSendMessage]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -92,12 +92,9 @@ export function ChatPanel({ conversationId, initialMessage, initialMessages }: C
   const isBusy = status !== "ready" && status !== "error";
 
   const handleSend = async (content: string) => {
-    let attachments: Attachment[] | undefined;
-    if (fileUpload.hasFiles) {
-      attachments = await fileUpload.uploadAll();
-      fileUpload.clear();
-    }
-    chatSendMessage(content, attachments);
+    const attachments = fileUpload.hasFiles ? fileUpload.attachments : undefined;
+    fileUpload.clear();
+    chatSendMessage(content, attachments && attachments.length > 0 ? attachments : undefined);
   };
 
   return (
@@ -121,14 +118,16 @@ export function ChatPanel({ conversationId, initialMessage, initialMessages }: C
         </div>
       </div>
 
-      <ChatInput
-        onSend={handleSend}
-        disabled={isBusy}
-        files={fileUpload.files}
-        onAddFiles={fileUpload.addFiles}
-        onRemoveFile={fileUpload.removeFile}
-        isUploading={fileUpload.isUploading}
-      />
+      <div className="border-t border-border p-3">
+        <Sender
+          onSubmit={handleSend}
+          busy={isBusy}
+          files={fileUpload.files}
+          onAddFiles={fileUpload.addFiles}
+          onRemoveFile={fileUpload.removeFile}
+          isUploading={fileUpload.isUploading}
+        />
+      </div>
     </div>
   );
 }

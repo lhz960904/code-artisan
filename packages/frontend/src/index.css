@@ -1,9 +1,19 @@
 @import "tailwindcss";
 
+/* Self-hosted fonts (order matters: family files, then Tailwind) */
+@import "@fontsource/geist-sans/400.css";
+@import "@fontsource/geist-sans/500.css";
+@import "@fontsource/geist-sans/600.css";
+@import "@fontsource/noto-sans/400.css";
+@import "@fontsource/noto-sans/500.css";
+@import "@fontsource/noto-sans/500-italic.css";
+@import "@fontsource/noto-sans/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
 /*
- * CodeArtisan Theme System
- * Scheme A: Dark (Cursor warm gray) + Light (Clean white blue)
- * shadcn/ui CSS variable convention with Tailwind v4 @theme
+ * CodeArtisan Theme System — Miro-aligned tokens
+ * shadcn/ui CSS-variable convention with Tailwind v4 @theme
  */
 
 @theme inline {
@@ -33,84 +43,121 @@
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
+
+  --color-pastel-coral: var(--pastel-coral);
+  --color-pastel-teal: var(--pastel-teal);
+  --color-pastel-orange: var(--pastel-orange);
+  --color-pastel-yellow: var(--pastel-yellow);
+  --color-pastel-pink: var(--pastel-pink);
+  --color-pastel-moss: var(--pastel-moss);
+  --color-surface-elevated: var(--surface-elevated);
+
+  --font-display: "Geist", system-ui, -apple-system, sans-serif;
+  --font-body: "Noto Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Light theme (default) */
+/* Light theme (Miro) */
 :root {
   --background: 0 0% 100%;
-  --foreground: 220 13% 18%;
-  --card: 210 17% 97%;
-  --card-foreground: 220 13% 18%;
+  --foreground: 240 4% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 4% 11%;
   --popover: 0 0% 100%;
-  --popover-foreground: 220 13% 18%;
-  --primary: 221 83% 53%;
+  --popover-foreground: 240 4% 11%;
+  --primary: 231 99% 68%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 220 9% 46%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
-  --accent: 220 14% 96%;
-  --accent-foreground: 220 13% 18%;
-  --destructive: 0 72% 51%;
+  --secondary: 225 14% 97%;
+  --secondary-foreground: 225 10% 37%;
+  --muted: 225 14% 97%;
+  --muted-foreground: 225 10% 37%;
+  --accent: 225 14% 97%;
+  --accent-foreground: 240 4% 11%;
+  --destructive: 9 68% 54%;
   --destructive-foreground: 0 0% 100%;
-  --success: 142 71% 45%;
+  --success: 155 100% 35%;
   --success-foreground: 0 0% 100%;
   --warning: 38 92% 50%;
   --warning-foreground: 0 0% 100%;
-  --border: 220 13% 83%;
-  --input: 220 13% 83%;
-  --ring: 221 83% 53%;
-  --radius: 0.5rem;
-  --sidebar: 210 17% 97%;
-  --sidebar-foreground: 220 13% 18%;
-  --sidebar-border: 220 13% 83%;
+  --border: 225 14% 90%;
+  --input: 225 14% 90%;
+  --ring: 231 99% 68%;
+  --radius: 0.75rem;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 240 4% 11%;
+  --sidebar-border: 225 14% 90%;
+  --pastel-coral: #ffc6c6;
+  --pastel-teal: #c3faf5;
+  --pastel-orange: #ffe6cd;
+  --pastel-yellow: #fff4c2;
+  --pastel-pink: #fde0f0;
+  --pastel-moss: #d6ecdd;
+  --surface-elevated: #fafbfc;
 }
 
-/* Dark theme — Cursor warm gray */
+/* Dark theme — workspace elevated */
 .dark {
-  --background: 0 0% 12%;
-  --foreground: 0 0% 83%;
-  --card: 0 0% 15%;
-  --card-foreground: 0 0% 83%;
-  --popover: 0 0% 15%;
-  --popover-foreground: 0 0% 83%;
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 18%;
-  --secondary-foreground: 0 0% 63%;
-  --muted: 0 0% 18%;
-  --muted-foreground: 0 0% 52%;
-  --accent: 0 0% 18%;
-  --accent-foreground: 0 0% 83%;
-  --destructive: 0 84% 60%;
+  --background: 220 10% 5%;
+  --foreground: 240 7% 92%;
+  --card: 220 8% 9%;
+  --card-foreground: 240 7% 92%;
+  --popover: 220 8% 9%;
+  --popover-foreground: 240 7% 92%;
+  --primary: 231 100% 74%;
+  --primary-foreground: 220 10% 5%;
+  --secondary: 220 7% 11%;
+  --secondary-foreground: 223 12% 66%;
+  --muted: 220 7% 11%;
+  --muted-foreground: 223 12% 66%;
+  --accent: 220 7% 11%;
+  --accent-foreground: 240 7% 92%;
+  --destructive: 9 100% 66%;
   --destructive-foreground: 0 0% 100%;
-  --success: 142 71% 45%;
+  --success: 155 100% 39%;
   --success-foreground: 0 0% 100%;
   --warning: 38 92% 50%;
   --warning-foreground: 0 0% 100%;
-  --border: 0 0% 18%;
-  --input: 0 0% 18%;
-  --ring: 217 91% 60%;
-  --sidebar: 0 0% 10%;
-  --sidebar-foreground: 0 0% 83%;
-  --sidebar-border: 0 0% 18%;
+  --border: 220 6% 16%;
+  --input: 220 6% 16%;
+  --ring: 231 100% 74%;
+  --sidebar: 220 8% 9%;
+  --sidebar-foreground: 240 7% 92%;
+  --sidebar-border: 220 6% 16%;
+  --pastel-coral: rgba(255, 160, 140, 0.14);
+  --pastel-teal: rgba(0, 200, 190, 0.12);
+  --pastel-orange: rgba(255, 170, 90, 0.12);
+  --pastel-yellow: rgba(235, 200, 90, 0.12);
+  --pastel-pink: rgba(255, 140, 210, 0.12);
+  --pastel-moss: rgba(100, 180, 120, 0.12);
+  --surface-elevated: #1a1d22;
 }
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    border-color: hsl(var(--border));
+  }
+  html {
+    scroll-behavior: smooth;
   }
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-body);
+    font-feature-settings: "ss01", "ss04", "ss05";
+  }
+  .font-display {
+    font-family: var(--font-display);
+    font-feature-settings: "cv03", "cv04", "cv09", "cv11";
+  }
+  .font-mono {
+    font-family: var(--font-mono);
   }
 
-  /* Scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
