@@ -173,3 +173,26 @@
     background: hsl(var(--muted-foreground) / 0.5);
   }
 }
+
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@utility animate-shimmer-text {
+  background-image: linear-gradient(
+    90deg,
+    hsl(var(--muted-foreground) / 0.4) 0%,
+    hsl(var(--foreground)) 50%,
+    hsl(var(--muted-foreground) / 0.4) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer-text 2s linear infinite;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Attachment,
   ImageURLContent,
@@ -8,21 +9,19 @@ import type {
   WebAgentEvent,
 } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
+import { conversationKeys, conversationMessagesOptions } from "@/api/queries";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "error";
 
 export interface UseChatOptions {
-  initialMessages?: StoredMessage[];
-  fetchMessages: (conversationId: string) => Promise<StoredMessage[]>;
   onFinish?: () => void;
   onError?: (error: Error) => void;
-  onFileChange?: (files: Array<{ path: string; content: string }>) => void;
-  onFileDelete?: (paths: string[]) => void;
 }
 
 export interface UseChatReturn {
   messages: StoredMessage[];
   status: ChatStatus;
+  isLoading: boolean;
   sendMessage: (content: string, attachments?: Attachment[]) => void;
   stop: () => void;
   error: Error | null;
@@ -30,11 +29,15 @@ export interface UseChatReturn {
 
 export function useChat(
   conversationId: string | null,
-  options: UseChatOptions,
+  options: UseChatOptions = {},
 ): UseChatReturn {
-  const [messages, setMessages] = useState<StoredMessage[]>(
-    options.initialMessages ?? [],
-  );
+  const queryClient = useQueryClient();
+
+  const { data: messages = [], isPending } = useQuery({
+    ...conversationMessagesOptions(conversationId ?? ""),
+    enabled: !!conversationId,
+  });
+
   const [status, setStatus] = useState<ChatStatus>("ready");
   const [error, setError] = useState<Error | null>(null);
 
@@ -42,81 +45,70 @@ export function useChat(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  useEffect(() => {
-    if (options.initialMessages && options.initialMessages.length > 0) {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id.startsWith("opt-"))) return prev;
-        if (prev.length > options.initialMessages!.length) return prev;
-        return options.initialMessages!;
-      });
-    }
-  }, [options.initialMessages]);
-
-  const refetchMessages = useCallback(() => {
-    if (!conversationId) return;
-    optionsRef.current
-      .fetchMessages(conversationId)
-      .then(setMessages)
-      .catch(() => {});
-  }, [conversationId]);
-
-  // Stable id for the assistant message being streamed.
   const streamingIdRef = useRef(`streaming-${Date.now()}`);
+
+  const updateMessages = useCallback(
+    (updater: (prev: StoredMessage[]) => StoredMessage[]) => {
+      if (!conversationId) return;
+      queryClient.setQueryData<StoredMessage[]>(
+        conversationKeys.messages(conversationId),
+        (prev) => updater(prev ?? []),
+      );
+    },
+    [conversationId, queryClient],
+  );
 
   const handleEvent = useCallback(
     (event: WebAgentEvent) => {
       switch (event.type) {
         case "partial": {
-          // Progressive streaming update — replace the in-flight assistant bubble.
           setStatus("running");
           const streamId = streamingIdRef.current;
           const stored = {
             ...event.message,
             id: streamId,
-            conversationId: "",
+            conversationId: conversationId ?? "",
             createdAt: new Date().toISOString(),
           } as StoredMessage;
-          setMessages((prev) => {
-            const filtered = prev.filter((m) => !m.id?.startsWith("opt-"));
-            const idx = filtered.findIndex((m) => m.id === streamId);
+          updateMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === streamId);
             if (idx >= 0) {
-              const next = [...filtered];
+              const next = [...prev];
               next[idx] = stored;
               return next;
             }
-            return [...filtered, stored];
+            return [...prev, stored];
           });
           break;
         }
         case "message": {
-          // Final complete message — replace the streaming placeholder.
           setStatus("running");
           const msg = event.message;
           const id = (msg as StoredMessage).id ?? streamingIdRef.current;
-          const stored = { ...msg, id, conversationId: "", createdAt: new Date().toISOString() } as StoredMessage;
-          setMessages((prev) => {
-            const filtered = prev.filter(
-              (m) => !m.id?.startsWith("opt-") && m.id !== streamingIdRef.current,
-            );
+          const stored = {
+            ...msg,
+            id,
+            conversationId: conversationId ?? "",
+            createdAt: new Date().toISOString(),
+          } as StoredMessage;
+          updateMessages((prev) => {
+            const filtered = prev.filter((m) => m.id !== streamingIdRef.current);
             return [...filtered, stored];
           });
-          // Reset for next message in a multi-turn run.
           streamingIdRef.current = `streaming-${Date.now()}`;
           break;
         }
-        case "file_update":
-          optionsRef.current.onFileChange?.(event.files);
-          break;
-        case "file_delete":
-          optionsRef.current.onFileDelete?.(event.paths);
-          break;
         case "quota_exceeded":
           setStatus("error");
           setError(new Error("Token quota exceeded"));
           break;
+        case "error":
+          setStatus("error");
+          setError(new Error(event.message));
+          break;
       }
     },
-    [],
+    [conversationId, updateMessages],
   );
 
   const readStream = useCallback(
@@ -174,7 +166,7 @@ export function useChat(
       }
       if (content) optContent.push({ type: "text", text: content });
 
-      setMessages((prev) => [
+      updateMessages((prev) => [
         ...prev,
         {
           id: optId,
@@ -199,18 +191,13 @@ export function useChat(
           signal: abort.signal,
         });
 
-        if (!res.ok) {
-          throw new Error(`Server error: ${res.status}`);
-        }
-        if (!res.body) {
-          throw new Error("No response body");
-        }
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        if (!res.body) throw new Error("No response body");
 
         setStatus("running");
         await readStream(res.body, abort.signal);
 
-        setStatus("ready");
-        refetchMessages();
+        setStatus((prev) => (prev === "error" ? prev : "ready"));
         optionsRef.current.onFinish?.();
       } catch (err) {
         if (abort.signal.aborted) return;
@@ -222,7 +209,7 @@ export function useChat(
         abortRef.current = null;
       }
     },
-    [conversationId, status, readStream, refetchMessages],
+    [conversationId, status, readStream, updateMessages],
   );
 
   const stop = useCallback(() => {
@@ -237,5 +224,12 @@ export function useChat(
     };
   }, [conversationId]);
 
-  return { messages, status, sendMessage, stop, error };
+  return {
+    messages,
+    status,
+    isLoading: isPending && !!conversationId,
+    sendMessage,
+    stop,
+    error,
+  };
 }

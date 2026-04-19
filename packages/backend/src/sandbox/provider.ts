@@ -15,13 +15,17 @@ export class E2BSandboxPool {
     if (existingId) {
       const cached = this.sandboxes.get(existingId);
       if (cached) {
-        await cached.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS).catch(() => {});
-        return cached;
+        try {
+          await cached.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS);
+          return cached;
+        } catch {
+          this.sandboxes.delete(existingId);
+        }
       }
 
       try {
         const reconnected = await E2BSandbox.connect(existingId);
-        await reconnected.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS).catch(() => {});
+        await reconnected.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS);
         this.sandboxes.set(reconnected.sandboxId, reconnected);
         return reconnected;
       } catch {

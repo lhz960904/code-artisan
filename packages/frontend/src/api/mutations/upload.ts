@@ -16,5 +16,6 @@ export async function uploadFile(file: File): Promise<Attachment> {
     throw new Error(err.error ?? "Upload failed");
   }
 
-  return res.json();
+  const json = await res.json();
+  return json.data !== undefined ? json.data : json;
 }

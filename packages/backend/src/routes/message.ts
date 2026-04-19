@@ -72,6 +72,12 @@ messageRouter.post(
         for await (const event of turnService.run(userMessage)) {
           await stream.writeSSE({ data: JSON.stringify(event) });
         }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[message.stream] agent turn failed:", err);
+        await stream.writeSSE({
+          data: JSON.stringify({ type: "error", message }),
+        });
       } finally {
         clearInterval(interval);
       }

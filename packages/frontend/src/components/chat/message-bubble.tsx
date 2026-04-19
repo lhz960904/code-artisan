@@ -140,18 +140,6 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
   );
 }
 
-/** Walks the message array once and builds a tool_use_id → result map. */
-export function buildToolResultLookup(messages: StoredMessage[]): Map<string, ToolResultContent> {
-  const map = new Map<string, ToolResultContent>();
-  for (const msg of messages) {
-    if (msg.role !== "tool") continue;
-    for (const c of msg.content) {
-      if (c.type === "tool_result") map.set(c.tool_use_id, c);
-    }
-  }
-  return map;
-}
-
 function resolveImageUrl(url: string): string {
   if (url.startsWith("http")) return url;
   const baseUrl = import.meta.env.SUPABASE_URL as string;
