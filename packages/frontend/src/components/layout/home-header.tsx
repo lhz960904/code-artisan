@@ -87,33 +87,41 @@ function HeaderAuthSlot() {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Account menu"
-        className="ml-1 inline-flex size-6 items-center justify-center overflow-hidden rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90"
+    <>
+      <Link
+        to="/dashboard"
+        className="ml-1 inline-flex h-8 items-center rounded-md px-3 font-display text-sm font-medium text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"
       >
-        {image ? (
-          <img src={image} alt={name || email || ""} className="size-6 object-cover" />
-        ) : (
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-            {getInitials(name, email)}
-          </span>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="truncate text-sm font-medium text-foreground">{name || email}</span>
-          {name && email && (
-            <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
+        Dashboard
+      </Link>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Account menu"
+          className="ml-1 inline-flex size-6 items-center justify-center overflow-hidden rounded-full outline-none ring-offset-background transition-opacity hover:opacity-90"
+        >
+          {image ? (
+            <img src={image} alt={name || email || ""} className="size-6 object-cover" />
+          ) : (
+            <span className="flex size-6 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+              {getInitials(name, email)}
+            </span>
           )}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={handleSignOut}>
-          <LogOut />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate text-sm font-medium text-foreground">{name || email}</span>
+            {name && email && (
+              <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
+            )}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={handleSignOut}>
+            <LogOut />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }
 
