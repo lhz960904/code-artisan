@@ -84,7 +84,7 @@ export function useChat(
         case "message": {
           setStatus("running");
           const msg = event.message;
-          const id = (msg as StoredMessage).id ?? streamingIdRef.current;
+          const id = (msg as StoredMessage).id ?? `msg-${Date.now()}`;
           const stored = {
             ...msg,
             id,

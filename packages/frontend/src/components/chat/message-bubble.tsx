@@ -15,9 +15,11 @@ interface MessageBubbleProps {
   message: StoredMessage;
   /** Lookup tool_use_id → ToolResultContent from messages later in the thread. */
   toolResultLookup: Map<string, ToolResultContent>;
+  /** Whether this message is currently being streamed. */
+  isStreaming?: boolean;
 }
 
-export function MessageBubble({ message, toolResultLookup }: MessageBubbleProps) {
+export function MessageBubble({ message, toolResultLookup, isStreaming }: MessageBubbleProps) {
   // Compaction divider
   if (message.metadata?.compacted) {
     return (
@@ -38,7 +40,7 @@ export function MessageBubble({ message, toolResultLookup }: MessageBubbleProps)
   }
 
   if (message.role === "assistant") {
-    return <AssistantBubble message={message as StoredAssistantMessage} toolResultLookup={toolResultLookup} />;
+    return <AssistantBubble message={message as StoredAssistantMessage} toolResultLookup={toolResultLookup} isStreaming={isStreaming} />;
   }
 
   return null;
@@ -83,9 +85,11 @@ function UserBubble({ message }: { message: StoredUserMessage }) {
 function AssistantBubble({
   message,
   toolResultLookup,
+  isStreaming,
 }: {
   message: StoredAssistantMessage;
   toolResultLookup: Map<string, ToolResultContent>;
+  isStreaming?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -98,7 +102,9 @@ function AssistantBubble({
           );
         }
         if (part.type === "thinking") {
-          return <ThinkingBlock key={i} thinking={part.thinking} />;
+          // Only show thinking while streaming; hide after completion
+          if (!isStreaming) return null;
+          return <ThinkingBlock key={i} thinking={part.thinking} defaultOpen />;
         }
         if (part.type === "tool_use") {
           const toolUse = part as ToolUseContent;
@@ -111,8 +117,8 @@ function AssistantBubble({
   );
 }
 
-function ThinkingBlock({ thinking }: { thinking: string }) {
-  const [open, setOpen] = useState(false);
+function ThinkingBlock({ thinking, defaultOpen = false }: { thinking: string; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-md border border-border bg-card">
       <button

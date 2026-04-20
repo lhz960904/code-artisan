@@ -16,6 +16,7 @@ export function MessageList({ messages }: MessageListProps) {
           key={message.id}
           message={message}
           toolResultLookup={toolResultLookup}
+          isStreaming={message.id.startsWith("streaming-")}
         />
       ))}
     </div>
