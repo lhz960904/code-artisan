@@ -1,16 +1,19 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import * as z from "zod";
-import type { AssistantMessage, Message } from "../../types/messages";
+import type { AssistantMessage, FileContent, Message } from "../../types/messages";
 import type { Tool } from "../../tools/tool";
 
 /**
  * Converts foundation messages to Anthropic API message params.
  * System messages are extracted separately since Anthropic takes them as a top-level param.
+ *
+ * Async because FileContent blocks may need to be fetched + decoded when the
+ * provider doesn't natively support the media type (e.g. text/markdown).
  */
-export function convertToAnthropicMessages(messages: Message[]): {
+export async function convertToAnthropicMessages(messages: Message[]): Promise<{
   system: Anthropic.TextBlockParam[];
   messages: Anthropic.MessageParam[];
-} {
+}> {
   const system: Anthropic.TextBlockParam[] = [];
   const anthropicMessages: Anthropic.MessageParam[] = [];
 
@@ -29,6 +32,8 @@ export function convertToAnthropicMessages(messages: Message[]): {
             type: "image",
             source: { type: "url", url: content.image_url.url },
           });
+        } else if (content.type === "file") {
+          contentBlocks.push(...(await encodeFileForAnthropic(content)));
         }
       }
       anthropicMessages.push({ role: "user", content: contentBlocks });
@@ -192,6 +197,50 @@ function parseToolInput(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Encode a FileContent block for Anthropic. PDFs go through the native
+ * `document` block (URL or base64 source); anything else is read as text and
+ * inlined so the model still sees the content — albeit without layout.
+ */
+async function encodeFileForAnthropic(file: FileContent): Promise<Anthropic.ContentBlockParam[]> {
+  if (file.mediaType === "application/pdf") {
+    return [
+      {
+        type: "document",
+        source:
+          file.data instanceof URL
+            ? { type: "url", url: String(file.data) }
+            : { type: "base64", media_type: "application/pdf", data: await fileDataToBase64(file.data) },
+        ...(file.filename ? { title: file.filename } : {}),
+      },
+    ];
+  }
+  const text = await fileDataToText(file.data);
+  const header = file.filename ? `[File: ${file.filename}]\n` : "";
+  return [{ type: "text", text: header + text }];
+}
+
+async function fileDataToText(data: Uint8Array | ArrayBuffer | string | URL): Promise<string> {
+  if (data instanceof URL) {
+    const response = await fetch(String(data));
+    return await response.text();
+  }
+  if (typeof data === "string") return Buffer.from(data, "base64").toString("utf-8");
+  const bytes = data instanceof ArrayBuffer ? new Uint8Array(data) : data;
+  return new TextDecoder().decode(bytes);
+}
+
+async function fileDataToBase64(data: Uint8Array | ArrayBuffer | string | URL): Promise<string> {
+  if (data instanceof URL) {
+    const response = await fetch(String(data));
+    const buffer = await response.arrayBuffer();
+    return Buffer.from(buffer).toString("base64");
+  }
+  if (typeof data === "string") return data;
+  const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+  return Buffer.from(buffer as ArrayBuffer).toString("base64");
 }
 
 /**

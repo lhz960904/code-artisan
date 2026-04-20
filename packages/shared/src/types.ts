@@ -9,6 +9,8 @@ export type {
   NonSystemMessage,
   TextContent,
   ImageURLContent,
+  FileContent,
+  FileData,
   ThinkingContent,
   ToolUseContent,
   ToolResultContent,

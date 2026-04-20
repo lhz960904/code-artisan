@@ -39,6 +39,8 @@ export class AgentTurnService {
       this._setupSandbox(),
     ]);
 
+    const [expandedUserMessage] = buildAgentMessages([userMessage]);
+
     yield { type: "user_message_saved", messageId: userMessageId };
 
     if (!this.agent) {
@@ -48,7 +50,7 @@ export class AgentTurnService {
     // Shared id across this turn's partial + message events.
     let assistantMessageId: string | null = null;
 
-    for await (const event of this.agent.stream(userMessage)) {
+    for await (const event of this.agent.stream(expandedUserMessage as UserMessage)) {
       while (this.pendingEvents.length > 0) {
         yield this.pendingEvents.shift()!;
       }
@@ -160,6 +162,7 @@ export class AgentTurnService {
         conversationId: this.conversation.id,
         role: message.role,
         content: message.content,
+        metadata: message.metadata ?? null,
       })
       .returning({ id: messages.id });
     return row.id;
@@ -211,6 +214,6 @@ export class AgentTurnService {
       } as StoredMessage;
     });
 
-    return buildAgentMessages(stored);
+    return buildAgentMessages(stored as Message[]);
   }
 }

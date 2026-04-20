@@ -1,56 +1,54 @@
 import type { Message, UserMessage, UserMessageContent } from "@code-artisan/agent";
-import type { Attachment, StoredMessage } from "@code-artisan/shared";
-import { getFileBuffer, getPublicUrl } from "../services/storage";
+import type { Attachment } from "@code-artisan/shared";
+import { getPublicUrl } from "../services/storage";
 
-export async function buildUserMessage(content: string, attachments: Attachment[]): Promise<UserMessage> {
-  const message: StoredMessage = {
-    id: "",
-    conversationId: "",
-    createdAt: new Date().toISOString(),
+/**
+ * Build a user message for persistence. Attachments stay in metadata — the
+ * agent-facing expansion (image_url / FileContent) is performed fresh by
+ * buildAgentMessages on every run, so the stored shape never duplicates
+ * file bytes into content.
+ */
+export function buildUserMessage(content: string, attachments: Attachment[]): UserMessage {
+  return {
     role: "user",
     content: [{ type: "text", text: content }],
-    metadata: { attachments: attachments },
+    metadata: { attachments },
   };
-  return (await buildAgentMessages([message]))[0] as UserMessage;
 }
 
-export async function buildAgentMessages(storedMessage: StoredMessage[]): Promise<Message[]> {
+/**
+ * Rehydrate stored messages into the shape the agent SDK expects. For user
+ * messages we expand `metadata.attachments` into additional content blocks
+ * without mutating the input. Each attachment becomes an `image_url` block
+ * (images) or a `file` block (everything else) — the provider decides how
+ * to encode FileContent based on its native capabilities.
+ */
+export function buildAgentMessages(storedMessages: Message[]): Message[] {
   const result: Message[] = [];
 
-  for (const msg of storedMessage) {
-    const message = {
-      role: msg.role,
-      content: msg.content,
-      metadata: msg.metadata,
-    } as Message;
+  for (const stored of storedMessages) {
+    if (stored.role !== "user") {
+      result.push(stored);
+      continue;
+    }
 
-    // attachments to message
-    if (msg.role === "user") {
-      const attachments = (msg.metadata?.attachments || []) as Attachment[];
-      for (const att of attachments) {
-        const content: UserMessageContent = msg.content;
-        if (att.mimeType.startsWith("image/")) {
-          content.push({
-            type: "image_url",
-            image_url: { url: getPublicUrl(att.fileId) },
-          });
-        } else {
-          // default to text
-          try {
-            const buf = await getFileBuffer(att.fileId);
-            const body = new TextDecoder().decode(buf);
-            content.push({ type: "text", text: `File: ${att.fileName}]\nContent:${body}` });
-          } catch {
-            content.push({
-              type: "text",
-              text: `File: ${att.fileName}]\nContent: failed to load`,
-            });
-          }
-        }
+    const attachments = (stored.metadata?.attachments ?? []) as Attachment[];
+    const content: UserMessageContent = [...stored.content];
+
+    for (const attachment of attachments) {
+      if (attachment.mimeType.startsWith("image/")) {
+        content.push({ type: "image_url", image_url: { url: getPublicUrl(attachment.fileId) } });
+      } else {
+        content.push({
+          type: "file",
+          data: new URL(getPublicUrl(attachment.fileId)),
+          mediaType: attachment.mimeType,
+          filename: attachment.fileName,
+        });
       }
     }
 
-    result.push(message);
+    result.push({ role: "user", content, metadata: stored.metadata });
   }
 
   return result;

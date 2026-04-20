@@ -28,7 +28,7 @@ export class AnthropicProvider extends LLMProvider {
 
   async invoke(params: ModelInvokeParams): Promise<AssistantMessage> {
     const { messages, tools: rawTools, options, signal } = params;
-    const { system, messages: anthropicMessages } = convertToAnthropicMessages(messages);
+    const { system, messages: anthropicMessages } = await convertToAnthropicMessages(messages);
 
     const anthropicTools = rawTools ? convertToAnthropicTools(rawTools) : undefined;
 
@@ -50,7 +50,7 @@ export class AnthropicProvider extends LLMProvider {
 
   async *stream(params: ModelInvokeParams): AsyncGenerator<AssistantMessage> {
     const { messages, tools: rawTools, options, signal } = params;
-    const { system, messages: anthropicMessages } = convertToAnthropicMessages(messages);
+    const { system, messages: anthropicMessages } = await convertToAnthropicMessages(messages);
     const anthropicTools = rawTools ? convertToAnthropicTools(rawTools) : undefined;
 
     const raw = await this.client.messages.create(

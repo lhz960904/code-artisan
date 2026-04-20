@@ -27,6 +27,28 @@ export interface ImageURLContent {
   };
 }
 
+/**
+ * Payload shapes accepted by {@link FileContent}. Providers narrow/encode
+ * based on their native capabilities.
+ */
+export type FileData = Uint8Array | ArrayBuffer | string | URL;
+
+/**
+ * File attachment in a user message (PDF, text, docx, …). Each provider
+ * decides how to encode — native document block where supported, falling
+ * back to text-inlining when not. Aligns with Vercel AI SDK's `FilePart`.
+ */
+export interface FileContent {
+  /** Discriminator: this segment is a file attachment. */
+  type: "file";
+  /** Payload — raw bytes, base64 string, or a remote URL the provider can fetch. */
+  data: FileData;
+  /** IANA media type, e.g. `application/pdf`, `text/markdown`. */
+  mediaType: string;
+  /** Original filename; shown in UI and hinted to providers that accept it. */
+  filename?: string;
+}
+
 
 /**
  * Model reasoning or chain-of-thought text (when exposed by the provider).
@@ -71,8 +93,8 @@ export interface ToolResultContent {
 /** Content allowed in a system message. */
 export type SystemMessageContent = TextContent[];
 
-/** Content allowed in a user message (text and/or images). */
-export type UserMessageContent = (TextContent | ImageURLContent)[];
+/** Content allowed in a user message (text, images, and file attachments). */
+export type UserMessageContent = (TextContent | ImageURLContent | FileContent)[];
 
 /** Content allowed in an assistant message. */
 export type AssistantMessageContent = (TextContent | ThinkingContent | ToolUseContent)[];
