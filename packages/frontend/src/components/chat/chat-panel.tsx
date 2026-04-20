@@ -36,8 +36,6 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   }, [messages]);
 
   const isBusy = status !== "ready" && status !== "error";
-  const isStreaming = messages[messages.length - 1]?.id?.startsWith("streaming-") ?? false;
-  const showThinking = isBusy && !isStreaming;
 
   const handleSend = async (content: string) => {
     const attachments = fileUpload.hasFiles ? fileUpload.attachments : undefined;
@@ -52,12 +50,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
           <MessageListSkeleton />
         ) : (
           <>
-            <MessageList messages={messages} />
-            {showThinking && (
-              <div className="mt-4 flex items-center gap-2 text-sm">
-                <span className="animate-shimmer-text font-medium">Thinking about next steps...</span>
-              </div>
-            )}
+            <MessageList messages={messages} status={status} />
             {status === "error" && error && (
               <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />

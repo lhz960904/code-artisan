@@ -18,6 +18,7 @@ import { getSandboxPool } from "../sandbox";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
@@ -32,22 +33,37 @@ export class AgentTurnService {
   constructor(private conversation: Conversation) {}
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
-    const [, resumeMessages, sandboxResult] = await Promise.all([
+    const [userMessageId, resumeMessages, sandboxResult] = await Promise.all([
       this._insertMessage(userMessage),
       this._buildAgentMessages(),
       this._setupSandbox(),
     ]);
 
+    yield { type: "user_message_saved", messageId: userMessageId };
+
     if (!this.agent) {
       this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles);
     }
+
+    // Shared id across this turn's partial + message events.
+    let assistantMessageId: string | null = null;
 
     for await (const event of this.agent.stream(userMessage)) {
       while (this.pendingEvents.length > 0) {
         yield this.pendingEvents.shift()!;
       }
-      yield event;
-      if (event.type === "message") await this._insertMessage(event.message);
+
+      if (event.type === "partial") {
+        if (!assistantMessageId) assistantMessageId = randomUUID();
+        yield { ...event, messageId: assistantMessageId };
+        continue;
+      }
+
+      const isAssistant = event.message.role === "assistant";
+      const messageId = isAssistant && assistantMessageId ? assistantMessageId : randomUUID();
+      await this._insertMessage(event.message, messageId);
+      yield { ...event, messageId };
+      if (isAssistant) assistantMessageId = null;
     }
     this.pendingEvents = [];
   }
@@ -135,11 +151,18 @@ export class AgentTurnService {
     return { sandbox, initialFiles };
   }
 
-  /** Insert a message to db */
-  private async _insertMessage(message: Message): Promise<void> {
-    await db
+  /** Insert a message to db; returns the row id (caller may supply one to pre-bind). */
+  private async _insertMessage(message: Message, id?: string): Promise<string> {
+    const [row] = await db
       .insert(messages)
-      .values({ conversationId: this.conversation.id, role: message.role, content: message.content });
+      .values({
+        ...(id ? { id } : {}),
+        conversationId: this.conversation.id,
+        role: message.role,
+        content: message.content,
+      })
+      .returning({ id: messages.id });
+    return row.id;
   }
 
   /**

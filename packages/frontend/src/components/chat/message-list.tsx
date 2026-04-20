@@ -1,13 +1,18 @@
 import { useMemo } from "react";
+import { Brain } from "lucide-react";
 import type { StoredMessage, ToolResultContent } from "@code-artisan/shared";
 import { MessageBubble } from "@/components/chat/message-bubble";
+import type { ChatStatus } from "@/hooks/use-chat";
 
 interface MessageListProps {
   messages: StoredMessage[];
+  status: ChatStatus;
 }
 
-export function MessageList({ messages }: MessageListProps) {
+export function MessageList({ messages, status }: MessageListProps) {
   const toolResultLookup = useMemo(() => buildToolResultLookup(messages), [messages]);
+  const lastMessage = messages[messages.length - 1];
+  const showThinking = status === "submitted" || status === "running";
 
   return (
     <div className="space-y-4">
@@ -16,9 +21,17 @@ export function MessageList({ messages }: MessageListProps) {
           key={message.id}
           message={message}
           toolResultLookup={toolResultLookup}
-          isStreaming={message.id.startsWith("streaming-")}
+          isStreaming={
+            status === "streaming" && message === lastMessage && message.role === "assistant"
+          }
         />
       ))}
+      {showThinking && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Brain className="h-4 w-4 animate-pulse" />
+          <span className="animate-shimmer-text font-medium">Thinking...</span>
+        </div>
+      )}
     </div>
   );
 }

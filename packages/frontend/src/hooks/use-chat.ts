@@ -11,7 +11,7 @@ import type {
 import { API_BASE } from "@/api/client";
 import { conversationKeys, conversationMessagesOptions } from "@/api/queries";
 
-export type ChatStatus = "ready" | "submitted" | "running" | "error";
+export type ChatStatus = "ready" | "submitted" | "running" | "streaming" | "error";
 
 export interface UseChatOptions {
   onFinish?: () => void;
@@ -45,7 +45,7 @@ export function useChat(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const streamingIdRef = useRef(`streaming-${Date.now()}`);
+  const optimisticUserIdRef = useRef<string | null>(null);
 
   const updateMessages = useCallback(
     (updater: (prev: StoredMessage[]) => StoredMessage[]) => {
@@ -58,44 +58,55 @@ export function useChat(
     [conversationId, queryClient],
   );
 
+  const upsertMessage = useCallback(
+    (stored: StoredMessage) => {
+      updateMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === stored.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = stored;
+          return next;
+        }
+        return [...prev, stored];
+      });
+    },
+    [updateMessages],
+  );
+
   const handleEvent = useCallback(
     (event: WebAgentEvent) => {
       switch (event.type) {
+        case "user_message_saved": {
+          const optimisticId = optimisticUserIdRef.current;
+          if (!optimisticId) break;
+          optimisticUserIdRef.current = null;
+          updateMessages((prev) =>
+            prev.map((m) => (m.id === optimisticId ? { ...m, id: event.messageId } : m)),
+          );
+          break;
+        }
         case "partial": {
-          setStatus("running");
-          const streamId = streamingIdRef.current;
-          const stored = {
+          setStatus("streaming");
+          upsertMessage({
             ...event.message,
-            id: streamId,
+            id: event.messageId,
             conversationId: conversationId ?? "",
             createdAt: new Date().toISOString(),
-          } as StoredMessage;
-          updateMessages((prev) => {
-            const idx = prev.findIndex((m) => m.id === streamId);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = stored;
-              return next;
-            }
-            return [...prev, stored];
-          });
+          } as StoredMessage);
           break;
         }
         case "message": {
-          setStatus("running");
-          const msg = event.message;
-          const id = (msg as StoredMessage).id ?? `msg-${Date.now()}`;
-          const stored = {
-            ...msg,
-            id,
+          // Skip the "running" flash on the final assistant text (no tool_use) — stream close flips straight to "ready".
+          const isFinalAssistant =
+            event.message.role === "assistant" &&
+            !event.message.content.some((block) => block.type === "tool_use");
+          if (!isFinalAssistant) setStatus("running");
+          upsertMessage({
+            ...event.message,
+            id: event.messageId,
             conversationId: conversationId ?? "",
             createdAt: new Date().toISOString(),
-          } as StoredMessage;
-          updateMessages((prev) => {
-            const filtered = prev.filter((m) => m.id !== streamingIdRef.current);
-            return [...filtered, stored];
-          });
-          streamingIdRef.current = `streaming-${Date.now()}`;
+          } as StoredMessage);
           break;
         }
         case "quota_exceeded":
@@ -108,7 +119,7 @@ export function useChat(
           break;
       }
     },
-    [conversationId, updateMessages],
+    [conversationId, updateMessages, upsertMessage],
   );
 
   const readStream = useCallback(
@@ -150,29 +161,30 @@ export function useChat(
     async (content: string, attachments?: Attachment[]) => {
       if (!conversationId || status === "submitted" || status === "running") return;
 
-      const optId = `opt-${Date.now()}`;
-      const optContent: Array<TextContent | ImageURLContent> = [];
+      const optimisticId = crypto.randomUUID();
+      optimisticUserIdRef.current = optimisticId;
+      const optimisticContent: Array<TextContent | ImageURLContent> = [];
       if (attachments) {
-        for (const att of attachments) {
-          if (att.mimeType.startsWith("image/")) {
-            optContent.push({
+        for (const attachment of attachments) {
+          if (attachment.mimeType.startsWith("image/")) {
+            optimisticContent.push({
               type: "image_url",
-              image_url: { url: `files/${att.fileId}` },
+              image_url: { url: `files/${attachment.fileId}` },
             });
           } else {
-            optContent.push({ type: "text", text: `[File: ${att.fileName}]` });
+            optimisticContent.push({ type: "text", text: `[File: ${attachment.fileName}]` });
           }
         }
       }
-      if (content) optContent.push({ type: "text", text: content });
+      if (content) optimisticContent.push({ type: "text", text: content });
 
       updateMessages((prev) => [
         ...prev,
         {
-          id: optId,
+          id: optimisticId,
           conversationId,
           role: "user",
-          content: optContent,
+          content: optimisticContent,
           createdAt: new Date().toISOString(),
         } as StoredUserMessage,
       ]);

@@ -24,7 +24,8 @@ import type {
   UserMessage,
   ToolMessage,
   SystemMessage,
-  AgentEvent,
+  AgentPartialEvent,
+  AgentMessageEvent,
 } from "@code-artisan/agent";
 
 /**
@@ -50,10 +51,17 @@ export interface Attachment {
 }
 
 /**
- * extend AgentEvent for web coding agent
+ * Web transport wraps agent stream events with the server-side message id
+ * so the frontend can key state by the db UUID from birth instead of
+ * minting throwaway client ids.
  */
+export type WebAgentPartialEvent = AgentPartialEvent & { messageId: string };
+export type WebAgentMessageEvent = AgentMessageEvent & { messageId: string };
+
 export type WebAgentEvent =
-  | AgentEvent
+  | WebAgentPartialEvent
+  | WebAgentMessageEvent
+  | { type: "user_message_saved"; messageId: string }
   | { type: "quota_exceeded" }
   | { type: "file_update"; files: Array<{ path: string; content: string }> }
   | { type: "file_delete"; paths: string[] }
