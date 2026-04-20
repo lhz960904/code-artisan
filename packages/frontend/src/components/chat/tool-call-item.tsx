@@ -3,10 +3,7 @@ import { FileText, FileCode, Terminal, FolderOpen, Play, Replace, ChevronRight }
 import { cn } from "@/lib/utils";
 import type { ToolUseContent, ToolResultContent } from "@code-artisan/shared";
 
-const TOOL_CONFIG: Record<
-  string,
-  { icon: typeof FileText; label: (input: Record<string, string>) => string }
-> = {
+const TOOL_CONFIG: Record<string, { icon: typeof FileText; label: (input: Record<string, string>) => string }> = {
   write_file: { icon: FileCode, label: (i) => `write ${i.path ?? "..."}` },
   read_file: { icon: FileText, label: (i) => `read ${i.path ?? "..."}` },
   bash: { icon: Terminal, label: (i) => i.command ?? "..." },
@@ -25,16 +22,14 @@ export function ToolCallItem({ toolUse, toolResult }: ToolCallItemProps) {
 
   const config = TOOL_CONFIG[toolUse.name];
   const Icon = config?.icon ?? Terminal;
-  const label =
-    config?.label(toolUse.input as Record<string, string>) ?? toolUse.name;
+  const label = config?.label(toolUse.input as Record<string, string>) ?? toolUse.name;
 
   const isDone = !!toolResult;
-  const hasError =
-    !!toolResult && toolResult.content.trim().startsWith("Error");
+  const hasError = !!toolResult && toolResult.content.trim().startsWith("Error");
   const output = toolResult?.content ?? "";
 
   return (
-    <div className="rounded-lg border border-border bg-card text-xs">
+    <div className="rounded-md border border-border bg-card text-xs">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -44,21 +39,11 @@ export function ToolCallItem({ toolUse, toolResult }: ToolCallItemProps) {
         <span className="truncate font-mono text-foreground">{label}</span>
         <div className="ml-auto flex items-center gap-1.5">
           {isDone ? (
-            <div
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                hasError ? "bg-destructive" : "bg-success",
-              )}
-            />
+            <div className={cn("h-1.5 w-1.5 rounded-full", hasError ? "bg-destructive" : "bg-success")} />
           ) : (
             <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-warning" />
           )}
-          <ChevronRight
-            className={cn(
-              "h-3 w-3 text-muted-foreground transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
+          <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform", expanded && "rotate-90")} />
         </div>
       </button>
       {expanded && output && (

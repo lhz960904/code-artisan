@@ -38,12 +38,7 @@ export function MessageBubble({ message, toolResultLookup }: MessageBubbleProps)
   }
 
   if (message.role === "assistant") {
-    return (
-      <AssistantBubble
-        message={message as StoredAssistantMessage}
-        toolResultLookup={toolResultLookup}
-      />
-    );
+    return <AssistantBubble message={message as StoredAssistantMessage} toolResultLookup={toolResultLookup} />;
   }
 
   return null;
@@ -103,9 +98,7 @@ function AssistantBubble({
           );
         }
         if (part.type === "thinking") {
-          return (
-            <ThinkingBlock key={i} thinking={part.thinking} />
-          );
+          return <ThinkingBlock key={i} thinking={part.thinking} />;
         }
         if (part.type === "tool_use") {
           const toolUse = part as ToolUseContent;
@@ -121,15 +114,14 @@ function AssistantBubble({
 function ThinkingBlock({ thinking }: { thinking: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div className="rounded-md border border-border bg-card">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-1.5 p-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
-        Thinking
-        <span className="opacity-50">({thinking.length} chars)</span>
+        Thought
       </button>
       {open && (
         <div className="border-t border-border p-3 max-h-60 overflow-y-auto text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">

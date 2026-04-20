@@ -25,10 +25,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     const pending = usePendingPromptStore.getState().consumeForConversation(conversationId);
     if (!pending) return;
     initialSentForRef.current = conversationId;
-    sendMessage(
-      pending.prompt,
-      pending.attachments.length > 0 ? pending.attachments : undefined,
-    );
+    sendMessage(pending.prompt, pending.attachments.length > 0 ? pending.attachments : undefined);
   }, [conversationId, status, sendMessage]);
 
   // scroll to bottom when messages change
@@ -58,15 +55,13 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
             <MessageList messages={messages} />
             {showThinking && (
               <div className="mt-4 flex items-center gap-2 text-sm">
-                <span className="animate-shimmer-text font-medium">Thinking...</span>
+                <span className="animate-shimmer-text font-medium">Thinking about next steps...</span>
               </div>
             )}
             {status === "error" && error && (
               <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-                  {error.message}
-                </div>
+                <div className="min-w-0 flex-1 whitespace-pre-wrap break-words">{error.message}</div>
               </div>
             )}
           </>
