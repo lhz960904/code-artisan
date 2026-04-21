@@ -45,6 +45,8 @@ export function useChat(
   optionsRef.current = options;
 
   const optimisticUserIdRef = useRef<string | null>(null);
+  const prevConversationIdRef = useRef<string | null>(null);
+  const mountGenRef = useRef(0);
 
   const updateMessages = useCallback(
     (updater: (prev: StoredMessage[]) => StoredMessage[]) => {
@@ -160,6 +162,13 @@ export function useChat(
     async (content: string, attachments?: Attachment[]) => {
       if (!conversationId || status === "submitted" || status === "running") return;
 
+      // Cancel any in-flight GET /message/:id so the loader prefetch can't
+      // settle after us and overwrite the optimistic user message + early
+      // streaming updates.
+      await queryClient.cancelQueries({
+        queryKey: conversationKeys.messages(conversationId),
+      });
+
       const optimisticId = crypto.randomUUID();
       optimisticUserIdRef.current = optimisticId;
       const optimisticContent: TextContent[] = content ? [{ type: "text", text: content }] : [];
@@ -208,7 +217,7 @@ export function useChat(
         abortRef.current = null;
       }
     },
-    [conversationId, status, readStream, updateMessages],
+    [conversationId, status, readStream, updateMessages, queryClient],
   );
 
   const stop = useCallback(() => {
@@ -217,11 +226,35 @@ export function useChat(
     setStatus("ready");
   }, []);
 
+  // Abort only when conversationId actually changes — StrictMode's dev-only
+  // mount→unmount→remount cycle must not kill the first sendMessage's fetch.
   useEffect(() => {
-    return () => {
+    const prev = prevConversationIdRef.current;
+    prevConversationIdRef.current = conversationId;
+    if (prev !== null && prev !== conversationId) {
       abortRef.current?.abort();
-    };
+      abortRef.current = null;
+      setStatus("ready");
+      setError(null);
+      optimisticUserIdRef.current = null;
+    }
   }, [conversationId]);
+
+  // True unmount: use a generation counter so StrictMode's simulated
+  // unmount/remount (which bumps the counter before the queued abort runs)
+  // is a no-op, while a real unmount leaves the generation unchanged.
+  useEffect(() => {
+    mountGenRef.current += 1;
+    const myGen = mountGenRef.current;
+    return () => {
+      queueMicrotask(() => {
+        if (mountGenRef.current === myGen) {
+          abortRef.current?.abort();
+          abortRef.current = null;
+        }
+      });
+    };
+  }, []);
 
   return {
     messages,

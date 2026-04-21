@@ -1,8 +1,9 @@
 # TODO
 
-## P0 — Web 稳定性
+## P0 — BUG
 
-- [ ] Runner 单测覆盖：`buildAgentMessages` 悬空 tool_use 修复、`conversation-runner` 主流程、`title-generation` 幂等
+- [x] dashboard、home 页面 sender 输入进入详情页，流式接口被取消，无法实时渲染
+- [x] backend 持久化文件，目前不支持图片，但有时候 AI 下载的模板中会出现图片，是否需要支持图片持久化
 
 ## P1 — 生产可用性
 
@@ -17,15 +18,25 @@
 
 - [ ] 悬空工具调用：中断恢复时未完成 tool_use 标记为 error
 
+### Tool
+
+- [ ] todo 工具重新设计
+
 ### 任务恢复
 
 - [ ] **中断对话恢复**：用户重新打开存在 in_progress todo / 无 result 的 tool_use 的会话时，TodoListCard 已显示 `Interrupted` 标签（静态展示），需新增 "Resume" 按钮触发后端从最后一个未完成步骤继续 ReAct loop
 
 ### 前端体验
 
-- [ ] Landing Page 重设计（居中 Hero / 动态 placeholder / 蓝色光晕）
-- [ ] 动画 + Empty States（Dashboard 空对话列表、首次进入欢迎页等）
-- [ ] ChatInput 边框科技感
+- [ ] 新建聊天的名字修改，采取 backend 流式返回 title 事件，做更改
+- [ ] workspace file tree UI 交互优化，即时响应流式数据
+- [ ] workspace editor panel UI 交互优化，即时响应流式数据
+- [ ] workspace terminal panel UI 交互优化，即时响应流式数据
+
+### 工程化
+
+- [ ] Prompt 优化
+- [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist/…）
 
 ## P2 — 增强
 
@@ -34,13 +45,11 @@
 - [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] Custom Rules（用户自定义 system prompt 规则）
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
+- [ ] 支持 mcp 工具
 
 ## P3 — 部署 & 求职
 
-- [ ] Auth（Supabase Auth 登录）
-- [ ] Railway 重新部署
 - [ ] 域名绑定（Cloudflare）
 - [ ] Demo 视频（2-3 分钟）
 - [ ] README + 架构图
 - [ ] 简历项目描述
-- [ ] 面试准备

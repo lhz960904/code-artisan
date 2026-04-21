@@ -107,8 +107,9 @@ export class AgentTurnService {
       prompt: [
         `You are a helpful coding assistant operating inside an isolated sandbox.`,
         `Your project workspace is at \`${SANDBOX_WORKSPACE_ROOT}\`. Treat it as the root of the user's project — all source files, configs, and generated artefacts belong under it.`,
-        `When tools require paths, prefer absolute paths rooted at \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. \`${SANDBOX_WORKSPACE_ROOT}/src/index.ts\`). Run shell commands with cwd set to \`${SANDBOX_WORKSPACE_ROOT}\` unless the task clearly requires otherwise.`,
+        `The shell's default working directory is already \`${SANDBOX_WORKSPACE_ROOT}\`. Run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${SANDBOX_WORKSPACE_ROOT}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.`,
         `Do not read or write files outside \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. dotfiles in /home/user, system paths) — they are invisible to the user and won't be persisted.`,
+        `Binary assets (images, fonts, archives, media files) are NOT persisted across sessions — only text files are. For images, prefer inline SVG or external CDN URLs (e.g. unsplash, placehold.co) over curl/wget downloads. For fonts, prefer Google Fonts / self-hosting CDN links over local font files.`,
       ].join("\n\n"),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
@@ -129,13 +130,7 @@ export class AgentTurnService {
       snapshots.length > 0 ? new Map(snapshots.map((s) => [s.path, s.content])) : null;
 
     if (sandbox.sandboxId !== this.conversation.sandboxId) {
-      // New sandbox: ensure the workspace exists (idempotent) before
-      // writing snapshots or letting the agent scan it.
-      try {
-        await sandbox.exec(`mkdir -p ${SANDBOX_WORKSPACE_ROOT}`);
-      } catch (error) {
-        console.error(`[AgentTurnService] mkdir workspace failed:`, error);
-      }
+      // workspaceRoot is pre-created by E2BSandbox.create; no mkdir needed here.
       if (snapshots.length > 0) {
         try {
           await sandbox.sdk.files.write(snapshots.map((s) => ({ path: s.path, data: s.content })));

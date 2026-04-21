@@ -1,3 +1,4 @@
+import binaryExtensions from "binary-extensions";
 import type { AgentMiddleware, Sandbox } from "@code-artisan/agent";
 import { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "@code-artisan/shared";
 
@@ -5,6 +6,26 @@ const DEFAULT_MAX_FILE_SIZE = 500 * 1024;
 const WRITE_TOOLS = new Set(["write_file", "str_replace"]);
 // mtime baseline file used by incremental scans (-newer marker).
 const SCAN_MARKER_PATH = "/tmp/.agent-scan-marker";
+
+// Sandbox.readFile returns UTF-8 decoded strings and the DB text column
+// rejects NUL bytes, so binary files (images, fonts, archives, ...) can't
+// round-trip. List comes from sindresorhus/binary-extensions — community
+// maintained, updated periodically. The AI is instructed to prefer inline
+// SVG / external CDN URLs instead.
+const BINARY_EXTENSION_SET = new Set(binaryExtensions);
+
+function isBinaryPath(path: string): boolean {
+  const dot = path.lastIndexOf(".");
+  if (dot < 0) return false;
+  return BINARY_EXTENSION_SET.has(path.slice(dot + 1).toLowerCase());
+}
+
+// Fallback for files whose extension isn't in the binary list but whose
+// content clearly isn't text (contains NUL). Runs after readFile so we
+// don't upsert garbage that would crash the text column on write.
+function looksBinaryContent(content: string): boolean {
+  return content.includes("\0");
+}
 
 // Generated from SANDBOX_IGNORED_DIRS so the exclude list stays in sync
 // with the frontend's defensive filter. Matches any depth: `./x/dir/*`,
@@ -79,11 +100,16 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
   }
 
   /**
-   * Hash only files whose mtime is newer than the marker. This is the hot
+   * Hash only files whose ctime is newer than the marker. This is the hot
    * path of our change detection: unchanged files pay zero I/O.
+   *
+   * ctime, not mtime: `mv`, `cp -p`, `tar x --preserve`, etc. preserve
+   * source mtime so `-newer` would miss them. ctime (inode metadata
+   * change time) updates on any rename/link/chmod/write so it's a strict
+   * superset — any mtime change also bumps ctime.
    */
   async function scanChangedSince(sandbox: Sandbox, markerPath: string): Promise<Map<string, string>> {
-    const cmd = `find . -type f ${IGNORE_FIND_ARGS} ${sizeArg} -newer ${markerPath} -exec sha256sum {} \\;`;
+    const cmd = `find . -type f ${IGNORE_FIND_ARGS} ${sizeArg} -cnewer ${markerPath} -exec sha256sum {} \\;`;
     const res = await sandbox.exec(cmd, { cwd: workspaceRoot });
     if (res.exitCode !== 0) {
       console.error("[FileTracker] scanChangedSince failed:", res.stderr);
@@ -122,6 +148,7 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
       console.warn(`[FileTracker] ignoring out-of-workspace write: ${absPath}`);
       return;
     }
+    if (isBinaryPath(absPath)) return;
     // No size cap here on purpose: LLMs don't typically touch large vendored
     // files, and capping explicit write-tool output would silently break
     // tracking mid-run (e.g. a single source file growing past the limit).
@@ -133,6 +160,7 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
       console.error("[FileTracker] readFile failed:", absPath, err);
       return;
     }
+    if (looksBinaryContent(content)) return;
     const hash = await hashString(content);
     if (manifest.get(relPath)?.hash === hash) return;
     manifest.set(relPath, { hash, content });
@@ -149,11 +177,13 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
 
     const updates: Array<{ path: string; content: string }> = [];
     for (const [relPath, hash] of changedHashes) {
+      if (isBinaryPath(relPath)) continue;
       // sha256 matched: touch/noop; skip readFile.
       if (manifest.get(relPath)?.hash === hash) continue;
       try {
         const content = await opts.sandbox.readFile(toAbs(relPath));
         if (content.length > maxFileSize) continue;
+        if (looksBinaryContent(content)) continue;
         manifest.set(relPath, { hash, content });
         updates.push({ path: toAbs(relPath), content });
       } catch (err) {
@@ -195,9 +225,11 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
       // locally after readFile, so no sandbox-side sha256sum is needed.
       const paths = await listAllPaths(opts.sandbox);
       for (const relPath of paths) {
+        if (isBinaryPath(relPath)) continue;
         try {
           const content = await opts.sandbox.readFile(toAbs(relPath));
           if (content.length > maxFileSize) continue;
+          if (looksBinaryContent(content)) continue;
           const hash = await hashString(content);
           manifest.set(relPath, { hash, content });
         } catch (err) {

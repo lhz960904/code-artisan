@@ -15,6 +15,7 @@ import type {
   GlobResult,
   GrepResult,
 } from "@code-artisan/agent";
+import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
@@ -34,8 +35,10 @@ export class E2BSandbox implements Sandbox {
   }
 
   async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
+    // Default cwd to the project workspace so AI-issued commands (npm install,
+    // ls, cat src/...) land where files live, without needing `cd` everywhere.
     const result = await this.sdk.commands.run(command, {
-      cwd: options?.cwd,
+      cwd: options?.cwd ?? SANDBOX_WORKSPACE_ROOT,
       timeoutMs: options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS,
     });
     return {
@@ -126,9 +129,16 @@ export class E2BSandbox implements Sandbox {
     await this.sdk.setTimeout(timeoutMs);
   }
 
-  /** Create a fresh E2B sandbox. */
+  /** Create a fresh E2B sandbox with the project workspace pre-created. */
   static async create(timeoutMs: number = DEFAULT_SANDBOX_LIFETIME_MS): Promise<E2BSandbox> {
     const sdk = await E2BSDK.create({ timeoutMs });
+    // Ensure workspaceRoot exists before any exec uses it as default cwd.
+    // Using files.makeDir (not exec) avoids the chicken-and-egg with default cwd.
+    try {
+      await sdk.files.makeDir(SANDBOX_WORKSPACE_ROOT);
+    } catch (err) {
+      console.error("[E2BSandbox] makeDir workspace failed:", err);
+    }
     return new E2BSandbox(sdk);
   }
 
