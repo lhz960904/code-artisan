@@ -1,9 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import { FileCode2 } from "lucide-react";
-import Editor from "@monaco-editor/react";
+import Editor, { type OnMount } from "@monaco-editor/react";
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useTheme } from "@/contexts/theme-context";
+
+type EditorInstance = Parameters<OnMount>[0];
 
 function getLanguage(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -36,17 +39,39 @@ function fileName(path: string): string {
 }
 
 export function EditorPanel() {
-  const { files, openTabs, activeTab, setActiveTab, closeTab } = useWorkspaceStore(
-    useShallow((s) => ({
-      files: s.files,
-      openTabs: s.openTabs,
-      activeTab: s.activeTab,
-      setActiveTab: s.setActiveTab,
-      closeTab: s.closeTab,
-    })),
-  );
+  const { files, openTabs, activeTab, setActiveTab, closeTab, pendingReveal, clearPendingReveal } =
+    useWorkspaceStore(
+      useShallow((s) => ({
+        files: s.files,
+        openTabs: s.openTabs,
+        activeTab: s.activeTab,
+        setActiveTab: s.setActiveTab,
+        closeTab: s.closeTab,
+        pendingReveal: s.pendingReveal,
+        clearPendingReveal: s.clearPendingReveal,
+      })),
+    );
   const { resolved } = useTheme();
   const content = activeTab ? files.get(activeTab) ?? "" : "";
+  const editorRef = useRef<EditorInstance | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
+
+  const handleMount: OnMount = (editor) => {
+    editorRef.current = editor;
+    setEditorReady(true);
+  };
+
+  useEffect(() => {
+    if (!pendingReveal || !editorReady) return;
+    if (activeTab !== pendingReveal.path) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const line = Math.max(1, pendingReveal.line);
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+    clearPendingReveal();
+  }, [pendingReveal, activeTab, content, editorReady, clearPendingReveal]);
 
   if (openTabs.length === 0) {
     return (
@@ -93,6 +118,7 @@ export function EditorPanel() {
           language={activeTab ? getLanguage(activeTab) : "plaintext"}
           value={content}
           path={activeTab ?? undefined}
+          onMount={handleMount}
           options={{
             readOnly: true,
             minimap: { enabled: false },

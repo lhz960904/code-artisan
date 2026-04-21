@@ -34,13 +34,14 @@ src/
       database-panel.tsx    Placeholder "Database coming soon" panel
       editor-panel.tsx      Monaco editor; theme follows useTheme().resolved (vs / vs-dark)
       terminal-panel.tsx    xterm.js; reads CSS vars for theme; on theme change waits 1 frame then term.refresh() to repaint scrollback
-      file-tree.tsx         Sticky h-9 "Files" header + tree body; px-3 padding matches ViewSwitcher's left offset
+      file-tree.tsx         `FilesPanel` — sticky h-9 tab header (Files / Search, Bolt-style) switches between `FileTreeView` (directory-sorted tree) and `FileSearch`. Files live-updated from SSE `file_update` / `file_delete` into the workspace store.
+      file-search.tsx       In-workspace grep: path + content matches, `Aa` case-sensitive + `.*` regex toggles, line-number preview, click-to-open
   hooks/
     use-chat.ts          SSE consumer backed by the TanStack Query cache; exposes { messages, status, sendMessage, stop, error }
     use-file-upload.ts   Selected-file lifecycle; each addFiles triggers an immediate background upload — state: uploading → done/error
     use-start-conversation.ts Shared "create conversation + navigate" flow (auth gate + store stash)
   stores/
-    workspace.ts         Live in-session workspace state (files map seeded from snapshots, open tabs, terminal history, preview URL, active view: "preview" | "code" | "database")
+    workspace.ts         Live in-session workspace state (files map seeded from snapshots, open tabs, terminal history, preview URL, active view: "preview" | "code" | "database"). `openFileAt(path, line)` writes a `pendingReveal` which EditorPanel's effect consumes to `revealLineInCenter` + focus, then clears.
     pending-prompt.ts    Cross-page prompt handoff: draft slot (Home→Dashboard, JSON-persisted via sessionStorage to survive GitHub OAuth) + byConversationId (Dashboard→chat), shape { prompt, attachments: Attachment[] }
   contexts/theme-context.tsx  light/dark/system toggle stored in localStorage
   lib/
@@ -59,7 +60,7 @@ public/, index.html, vite.config.ts, components.json (shadcn), eslint.config.js
 
 ## ChatStatus
 
-`ready | submitted | running | streaming | error`. Drives Sender's `busy`, the "Thinking…" indicator (shown only in `submitted` / `running`), and TodoListCard's live spinners (anything other than `ready` / `error`). `running` is skipped on the final assistant-text turn (no tool_use) so the UI doesn't flash before settling to `ready`.
+`ready | submitted | running | streaming | error`. Drives Sender's `busy`, the "Thinking" indicator (shown only in `submitted` / `running`), and TodoListCard's live spinners (anything other than `ready` / `error`). `running` is skipped on the final assistant-text turn (no tool_use) so the UI doesn't flash before settling to `ready`.
 
 ## Message rendering pipeline
 
@@ -79,7 +80,7 @@ Backend emits one UUID per assistant turn, shared across the turn's `partial` + 
 
 ## SSE events handled by `useChat`
 
-`user_message_saved` (swap optimistic id) · `partial` (status→streaming, upsert snapshot) · `message` (upsert; skip `running` flash on final assistant text) · `quota_exceeded` · `error`. Backend also emits `file_update` / `file_delete` — not currently consumed by the frontend; workspace files are seeded from the `fileSnapshots` query and refreshed when that query revalidates.
+`user_message_saved` (swap optimistic id) · `partial` (status→streaming, upsert snapshot) · `message` (upsert; skip `running` flash on final assistant text) · `title_update` · `file_update` / `file_delete` (pipe into `useWorkspaceStore.getState().updateFile` / `deleteFile` — file tree reflects changes live) · `quota_exceeded` · `error`. Initial files still come from the `fileSnapshots` query on mount; SSE takes over as mutations stream.
 
 ## Flows
 

@@ -9,6 +9,7 @@ import type {
 } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
 import { conversationKeys, conversationMessagesOptions, type ConversationResponse } from "@/api/queries";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "streaming" | "error";
 
@@ -121,6 +122,16 @@ export function useChat(
             (prev) =>
               prev?.map((c) => (c.id === conversationId ? { ...c, title: event.title } : c)),
           );
+          break;
+        }
+        case "file_update": {
+          const { updateFile } = useWorkspaceStore.getState();
+          for (const file of event.files) updateFile(file.path, file.content);
+          break;
+        }
+        case "file_delete": {
+          const { deleteFile } = useWorkspaceStore.getState();
+          for (const path of event.paths) deleteFile(path);
           break;
         }
         case "quota_exceeded":

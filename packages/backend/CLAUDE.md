@@ -68,7 +68,7 @@ drizzle.config.ts
 
 ## WebAgentEvent
 
-```
+```text
 { type: "user_message_saved", messageId }
 | { type: "partial", message: AssistantMessage, messageId }
 | { type: "message", message: AssistantMessage | ToolMessage, messageId }

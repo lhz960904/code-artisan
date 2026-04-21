@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileTree } from "@/components/workspace/file-tree";
+import { FilesPanel } from "@/components/workspace/file-tree";
 import { EditorPanel } from "@/components/workspace/editor-panel";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import { PreviewPanel } from "@/components/workspace/preview-panel";
@@ -48,8 +48,8 @@ function CodeView() {
           panelIds={["file-tree", "editor"]}
         >
           <ResizablePanel id="file-tree" defaultSize="22%" minSize="10%" maxSize="40%">
-            <div className="h-full overflow-y-auto bg-card">
-              <FileTree />
+            <div className="h-full bg-card">
+              <FilesPanel />
             </div>
           </ResizablePanel>
           <ResizableHandle className="w-px bg-border" />

@@ -9,6 +9,11 @@ interface TerminalEntry {
 
 export type WorkspaceView = "preview" | "code" | "database";
 
+interface PendingReveal {
+  path: string;
+  line: number;
+}
+
 interface WorkspaceState {
   files: Map<string, string>;
   openTabs: string[];
@@ -16,8 +21,10 @@ interface WorkspaceState {
   terminalHistory: TerminalEntry[];
   previewUrl: string | null;
   view: WorkspaceView;
+  pendingReveal: PendingReveal | null;
 
   openFile: (path: string) => void;
+  openFileAt: (path: string, line: number) => void;
   closeTab: (path: string) => void;
   setActiveTab: (path: string) => void;
   updateFile: (path: string, content: string) => void;
@@ -26,6 +33,7 @@ interface WorkspaceState {
   setPreviewUrl: (url: string | null) => void;
   setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
+  clearPendingReveal: () => void;
   reset: () => void;
 }
 
@@ -36,6 +44,7 @@ const freshState = () => ({
   terminalHistory: [] as TerminalEntry[],
   previewUrl: null as string | null,
   view: "code" as WorkspaceView,
+  pendingReveal: null as PendingReveal | null,
 });
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -46,6 +55,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       openTabs: s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path],
       activeTab: path,
     })),
+
+  openFileAt: (path, line) =>
+    set((s) => ({
+      openTabs: s.openTabs.includes(path) ? s.openTabs : [...s.openTabs, path],
+      activeTab: path,
+      pendingReveal: { path, line },
+    })),
+
+  clearPendingReveal: () => set({ pendingReveal: null }),
 
   closeTab: (path) =>
     set((s) => {
