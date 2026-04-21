@@ -62,9 +62,8 @@ describe("createTodoSystem (todo)", () => {
     });
 
     it("should update existing items by id when merge=true", async () => {
-      const { tool } = createTodoSystem();
+      const { tool, middleware } = createTodoSystem();
 
-      // Add initial items
       await tool.invoke({
         name: "demo",
         todos: [
@@ -74,7 +73,8 @@ describe("createTodoSystem (todo)", () => {
         merge: true,
       }, ctx);
 
-      // Update one item
+      await middleware.beforeAgentStep!({ agentContext: makeAgentContext(), step: 2 });
+
       const result = await tool.invoke({
         name: "demo",
         todos: [{ id: "1", content: "Task A", status: "completed" }],
@@ -87,13 +87,15 @@ describe("createTodoSystem (todo)", () => {
     });
 
     it("should append new items when merge=true and id is new", async () => {
-      const { tool } = createTodoSystem();
+      const { tool, middleware } = createTodoSystem();
 
       await tool.invoke({
         name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
+
+      await middleware.beforeAgentStep!({ agentContext: makeAgentContext(), step: 2 });
 
       const result = await tool.invoke({
         name: "demo",
@@ -155,7 +157,6 @@ describe("createTodoSystem (todo)", () => {
     it("should inject reminder after enough steps without todo_write", async () => {
       const { middleware, tool } = createTodoSystem();
 
-      // Create some todos
       await tool.invoke({
         name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
@@ -164,9 +165,8 @@ describe("createTodoSystem (todo)", () => {
 
       const modelContext = makeModelContext();
 
-      // Simulate 11 steps (threshold is 10)
       let reminderInjected = false;
-      for (let i = 0; i < 11; i++) {
+      for (let i = 0; i < 6; i++) {
         const result = await middleware.beforeModel!({ agentContext: makeAgentContext(), modelContext });
         if (result?.prompt && result.prompt.includes("todo_reminder")) {
           reminderInjected = true;
@@ -179,7 +179,6 @@ describe("createTodoSystem (todo)", () => {
     it("should not inject reminder right after todo_write is used", async () => {
       const { middleware, tool } = createTodoSystem();
 
-      // Create todos
       await tool.invoke({
         name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
@@ -188,8 +187,7 @@ describe("createTodoSystem (todo)", () => {
 
       const modelContext = makeModelContext();
 
-      // Only a few steps — well within threshold
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 3; i++) {
         const result = await middleware.beforeModel!({ agentContext: makeAgentContext(), modelContext });
         expect(result?.prompt?.includes("todo_reminder") ?? false).toBe(false);
       }
@@ -207,7 +205,6 @@ describe("createTodoSystem (todo)", () => {
       const modelContext = makeModelContext();
       let reminderCount = 0;
 
-      // Run 25 steps — should get at most 2 reminders (at ~step 11 and ~step 21)
       for (let i = 0; i < 25; i++) {
         const result = await middleware.beforeModel!({ agentContext: makeAgentContext(), modelContext });
         if (result?.prompt && result.prompt.includes("todo_reminder")) {
@@ -215,8 +212,8 @@ describe("createTodoSystem (todo)", () => {
         }
       }
 
-      expect(reminderCount).toBeLessThanOrEqual(2);
-      expect(reminderCount).toBeGreaterThanOrEqual(1);
+      expect(reminderCount).toBeLessThanOrEqual(5);
+      expect(reminderCount).toBeGreaterThanOrEqual(4);
     });
   });
 
@@ -232,23 +229,67 @@ describe("createTodoSystem (todo)", () => {
 
       const modelContext = makeModelContext();
 
-      // Simulate 9 steps (just under threshold)
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 4; i++) {
         await middleware.beforeModel!({ agentContext: makeAgentContext(), modelContext });
       }
 
-      // Simulate a todo_write tool use — resets counter
       await middleware.afterToolUse!({
         agentContext: makeAgentContext(),
         toolUse: { type: "tool_use", id: "call_1", name: "todo_write", input: {} },
         toolResult: "ok",
       });
 
-      // Another 9 steps — still under threshold, no reminder
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 4; i++) {
         const result = await middleware.beforeModel!({ agentContext: makeAgentContext(), modelContext });
         expect(result?.prompt?.includes("todo_reminder") ?? false).toBe(false);
       }
+    });
+
+    it("should reset concurrent-write counter on beforeAgentStep", async () => {
+      const { middleware, tool } = createTodoSystem();
+
+      await tool.invoke({
+        name: "demo",
+        todos: [{ id: "1", content: "Task A", status: "pending" }],
+        merge: false,
+      }, ctx);
+
+      const second = await tool.invoke({
+        name: "demo",
+        todos: [{ id: "2", content: "Task B", status: "pending" }],
+        merge: false,
+      }, ctx);
+      expect(second).toContain("Error");
+      expect(second).toContain("already called");
+
+      await middleware.beforeAgentStep!({ agentContext: makeAgentContext(), step: 2 });
+
+      const third = await tool.invoke({
+        name: "demo",
+        todos: [{ id: "3", content: "Task C", status: "pending" }],
+        merge: false,
+      }, ctx);
+      expect(third).not.toContain("Error");
+      expect(third).toContain("Task C");
+    });
+
+    it("should not mutate state when a concurrent write is rejected", async () => {
+      const { tool } = createTodoSystem();
+
+      const first = await tool.invoke({
+        name: "demo",
+        todos: [{ id: "1", content: "Task A", status: "pending" }],
+        merge: false,
+      }, ctx);
+      expect(first).toContain("Task A");
+
+      const second = await tool.invoke({
+        name: "demo",
+        todos: [{ id: "2", content: "Task B", status: "pending" }],
+        merge: false,
+      }, ctx);
+      expect(second).toContain("Error");
+      expect(second).not.toContain("Task B");
     });
 
     it("should not reset counter for other tools", async () => {

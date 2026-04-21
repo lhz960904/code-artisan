@@ -61,9 +61,12 @@ belong to (e.g. "Onboarding flow", "Fix auth regression").
 - merge=false: Replaces the entire list with the provided todos.`;
 
 const REMINDER_CONFIG = {
-  STEPS_SINCE_WRITE: 10,
-  STEPS_BETWEEN_REMINDERS: 10,
+  STEPS_SINCE_WRITE: 5,
+  STEPS_BETWEEN_REMINDERS: 5,
 } as const;
+
+const CONCURRENT_WRITE_ERROR =
+  "Error: todo_write was already called in this turn. Multiple concurrent todo_write calls create ambiguous state — only the first call took effect. Merge all updates into a single call next turn.";
 
 function formatSummary(name: string, todoList: TodoItem[]): string {
   const marker = {
@@ -92,6 +95,7 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
   let todoList: TodoItem[] = [];
   let stepsSinceLastWrite = Infinity;
   let stepsSinceLastReminder = Infinity;
+  let invocationsThisStep = 0;
 
   const tool = defineTool({
     name: TODO_WRITE_TOOL_NAME,
@@ -116,6 +120,10 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
         .describe("If true, merges into the existing list by id (existing ids updated, new ids appended). If false, replaces the entire list."),
     }),
     invoke: async ({ name, todos, merge }, _ctx) => {
+      invocationsThisStep++;
+      if (invocationsThisStep > 1) {
+        return CONCURRENT_WRITE_ERROR;
+      }
       if (merge) {
         for (const item of todos) {
           const idx = todoList.findIndex((t) => t.id === item.id);
@@ -134,6 +142,10 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
   });
 
   const middleware: AgentMiddleware = {
+    beforeAgentStep: async () => {
+      invocationsThisStep = 0;
+    },
+
     beforeModel: async ({ modelContext }) => {
       stepsSinceLastWrite++;
       stepsSinceLastReminder++;
