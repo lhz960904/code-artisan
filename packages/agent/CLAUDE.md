@@ -7,10 +7,13 @@ Environment-agnostic agent SDK. Runs a ReAct loop: feed messages to an LLM, extr
 ```text
 core/          Agent class + createAgent() factory — the loop itself
   agent.ts       invoke() and stream() async generators
-  index.ts       createAgent(): merges user tools/middlewares with defaults (user overrides by name)
+  index.ts       createAgent(): auto-wires skills + todo + loop-detection, appends user middlewares/tools
 types/         Public interfaces
   agent.ts       AgentContext, ModelContext, AgentOptions
-  messages/      Block-based content (text, image_url, thinking, tool_use, tool_result); roles system/user/assistant/tool; AssistantMessage carries usage
+  messages/      Block-based content: text, image_url, file (FileContent), thinking, tool_use, tool_result
+                   Roles: system / user / assistant / tool
+                   UserMessageContent = (text | image_url | file)[]  — FileContent aligns with Vercel AI SDK FilePart
+                   AssistantMessage carries `usage`
   provider/      LLMProvider abstract (invoke + stream)
   middleware.ts  8 hooks: before|afterModel, before|afterAgentRun, before|afterAgentStep, before|afterToolUse
 tools/         Registry + builtins
@@ -19,30 +22,38 @@ tools/         Registry + builtins
 middlewares/   Cross-cutting logic, folder-per-module
   loop-detection/  MD5 hash sliding window of (toolName+input); warn → shouldStop
   micro-compact/   Stub older tool_result content; keep N recent verbatim
-  auto-compact/    Summary-based history compaction
+  auto-compact/    Summary-based history compaction (onCompacted callback yields compacted summary msg)
   skills/          Load gray-matter frontmatter skills from disk
-  todo/            Todo system
+  todo/            createTodoSystem() → { tool: todo_write, middleware } — plan-scoped task tracking
 sandbox/       Abstraction: exec/readFile/writeFile/listDir/glob/grep
   local.ts       LocalSandbox (Node.js)
-community/     Provider impls (anthropic/, openai/)
+community/     Provider impls
+  anthropic/     AnthropicProvider (OpenAI-compatible baseURL override supported)
 index.ts       Public exports
 ```
 
 ## Streaming shape
 
 `stream({ mode })` yields `AgentEvent`:
-- `AgentPartialEvent` — partial token deltas (tool_use may have incomplete JSON input)
-- `AgentMessageEvent` — completed message
+- `AgentPartialEvent` — partial assistant snapshot; each yield supersedes the last (replace by identity, never append). A tool_use block may carry partial/empty `input` until JSON is well-formed.
+- `AgentMessageEvent` — completed assistant message or the tool message produced after local tool execution (ToolMessage is always atomic).
 
-`mode: "message"` skips partials. `invoke()` returns the final message array.
+Stream ends naturally when the generator returns. `mode: "message"` skips partials. `invoke()` returns the final message array.
 
 ## Core abstractions
 
 - **Agent** — stateful loop holding model, tools, middlewares, sandbox, messages.
 - **LLMProvider** — abstract `invoke` + `stream`.
 - **Tool** — Zod input schema + `invoke(input, ctx)`. `ctx` = `{ sandbox, abortSignal }`.
-- **Middleware** — sequential hooks; return `Partial<AgentContext>` to merge mutations.
+- **Middleware** — sequential hooks; return `Partial<AgentContext>` / `Partial<ModelContext>` / `Partial<AssistantMessage>` to merge mutations.
 - **Sandbox** — injected at agent creation; all builtin tools route through it.
+
+## createAgent defaults
+
+`createAgent({ model, sandbox, tools?, middlewares?, skillsDirs?, initMessages?, prompt?, maxSteps? })`:
+- Builtin tools (bash/read/write/strReplace/glob/grep/ls + todo_write) are prepended; `tools` override by name.
+- Middlewares auto-wired in order: `createSkillsMiddleware(skillsDirs)` → `todoSystem.middleware` → `loopDetectionMiddleware()` → ...user middlewares.
+- `skillsDirs` defaults to `[~/.agents/skills]`; pass `[]` to disable.
 
 ## Conventions
 
@@ -53,8 +64,8 @@ index.ts       Public exports
 
 ## Tech
 
-Bun + TS. `@anthropic-ai/sdk`, `openai`, `@modelcontextprotocol/sdk`, `@e2b/code-interpreter`, `zod`, `gray-matter`.
+Bun + TS. `@anthropic-ai/sdk`, `@modelcontextprotocol/sdk`, `zod`, `gray-matter`.
 
 ## Relationship
 
-Consumed by `@code-artisan/backend`, which injects `E2BSandbox`, wraps MCP tools via `defineTool`, adds quota middleware, and pipes `agent.stream()` into SSE. The message model is unified — backend persists JSONB that mirrors these shapes and rebuilds them via a bridge function.
+Consumed by `@code-artisan/backend`, which injects `E2BSandbox`, adds quota + file-tracker middlewares, and pipes `agent.stream()` into SSE. The message model is unified — backend persists JSONB that mirrors these shapes and rebuilds them via a bridge function that expands `metadata.attachments` into `image_url` / `file` blocks at run-time.
