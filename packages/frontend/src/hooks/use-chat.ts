@@ -8,7 +8,7 @@ import type {
   WebAgentEvent,
 } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
-import { conversationKeys, conversationMessagesOptions } from "@/api/queries";
+import { conversationKeys, conversationMessagesOptions, type ConversationResponse } from "@/api/queries";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "streaming" | "error";
 
@@ -110,6 +110,19 @@ export function useChat(
           } as StoredMessage);
           break;
         }
+        case "title_update": {
+          if (!conversationId) break;
+          queryClient.setQueryData<ConversationResponse>(
+            conversationKeys.detail(conversationId),
+            (prev) => (prev ? { ...prev, title: event.title } : prev),
+          );
+          queryClient.setQueryData<ConversationResponse[]>(
+            conversationKeys.all(),
+            (prev) =>
+              prev?.map((c) => (c.id === conversationId ? { ...c, title: event.title } : c)),
+          );
+          break;
+        }
         case "quota_exceeded":
           setStatus("error");
           setError(new Error("Token quota exceeded"));
@@ -120,7 +133,7 @@ export function useChat(
           break;
       }
     },
-    [conversationId, updateMessages, upsertMessage],
+    [conversationId, updateMessages, upsertMessage, queryClient],
   );
 
   const readStream = useCallback(

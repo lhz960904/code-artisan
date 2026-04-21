@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
+import { generateTitleMiddleware } from "./middlewares/generate-title";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -86,6 +87,13 @@ export class AgentTurnService {
       // check quota exceeded
       checkQuotaMiddleware(this.conversation.userId, () => {
         this.pendingEvents.push({ type: "quota_exceeded" });
+      }),
+      // auto-generate conversation title from first user message (skipped if title already set)
+      generateTitleMiddleware({
+        conversation: this.conversation,
+        onTitleReady: (title: string) => {
+          this.pendingEvents.push({ type: "title_update", title });
+        },
       }),
       // track file mutations (write tools + bash); stream to web + persist
       fileTrackerMiddleware({

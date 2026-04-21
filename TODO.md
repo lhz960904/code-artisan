@@ -28,7 +28,7 @@
 
 ### 前端体验
 
-- [ ] 新建聊天的名字修改，采取 backend 流式返回 title 事件，做更改
+- [x] 新建聊天的名字修改，采取 backend 流式返回 title 事件，做更改
 - [ ] workspace file tree UI 交互优化，即时响应流式数据
 - [ ] workspace editor panel UI 交互优化，即时响应流式数据
 - [ ] workspace terminal panel UI 交互优化，即时响应流式数据
