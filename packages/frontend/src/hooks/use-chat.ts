@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Attachment,
-  ImageURLContent,
   StoredMessage,
   StoredUserMessage,
   TextContent,
@@ -163,20 +162,7 @@ export function useChat(
 
       const optimisticId = crypto.randomUUID();
       optimisticUserIdRef.current = optimisticId;
-      const optimisticContent: Array<TextContent | ImageURLContent> = [];
-      if (attachments) {
-        for (const attachment of attachments) {
-          if (attachment.mimeType.startsWith("image/")) {
-            optimisticContent.push({
-              type: "image_url",
-              image_url: { url: `files/${attachment.fileId}` },
-            });
-          } else {
-            optimisticContent.push({ type: "text", text: `[File: ${attachment.fileName}]` });
-          }
-        }
-      }
-      if (content) optimisticContent.push({ type: "text", text: content });
+      const optimisticContent: TextContent[] = content ? [{ type: "text", text: content }] : [];
 
       updateMessages((prev) => [
         ...prev,
@@ -185,6 +171,7 @@ export function useChat(
           conversationId,
           role: "user",
           content: optimisticContent,
+          metadata: attachments && attachments.length > 0 ? { attachments } : undefined,
           createdAt: new Date().toISOString(),
         } as StoredUserMessage,
       ]);

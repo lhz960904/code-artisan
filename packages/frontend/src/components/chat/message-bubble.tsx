@@ -1,80 +1,39 @@
 import { useState } from "react";
-import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Archive, Brain, ChevronRight, File as FileIcon } from "lucide-react";
+import { cn, resolveAttachmentUrl } from "@/lib/utils";
 import { MarkdownRenderer } from "@/components/common/markdown-renderer";
-import { ToolCallItem } from "@/components/chat/tool-call-item";
 import type {
+  Attachment,
   StoredMessage,
-  StoredAssistantMessage,
   StoredUserMessage,
-  ToolUseContent,
-  ToolResultContent,
 } from "@code-artisan/shared";
 
-interface MessageBubbleProps {
-  message: StoredMessage;
-  /** Lookup tool_use_id → ToolResultContent from messages later in the thread. */
-  toolResultLookup: Map<string, ToolResultContent>;
-  /** Whether this message is currently being streamed. */
-  isStreaming?: boolean;
-}
+export function UserBubble({ message }: { message: StoredUserMessage }) {
+  const attachments = (message.metadata?.attachments ?? []) as Attachment[];
+  const text = message.content
+    .filter((block): block is { type: "text"; text: string } => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
 
-export function MessageBubble({ message, toolResultLookup, isStreaming }: MessageBubbleProps) {
-  // Compaction divider
-  if (message.metadata?.compacted) {
-    return (
-      <div className="flex items-center gap-3 py-2">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">Conversation compacted</span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-    );
-  }
-
-  // Tool-role messages are consumed by their paired assistant's
-  // ToolCallItem — skip here to avoid rendering outputs twice.
-  if (message.role === "tool") return null;
-
-  if (message.role === "user") {
-    return <UserBubble message={message as StoredUserMessage} />;
-  }
-
-  if (message.role === "assistant") {
-    return <AssistantBubble message={message as StoredAssistantMessage} toolResultLookup={toolResultLookup} isStreaming={isStreaming} />;
-  }
-
-  return null;
-}
-
-function UserBubble({ message }: { message: StoredUserMessage }) {
-  const hasAny = message.content.length > 0;
-  if (!hasAny) return null;
+  if (attachments.length === 0 && !text) return null;
 
   return (
     <div className="flex justify-end">
       <div className="max-w-[85%] space-y-2">
-        {/* Images first */}
-        {message.content.some((c) => c.type === "image_url") && (
+        {attachments.length > 0 && (
           <div className="flex flex-wrap justify-end gap-2">
-            {message.content.map((c, i) =>
-              c.type === "image_url" ? (
-                <img
-                  key={`img-${i}`}
-                  src={resolveImageUrl(c.image_url.url)}
-                  alt="attachment"
-                  className="max-h-48 max-w-64 rounded-lg border border-border object-cover"
-                />
-              ) : null,
+            {attachments.map((attachment) =>
+              attachment.mimeType.startsWith("image/") ? (
+                <ImageThumbnail key={attachment.fileId} attachment={attachment} />
+              ) : (
+                <FileChip key={attachment.fileId} attachment={attachment} />
+              ),
             )}
           </div>
         )}
-        {/* Then all text */}
-        {message.content.some((c) => c.type === "text") && (
+        {text && (
           <div className="rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground whitespace-pre-wrap">
-            {message.content
-              .filter((c): c is { type: "text"; text: string } => c.type === "text")
-              .map((c) => c.text)
-              .join("\n")}
+            {text}
           </div>
         )}
       </div>
@@ -82,55 +41,50 @@ function UserBubble({ message }: { message: StoredUserMessage }) {
   );
 }
 
-function AssistantBubble({
-  message,
-  toolResultLookup,
-  isStreaming,
-}: {
-  message: StoredAssistantMessage;
-  toolResultLookup: Map<string, ToolResultContent>;
-  isStreaming?: boolean;
-}) {
+export function AssistantText({ text }: { text: string }) {
   return (
-    <div className="space-y-2">
-      {message.content.map((part, i) => {
-        if (part.type === "text") {
-          return (
-            <div key={i} className="text-sm leading-relaxed text-foreground">
-              <MarkdownRenderer content={part.text} />
-            </div>
-          );
-        }
-        if (part.type === "thinking") {
-          // Only show thinking while streaming; hide after completion
-          if (!isStreaming) return null;
-          return <ThinkingBlock key={i} thinking={part.thinking} defaultOpen />;
-        }
-        if (part.type === "tool_use") {
-          const toolUse = part as ToolUseContent;
-          const result = toolResultLookup.get(toolUse.id);
-          return <ToolCallItem key={i} toolUse={toolUse} toolResult={result} />;
-        }
-        return null;
-      })}
+    <div className="text-sm leading-relaxed text-foreground">
+      <MarkdownRenderer content={text} />
     </div>
   );
 }
 
-function ThinkingBlock({ thinking, defaultOpen = false }: { thinking: string; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+export function ThinkingQuote({ thinking, isStreaming }: { thinking: string; isStreaming?: boolean }) {
+  const streaming = !!isStreaming;
+  const [override, setOverride] = useState<boolean | null>(null);
+  const [prevStreaming, setPrevStreaming] = useState(streaming);
+
+  // Reset the user's toggle on each streaming transition; default snaps back
+  // to expanded (while streaming) or collapsed (once done).
+  if (prevStreaming !== streaming) {
+    setPrevStreaming(streaming);
+    setOverride(null);
+  }
+
+  const open = override ?? streaming;
+
   return (
-    <div className="rounded-md border border-border bg-card">
+    <div className="space-y-2">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 p-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => !streaming && setOverride(!open)}
+        disabled={streaming}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:cursor-default"
       >
-        <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
-        Thought
+        {streaming ? (
+          <>
+            <Brain className="h-3.5 w-3.5 animate-pulse" />
+            <span className="animate-shimmer-text font-medium">Thinking</span>
+          </>
+        ) : (
+          <>
+            <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
+            <span className="font-medium">Thought</span>
+          </>
+        )}
       </button>
       {open && (
-        <div className="border-t border-border p-3 max-h-60 overflow-y-auto text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+        <div className="border-l-2 border-border pl-3 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
           {thinking}
         </div>
       )}
@@ -138,9 +92,61 @@ function ThinkingBlock({ thinking, defaultOpen = false }: { thinking: string; de
   );
 }
 
-function resolveImageUrl(url: string): string {
-  if (url.startsWith("http")) return url;
-  const baseUrl = import.meta.env.SUPABASE_URL as string;
-  const fileId = url.replace(/^files\//, "");
-  return `${baseUrl}/storage/v1/object/public/attachments/${fileId}`;
+export function CompactedBlock({ message }: { message: StoredMessage }) {
+  const [open, setOpen] = useState(false);
+  const summary = message.content
+    .filter((block): block is { type: "text"; text: string } => block.type === "text")
+    .map((block) => block.text)
+    .join("\n\n");
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs hover:bg-muted/40 transition-colors"
+      >
+        <Archive className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-foreground">Previous conversation compacted</div>
+          <div className="text-muted-foreground">Earlier messages replaced with a summary</div>
+        </div>
+        <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+      </button>
+      {open && summary && (
+        <div className="border-t border-border/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          {summary}
+        </div>
+      )}
+    </div>
+  );
 }
+
+function ImageThumbnail({ attachment }: { attachment: Attachment }) {
+  return (
+    <img
+      src={resolveAttachmentUrl(attachment.fileId)}
+      alt={attachment.fileName}
+      className="h-14 w-14 rounded-lg border border-border object-cover"
+    />
+  );
+}
+
+function FileChip({ attachment }: { attachment: Attachment }) {
+  return (
+    <div className="flex h-14 items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-xs">
+      <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <div className="truncate font-medium text-foreground">{attachment.fileName}</div>
+        <div className="text-muted-foreground">{formatBytes(attachment.size)}</div>
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+

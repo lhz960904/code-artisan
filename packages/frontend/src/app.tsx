@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { chatRoute } from "@/pages/chat";
+import { debugMessagesRoute } from "@/pages/debug-messages";
 import { homeRoute } from "@/pages/home";
 import { loginRoute } from "@/pages/login";
 import { authedRoute } from "@/pages/layout/authed";
@@ -10,7 +11,12 @@ import { dashboardRoute } from "./pages/dashboard";
 
 // appShellRoute.addChildren([mcpServersRoute])
 
-const routeTree = rootRoute.addChildren([loginRoute, homeRoute, authedRoute.addChildren([dashboardRoute, chatRoute])]);
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  homeRoute,
+  debugMessagesRoute,
+  authedRoute.addChildren([dashboardRoute, chatRoute]),
+]);
 
 const queryClient = new QueryClient({
   defaultOptions: {

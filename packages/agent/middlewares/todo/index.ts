@@ -46,6 +46,15 @@ const TOOL_DESCRIPTION = `Create and manage a structured task list for the curre
 - Complete current tasks before starting new ones
 - If blocked, keep the task as in_progress and create a new task for the blocker
 
+## Plan name
+
+Every call must include a short \`name\` identifying the *plan* these todos
+belong to (e.g. "Onboarding flow", "Fix auth regression").
+
+- Reuse the SAME \`name\` whenever updating statuses of todos you already
+  declared — they are grouped and rendered as a single plan.
+- Use a NEW \`name\` only when starting a fresh, unrelated plan.
+
 ## Merge Behavior
 
 - merge=true: Merges by id — existing ids are updated, new ids are appended. You can send only the changed items.
@@ -56,7 +65,7 @@ const REMINDER_CONFIG = {
   STEPS_BETWEEN_REMINDERS: 10,
 } as const;
 
-function formatSummary(todoList: TodoItem[]): string {
+function formatSummary(name: string, todoList: TodoItem[]): string {
   const marker = {
     pending: "[ ]",
     in_progress: "[>]",
@@ -64,7 +73,7 @@ function formatSummary(todoList: TodoItem[]): string {
   };
   const completed = todoList.reduce((acc, t) => acc + Number(t.status === "completed"), 0);
   const lines = todoList.map((t, i) => `${i + 1}. ${marker[t.status]} ${t.content}`).join("\n");
-  return `Todo list updated, ${completed}/${todoList.length} completed. \n${lines}`;
+  return `Plan "${name}" updated, ${completed}/${todoList.length} completed.\n${lines}`;
 }
 
 function formatReminder(todos: TodoItem[]): string {
@@ -88,6 +97,11 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
     name: TODO_WRITE_TOOL_NAME,
     description: TOOL_DESCRIPTION,
     parameters: z.object({
+      name: z
+        .string()
+        .describe(
+          "Short label identifying the plan these todos belong to. Reuse the same name when updating; use a new name only for a fresh plan.",
+        ),
       todos: z
         .array(
           z.object({
@@ -101,7 +115,7 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
         .boolean()
         .describe("If true, merges into the existing list by id (existing ids updated, new ids appended). If false, replaces the entire list."),
     }),
-    invoke: async ({ todos, merge }, _ctx) => {
+    invoke: async ({ name, todos, merge }, _ctx) => {
       if (merge) {
         for (const item of todos) {
           const idx = todoList.findIndex((t) => t.id === item.id);
@@ -115,7 +129,7 @@ export function createTodoSystem(): { middleware: AgentMiddleware; tool: Tool } 
         todoList = [...todos];
       }
       stepsSinceLastWrite = 0;
-      return formatSummary(todoList);
+      return formatSummary(name, todoList);
     },
   });
 

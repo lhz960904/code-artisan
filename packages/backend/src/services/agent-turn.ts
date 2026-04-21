@@ -1,16 +1,15 @@
 import {
   Agent,
-  AgentEvent,
   AgentMiddleware,
   AnthropicProvider,
   autoCompactMiddleware,
   createAgent,
-  LocalSandbox,
-  loopDetectionMiddleware,
   Message,
   microCompactMiddleware,
   Sandbox,
   UserMessage,
+  webFetchTool,
+  webSearchTool,
 } from "@code-artisan/agent";
 import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
@@ -114,7 +113,7 @@ export class AgentTurnService {
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
       // TODO: how to integration mcp tools and skills, if need to put in sandbox?
-      tools: [],
+      tools: [webSearchTool, webFetchTool],
       skillsDirs: [],
     });
   }

@@ -31,6 +31,7 @@ describe("createTodoSystem (todo)", () => {
       const { tool } = createTodoSystem();
 
       const result = await tool.invoke({
+        name: "demo",
         todos: [
           { id: "1", content: "Task A", status: "pending" },
           { id: "2", content: "Task B", status: "in_progress" },
@@ -47,6 +48,7 @@ describe("createTodoSystem (todo)", () => {
       const { tool } = createTodoSystem();
 
       const result = await tool.invoke({
+        name: "demo",
         todos: [
           { id: "1", content: "Task A", status: "pending" },
           { id: "2", content: "Task B", status: "completed" },
@@ -64,6 +66,7 @@ describe("createTodoSystem (todo)", () => {
 
       // Add initial items
       await tool.invoke({
+        name: "demo",
         todos: [
           { id: "1", content: "Task A", status: "pending" },
           { id: "2", content: "Task B", status: "pending" },
@@ -73,6 +76,7 @@ describe("createTodoSystem (todo)", () => {
 
       // Update one item
       const result = await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "completed" }],
         merge: true,
       }, ctx);
@@ -86,11 +90,13 @@ describe("createTodoSystem (todo)", () => {
       const { tool } = createTodoSystem();
 
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
 
       const result = await tool.invoke({
+        name: "demo",
         todos: [{ id: "2", content: "Task B", status: "in_progress" }],
         merge: true,
       }, ctx);
@@ -104,6 +110,7 @@ describe("createTodoSystem (todo)", () => {
       const { tool } = createTodoSystem();
 
       const result = await tool.invoke({
+        name: "demo",
         todos: [
           { id: "1", content: "Pending", status: "pending" },
           { id: "2", content: "InProgress", status: "in_progress" },
@@ -116,6 +123,18 @@ describe("createTodoSystem (todo)", () => {
       expect(result).toContain("[>] InProgress");
       expect(result).toContain("[x] Done");
       expect(result).toContain("1/3 completed");
+    });
+
+    it("should echo the plan name in the summary", async () => {
+      const { tool } = createTodoSystem();
+
+      const result = await tool.invoke({
+        name: "Onboarding flow",
+        todos: [{ id: "1", content: "Task A", status: "pending" }],
+        merge: false,
+      }, ctx);
+
+      expect(result).toContain('Plan "Onboarding flow"');
     });
   });
 
@@ -138,6 +157,7 @@ describe("createTodoSystem (todo)", () => {
 
       // Create some todos
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
@@ -161,6 +181,7 @@ describe("createTodoSystem (todo)", () => {
 
       // Create todos
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
@@ -178,6 +199,7 @@ describe("createTodoSystem (todo)", () => {
       const { middleware, tool } = createTodoSystem();
 
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
@@ -203,6 +225,7 @@ describe("createTodoSystem (todo)", () => {
       const { middleware, tool } = createTodoSystem();
 
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
@@ -232,6 +255,7 @@ describe("createTodoSystem (todo)", () => {
       const { middleware, tool } = createTodoSystem();
 
       await tool.invoke({
+        name: "demo",
         todos: [{ id: "1", content: "Task A", status: "pending" }],
         merge: true,
       }, ctx);
