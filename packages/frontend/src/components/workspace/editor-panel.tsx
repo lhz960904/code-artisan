@@ -91,9 +91,9 @@ export function EditorPanel() {
             key={path}
             onClick={() => setActiveTab(path)}
             className={cn(
-              "group flex shrink-0 items-center gap-1.5 border-r border-border px-3 text-xs",
+              "group flex shrink-0 items-center gap-1.5 border-r border-border px-3 text-xs transition-colors",
               activeTab === path
-                ? "bg-background text-foreground"
+                ? "bg-background text-foreground shadow-[inset_0_-2px_0_hsl(var(--primary))]"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
@@ -103,7 +103,7 @@ export function EditorPanel() {
                 e.stopPropagation();
                 closeTab(path);
               }}
-              className="ml-1 hidden rounded px-0.5 text-muted-foreground hover:text-destructive group-hover:inline"
+              className="ml-1 rounded px-0.5 text-muted-foreground invisible group-hover:visible hover:text-destructive"
             >
               ×
             </span>
