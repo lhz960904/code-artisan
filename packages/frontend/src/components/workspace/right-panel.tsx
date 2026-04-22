@@ -1,11 +1,12 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FilesPanel } from "@/components/workspace/file-tree";
 import { EditorPanel } from "@/components/workspace/editor-panel";
-import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import { TerminalPanel, TerminalToggleButton } from "@/components/workspace/terminal-panel";
 import { PreviewPanel } from "@/components/workspace/preview-panel";
 import { DatabasePanel } from "@/components/workspace/database-panel";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { usePanelRef } from "react-resizable-panels";
 import { fileSnapshotsOptions } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
 
@@ -32,25 +33,62 @@ export function RightPanel({ conversationId }: RightPanelProps) {
 }
 
 function CodeView() {
+  const terminalPanelRef = usePanelRef();
+  const [terminalCollapsed, setTerminalCollapsed] = useState(false);
+
+  const toggleTerminal = useCallback(() => {
+    const panel = terminalPanelRef.current;
+    if (!panel) return;
+
+    setTerminalCollapsed((prev) => !prev);
+    if (panel.isCollapsed()) {
+      panel.expand();
+      setTerminalCollapsed(false);
+    } else {
+      panel.collapse();
+      setTerminalCollapsed(true);
+    }
+  }, [terminalPanelRef]);
+
   return (
-    <ResizablePanelGroup orientation="vertical" id="workspace-code-vertical" panelIds={["editor-area", "terminal"]}>
-      <ResizablePanel id="editor-area" defaultSize="70%" minSize="30%">
-        <ResizablePanelGroup orientation="horizontal" id="workspace-code-horizontal" panelIds={["file-tree", "editor"]}>
-          <ResizablePanel id="file-tree" defaultSize="22%" minSize="10%" maxSize="40%">
-            <div className="h-full bg-card">
-              <FilesPanel />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle className="w-px bg-border" />
-          <ResizablePanel id="editor" defaultSize="78%">
-            <EditorPanel />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </ResizablePanel>
-      <ResizableHandle className="aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:bg-border" />
-      <ResizablePanel id="terminal" defaultSize="30%" minSize="15%">
-        <TerminalPanel />
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <div className="relative h-full">
+      <ResizablePanelGroup orientation="vertical" id="workspace-code-vertical" panelIds={["editor-area", "terminal"]}>
+        <ResizablePanel id="editor-area" defaultSize="70%" minSize="30%">
+          <ResizablePanelGroup
+            orientation="horizontal"
+            id="workspace-code-horizontal"
+            panelIds={["file-tree", "editor"]}
+          >
+            <ResizablePanel id="file-tree" defaultSize="22%" minSize="10%" maxSize="40%">
+              <div className="h-full bg-card">
+                <FilesPanel />
+              </div>
+            </ResizablePanel>
+            <ResizableHandle className="w-px bg-border" />
+            <ResizablePanel id="editor" defaultSize="78%">
+              <EditorPanel />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle className="aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:bg-border" />
+        <ResizablePanel
+          id="terminal"
+          defaultSize="30%"
+          minSize="15%"
+          collapsible
+          panelRef={terminalPanelRef}
+          onResize={(size) => {
+            setTerminalCollapsed(size.asPercentage === 0);
+          }}
+        >
+          <TerminalPanel collapsed={terminalCollapsed} onToggleCollapse={toggleTerminal} />
+        </ResizablePanel>
+      </ResizablePanelGroup>
+      {terminalCollapsed && (
+        <div className="absolute bottom-0 right-4">
+          <TerminalToggleButton onClick={toggleTerminal} />
+        </div>
+      )}
+    </div>
   );
 }
