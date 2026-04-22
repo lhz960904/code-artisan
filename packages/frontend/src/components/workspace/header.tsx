@@ -1,15 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import {
-  Eye,
-  Code2,
-  Database,
-  Coins,
-  LogOut,
-  Moon,
-  Sun,
-  Monitor,
-} from "lucide-react";
+import { Eye, Code2, Database, Coins, LogOut, Moon, Sun, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/common/logo";
@@ -87,18 +78,10 @@ function ViewSwitcher() {
       >
         <Eye className="h-3.5 w-3.5" />
       </SwitcherBtn>
-      <SwitcherBtn
-        active={effective === "code"}
-        onClick={() => setView("code")}
-        title="Code"
-      >
+      <SwitcherBtn active={effective === "code"} onClick={() => setView("code")} title="Code">
         <Code2 className="h-3.5 w-3.5" />
       </SwitcherBtn>
-      <SwitcherBtn
-        active={effective === "database"}
-        onClick={() => setView("database")}
-        title="Database"
-      >
+      <SwitcherBtn active={effective === "database"} onClick={() => setView("database")} title="Database">
         <Database className="h-3.5 w-3.5" />
       </SwitcherBtn>
     </div>
@@ -125,9 +108,7 @@ function SwitcherBtn({
       title={title}
       className={cn(
         "flex h-6 w-6 items-center justify-center rounded transition-colors",
-        active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:text-foreground",
+        active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
         disabled && "cursor-not-allowed opacity-40 hover:text-muted-foreground",
       )}
     >
@@ -145,9 +126,7 @@ function HeaderBrand({ title, children }: { title?: string; children?: React.Rea
       </Link>
       <span className="text-muted-foreground">/</span>
       {title !== undefined ? (
-        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
-          {title}
-        </span>
+        <span className="text-sm font-medium text-foreground truncate max-w-[200px]">{title}</span>
       ) : (
         children
       )}
@@ -169,9 +148,11 @@ function TokenBalance({ remaining }: { remaining: number }) {
 }
 
 function formatTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
+  const symbol = n < 0 ? "-" : "";
+  n = Math.abs(n);
+  if (n >= 1_000_000) return `${symbol}${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${symbol}${(n / 1_000).toFixed(1)}K`;
+  return `${symbol}${String(n)}`;
 }
 
 function UserAvatar() {
@@ -250,9 +231,7 @@ function ThemeBtn({
       title={title}
       className={cn(
         "flex h-5 w-5 items-center justify-center rounded transition-colors",
-        active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:text-foreground",
+        active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}

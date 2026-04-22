@@ -80,8 +80,7 @@ export class AgentTurnService {
       yield { ...event, messageId };
       if (isAssistant) assistantMessageId = null;
     }
-    // Drain any events pushed after the last agent yield (e.g. quota_exceeded
-    // when shouldStop=true causes the agent to exit without yielding again).
+    // Drain any events pushed after the last agent yield (e.g. quota_exceeded)
     while (this.pendingEvents.length > 0) {
       yield this.pendingEvents.shift()!;
     }
