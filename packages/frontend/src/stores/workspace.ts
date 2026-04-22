@@ -17,10 +17,12 @@ interface PendingReveal {
 
 interface WorkspaceState {
   files: Map<string, string>;
+  snapshotsLoaded: boolean;
   openTabs: string[];
   activeTab: string | null;
   terminalSessions: TerminalSession[];
   previewUrl: string | null;
+  pendingChatMessage: string | null;
   view: WorkspaceView;
   pendingReveal: PendingReveal | null;
 
@@ -35,16 +37,19 @@ interface WorkspaceState {
   setPreviewUrl: (url: string | null) => void;
   setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
+  setPendingChatMessage: (msg: string | null) => void;
   clearPendingReveal: () => void;
   reset: () => void;
 }
 
 const freshState = () => ({
   files: new Map<string, string>(),
+  snapshotsLoaded: false,
   openTabs: [] as string[],
   activeTab: null as string | null,
   terminalSessions: [] as TerminalSession[],
   previewUrl: null as string | null,
+  pendingChatMessage: null as string | null,
   view: "code" as WorkspaceView,
   pendingReveal: null as PendingReveal | null,
 });
@@ -114,8 +119,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setSnapshots: (snapshots) => {
     const fileMap = new Map<string, string>();
     for (const s of snapshots) fileMap.set(s.path, s.content);
-    set({ files: fileMap });
+    set({ files: fileMap, snapshotsLoaded: true });
   },
+
+  setPendingChatMessage: (msg) => set({ pendingChatMessage: msg }),
 
   reset: () => set(freshState()),
 }));
