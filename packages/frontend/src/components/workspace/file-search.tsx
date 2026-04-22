@@ -73,7 +73,7 @@ function Highlight({ text, query, caseSensitive, useRegex }: HighlightProps) {
       parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
     }
     parts.push(
-      <mark key={key++} className="rounded-sm bg-yellow-400/40 text-foreground">
+      <mark key={key++} className="rounded-xs bg-yellow-400/40 text-foreground">
         {match[0]}
       </mark>,
     );

@@ -103,7 +103,7 @@ export function EditorPanel() {
                 e.stopPropagation();
                 closeTab(path);
               }}
-              className="ml-1 rounded px-0.5 text-muted-foreground invisible group-hover:visible hover:text-destructive"
+              className="ml-1 rounded px-0.5 text-muted-foreground invisible group-hover:visible hover:text-foreground text-base"
             >
               ×
             </span>
