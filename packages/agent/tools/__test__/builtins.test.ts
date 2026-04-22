@@ -30,55 +30,6 @@ describe("bashTool", () => {
     const result = await bashTool.invoke({ description: "test", command: "true" }, ctx);
     expect(result).toBe("(no output)");
   });
-
-  it("should spawn a detached process when run_in_background is true", async () => {
-    const result = await bashTool.invoke(
-      { description: "test", command: "sleep 0.05 && echo done", run_in_background: true },
-      ctx,
-    );
-    expect(result).toMatch(/^Started in background\. PID: \d+\./);
-  });
-});
-
-// ---- LocalSandbox.spawn ----
-
-describe("LocalSandbox.spawn", () => {
-  it("should stream stdout chunks and resolve wait() with exit code", async () => {
-    const sandbox = new LocalSandbox();
-    const handle = await sandbox.spawn("printf 'line1\\nline2\\n'");
-
-    let stdout = "";
-    for await (const chunk of handle.stdout) stdout += chunk;
-
-    const exitCode = await handle.wait();
-    expect(stdout).toBe("line1\nline2\n");
-    expect(exitCode).toBe(0);
-  });
-
-  it("should surface stderr separately", async () => {
-    const sandbox = new LocalSandbox();
-    const handle = await sandbox.spawn("printf 'oops\\n' 1>&2");
-
-    let stderr = "";
-    for await (const chunk of handle.stderr) stderr += chunk;
-
-    await handle.wait();
-    expect(stderr).toBe("oops\n");
-  });
-
-  it("should report non-zero exit code via wait()", async () => {
-    const sandbox = new LocalSandbox();
-    const handle = await sandbox.spawn("exit 7");
-    const exitCode = await handle.wait();
-    expect(exitCode).toBe(7);
-  });
-
-  it("should throw from exposePort (local sandbox has no public URL)", async () => {
-    const sandbox = new LocalSandbox();
-    const handle = await sandbox.spawn("sleep 0.05");
-    await expect(handle.exposePort(3000)).rejects.toThrow(/exposePort/);
-    await handle.kill();
-  });
 });
 
 // ---- ls ----

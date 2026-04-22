@@ -6,23 +6,24 @@ import {
   createAgent,
   Message,
   microCompactMiddleware,
-  ProcessHandle,
   UserMessage,
   webFetchTool,
   webSearchTool,
 } from "@code-artisan/agent";
 import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
-import { getSandboxPool } from "../sandbox";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
+import { acquireConversationSandbox } from "./conversation-sandbox";
 import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
-import { checkQuotaMiddleware, isQuotaExceeded } from "./middlewares/check-quota";
+import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { generateTitleMiddleware } from "./middlewares/generate-title";
+import { getShellSessionManager } from "./shell-session";
+import { createWebBashTool, createBashOutputTool, createKillShellTool } from "./web-tools";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -43,12 +44,6 @@ export class AgentTurnService {
     const [expandedUserMessage] = buildAgentMessages([userMessage]);
 
     yield { type: "user_message_saved", messageId: userMessageId };
-
-    // Wire terminal streaming: whenever the bash tool starts a background
-    // process via sandbox.spawn(), fan its stdout/stderr into SSE events.
-    sandboxResult.sandbox.onProcessStart = (handle, command) => {
-      this._relayBackgroundProcess(handle, command);
-    };
 
     if (!this.agent) {
       this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles);
@@ -128,74 +123,30 @@ export class AgentTurnService {
         `The shell's default working directory is already \`${SANDBOX_WORKSPACE_ROOT}\`. Run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${SANDBOX_WORKSPACE_ROOT}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.`,
         `Do not read or write files outside \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. dotfiles in /home/user, system paths) — they are invisible to the user and won't be persisted.`,
         `Binary assets (images, fonts, archives, media files) are NOT persisted across sessions — only text files are. For images, prefer inline SVG or external CDN URLs (e.g. unsplash, placehold.co) over curl/wget downloads. For fonts, prefer Google Fonts / self-hosting CDN links over local font files.`,
-        `For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — the command returns immediately with a PID and its output streams live into the user's terminal panel. Do NOT background one-shot commands; those must run foreground so you receive their output directly.`,
+        `For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — you get a session id, and output streams live into the user's terminal panel. After starting a server, wait ~2s and call \`bash_output\` to verify it booted (check status + last output). If the session already exited with non-zero code, diagnose from the tail before retrying. Use \`kill_shell\` to stop a session. Do NOT background one-shot commands whose output you need immediately.`,
       ].join("\n\n"),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
       // TODO: how to integration mcp tools and skills, if need to put in sandbox?
-      tools: [webSearchTool, webFetchTool],
+      tools: [
+        createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
+        createBashOutputTool({ manager: getShellSessionManager() }),
+        createKillShellTool({ manager: getShellSessionManager() }),
+        webSearchTool,
+        webFetchTool,
+      ],
       skillsDirs: [],
     });
   }
 
   private async _setupSandbox(): Promise<{ sandbox: E2BSandbox; initialFiles: Map<string, string> | null }> {
-    const pool = getSandboxPool();
-    const [sandbox, snapshots] = await Promise.all([
-      pool.acquire(this.conversation.sandboxId ?? undefined),
-      db.select().from(fileSnapshots).where(eq(fileSnapshots.conversationId, this.conversation.id)),
-    ]);
-
+    const { sandbox, snapshots } = await acquireConversationSandbox(
+      this.conversation.id,
+      this.conversation.sandboxId,
+    );
     const initialFiles: Map<string, string> | null =
       snapshots.length > 0 ? new Map(snapshots.map((s) => [s.path, s.content])) : null;
-
-    if (sandbox.sandboxId !== this.conversation.sandboxId) {
-      // workspaceRoot is pre-created by E2BSandbox.create; no mkdir needed here.
-      if (snapshots.length > 0) {
-        try {
-          await sandbox.sdk.files.write(snapshots.map((s) => ({ path: s.path, data: s.content })));
-        } catch (error) {
-          console.error(`[AgentTurnService] batch snapshot restore failed:`, error);
-        }
-      }
-      await db
-        .update(conversations)
-        .set({ sandboxId: sandbox.sandboxId })
-        .where(eq(conversations.id, this.conversation.id));
-    }
-
     return { sandbox, initialFiles };
-  }
-
-  /**
-   * Fan a newly-spawned process's stdout/stderr into SSE terminal events.
-   * Called by the sandbox's `onProcessStart` hook for each background bash.
-   */
-  private _relayBackgroundProcess(handle: ProcessHandle, command: string): void {
-    const terminalId = randomUUID();
-    this.pendingEvents.push({ type: "terminal_start", id: terminalId, command });
-
-    const relayStream = async (stream: AsyncIterable<string>, kind: "stdout" | "stderr") => {
-      try {
-        for await (const chunk of stream) {
-          this.pendingEvents.push({ type: "terminal_chunk", id: terminalId, stream: kind, data: chunk });
-        }
-      } catch (err) {
-        console.error(`[AgentTurnService] terminal ${kind} stream error:`, err);
-      }
-    };
-
-    void relayStream(handle.stdout, "stdout");
-    void relayStream(handle.stderr, "stderr");
-
-    handle.wait().then(
-      (exitCode) => {
-        this.pendingEvents.push({ type: "terminal_exit", id: terminalId, exitCode });
-      },
-      (err) => {
-        console.error(`[AgentTurnService] terminal wait error:`, err);
-        this.pendingEvents.push({ type: "terminal_exit", id: terminalId, exitCode: -1 });
-      },
-    );
   }
 
   /** Insert a message to db; returns the row id (caller may supply one to pre-bind). */

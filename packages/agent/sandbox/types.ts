@@ -8,9 +8,6 @@
 export interface Sandbox {
   /** Execute a shell command and return combined stdout/stderr. */
   exec(command: string, options?: ExecOptions): Promise<ExecResult>;
-  /** Start a long-running process and return a handle. The process keeps running
-   *  until it exits on its own or the caller calls `kill()`. */
-  spawn(command: string, options?: SpawnOptions): Promise<ProcessHandle>;
   /** Read a text file. */
   readFile(path: string): Promise<string>;
   /** Write a text file. Creates parent directories if missing. */
@@ -35,28 +32,6 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
   exitCode: number;
-}
-
-export interface SpawnOptions {
-  /** Working directory override for this command. Defaults to sandbox's cwd. */
-  cwd?: string;
-}
-
-export interface ProcessHandle {
-  readonly pid: number;
-  /** Yields stdout chunks as decoded strings. Completes when the process exits. */
-  readonly stdout: AsyncIterable<string>;
-  /** Yields stderr chunks as decoded strings. Completes when the process exits. */
-  readonly stderr: AsyncIterable<string>;
-  /** Resolves with the exit code once the process terminates. */
-  wait(): Promise<number>;
-  /** Non-blocking liveness check. */
-  isAlive(): boolean;
-  /** Terminate the process. Defaults to SIGTERM. */
-  kill(signal?: "SIGTERM" | "SIGKILL"): Promise<void>;
-  /** Map a port inside the sandbox to a public URL. Only meaningful for
-   *  remote sandboxes (E2B). Local sandboxes should throw. */
-  exposePort(port: number): Promise<string>;
 }
 
 export interface WriteFileOptions {

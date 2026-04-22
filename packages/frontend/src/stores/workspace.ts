@@ -1,13 +1,6 @@
 import { create } from "zustand";
 import type { FileSnapshot } from "@/api";
 
-export interface TerminalSession {
-  id: string;
-  command: string;
-  status: "running" | "exited";
-  exitCode?: number;
-}
-
 const WORKSPACE_VIEWS = ["preview", "code", "database"] as const;
 export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number];
 
@@ -21,7 +14,6 @@ interface WorkspaceState {
   snapshotsLoaded: boolean;
   openTabs: string[];
   activeTab: string | null;
-  terminalSessions: TerminalSession[];
   previewUrl: string | null;
   pendingChatMessage: string | null;
   view: WorkspaceView;
@@ -33,8 +25,6 @@ interface WorkspaceState {
   setActiveTab: (path: string) => void;
   updateFile: (path: string, content: string) => void;
   deleteFile: (path: string) => void;
-  startTerminalSession: (id: string, command: string) => void;
-  exitTerminalSession: (id: string, exitCode: number) => void;
   setPreviewUrl: (url: string | null) => void;
   setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
@@ -61,7 +51,6 @@ const freshState = () => ({
   snapshotsLoaded: false,
   openTabs: [] as string[],
   activeTab: null as string | null,
-  terminalSessions: [] as TerminalSession[],
   previewUrl: null as string | null,
   pendingChatMessage: null as string | null,
   view: readPersistedView(),
@@ -112,16 +101,6 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         s.activeTab === path ? (nextTabs.length > 0 ? nextTabs[nextTabs.length - 1] : null) : s.activeTab;
       return { files: nextFiles, openTabs: nextTabs, activeTab: nextActive };
     }),
-
-  startTerminalSession: (id, command) =>
-    set((s) => ({
-      terminalSessions: [...s.terminalSessions, { id, command, status: "running" }],
-    })),
-
-  exitTerminalSession: (id, exitCode) =>
-    set((s) => ({
-      terminalSessions: s.terminalSessions.map((t) => (t.id === id ? { ...t, status: "exited", exitCode } : t)),
-    })),
 
   setPreviewUrl: (url) => set({ previewUrl: url }),
 

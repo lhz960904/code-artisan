@@ -1,14 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useTheme } from "@/contexts/theme-context";
-import { terminalBus } from "@/lib/terminal-bus";
-import { Plus, X, ChevronDown, ChevronUp, TerminalSquare, Zap } from "lucide-react";
+import { TerminalWsClient, type SessionMeta } from "@/lib/terminal-ws";
+import { Plus, X, ChevronDown, ChevronUp, TerminalSquare, Zap, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const MAX_TERMINALS = 3;
+type DisplaySession = Omit<SessionMeta, "status"> & { status: SessionMeta["status"] | "pending" };
+
+const MAX_USER_TERMINALS = 3;
+const DEFAULT_COLS = 120;
+const DEFAULT_ROWS = 30;
 
 const TERMINAL_THEMES = {
   dark: {
@@ -66,68 +69,136 @@ function getTerminalTheme(mode: "dark" | "light") {
 }
 
 interface TerminalInstance {
-  id: number;
   terminal: Terminal;
   fitAddon: FitAddon;
-  inputBuffer: string;
+  observer: ResizeObserver;
+  attached: boolean;
 }
 
 interface TerminalPanelProps {
+  conversationId: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
 
-export function TerminalPanel({ collapsed, onToggleCollapse }: TerminalPanelProps) {
-  const [tabs, setTabs] = useState<number[]>([]);
-  const [activeTab, setActiveTab] = useState(0);
-  const instancesRef = useRef<Map<number, TerminalInstance>>(new Map());
-  const containersRef = useRef<Map<number, HTMLDivElement>>(new Map());
+export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: TerminalPanelProps) {
+  const [sessions, setSessions] = useState<DisplaySession[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const wsRef = useRef<TerminalWsClient | null>(null);
+  const instancesRef = useRef<Map<string, TerminalInstance>>(new Map());
+  const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const { resolved } = useTheme();
   const resolvedRef = useRef(resolved);
+  // eslint-disable-next-line react-hooks/refs
   resolvedRef.current = resolved;
 
-  const addTerminal = useCallback(() => {
-    if (tabs.length >= MAX_TERMINALS) return;
-    console.log("addTerminal", tabs, Math.max(...tabs));
-    const id = Math.max(...tabs, 0) + 1;
-    setTabs((prev) => [...prev, id]);
-    setActiveTab(id);
-  }, [tabs]);
-
-  const removeTerminal = useCallback(
-    (id: number) => {
-      const instance = instancesRef.current.get(id);
-      if (instance) {
-        instance.terminal.dispose();
-        instancesRef.current.delete(id);
+  // ---- WebSocket lifecycle ----
+  useEffect(() => {
+    const client = new TerminalWsClient(conversationId);
+    wsRef.current = client;
+    const unsubscribe = client.subscribe((event) => {
+      switch (event.op) {
+        case "sessions":
+          setSessions((prev) => {
+            // Preserve any local drafts — server has no record of them yet.
+            const drafts = prev.filter((s) => s.status === "pending");
+            return [...event.sessions, ...drafts];
+          });
+          break;
+        case "session_started":
+          setSessions((prev) =>
+            prev.some((s) => s.id === event.meta.id) ? prev : [...prev, event.meta],
+          );
+          break;
+        case "session_ended":
+          // Auto-close the tab when the underlying PTY exits (agent kill,
+          // user kill, or crash). The xterm scrollback is torn down with it,
+          // so if the user wants to keep crash output they should copy it
+          // before killing.
+          setSessions((prev) => prev.filter((s) => s.id !== event.sessionId));
+          break;
+        case "created": {
+          const { draftId, meta } = event;
+          // `session_started` is broadcast to *all* subscribers (including us)
+          // and typically arrives before `created`, so the real meta may
+          // already be in state. Drop both the draft and any duplicate, then
+          // append the authoritative meta once.
+          setSessions((prev) => {
+            const cleaned = prev.filter((s) => s.id !== draftId && s.id !== meta.id);
+            return [...cleaned, meta];
+          });
+          setActiveId((current) => (current && draftId && current === draftId ? meta.id : current));
+          break;
+        }
+        case "create_failed": {
+          const { draftId, message } = event;
+          if (draftId) {
+            setSessions((prev) => prev.filter((s) => s.id !== draftId));
+            setActiveId((current) => (current === draftId ? null : current));
+          }
+          console.warn("[terminal-ws] create failed:", message);
+          break;
+        }
+        case "snapshot": {
+          const inst = instancesRef.current.get(event.sessionId);
+          if (inst && event.data) inst.terminal.write(event.data);
+          break;
+        }
+        case "data": {
+          const inst = instancesRef.current.get(event.sessionId);
+          if (inst) inst.terminal.write(event.data);
+          break;
+        }
+        case "error":
+          console.warn("[terminal-ws]", event.message, event.cause);
+          break;
+        default:
+          break;
       }
+    });
+    return () => {
+      unsubscribe();
+      client.close();
+      wsRef.current = null;
+    };
+  }, [conversationId]);
+
+  // ---- Auto-select an active tab when one becomes available / disappears ----
+  useEffect(() => {
+    if (sessions.length === 0) {
+      if (activeId !== null) setActiveId(null);
+      return;
+    }
+    if (!activeId || !sessions.some((s) => s.id === activeId)) {
+      setActiveId(sessions[0].id);
+    }
+  }, [sessions, activeId]);
+
+  // ---- Drop xterm instances for sessions that disappeared from the server ----
+  useEffect(() => {
+    const alive = new Set(sessions.map((s) => s.id));
+    for (const [id, inst] of instancesRef.current) {
+      if (alive.has(id)) continue;
+      inst.observer.disconnect();
+      inst.terminal.dispose();
+      instancesRef.current.delete(id);
       containersRef.current.delete(id);
-      const nextTabs = tabs.filter((t) => t !== id);
-      if (activeTab === id) {
-        setActiveTab(nextTabs[nextTabs.length - 1]);
-      }
-      setTabs(nextTabs);
-    },
-    [activeTab, tabs, setActiveTab],
-  );
+    }
+  }, [sessions]);
 
-  // init xterm instance
-  const initTerminal = useCallback((tabId: number, container: HTMLDivElement | null) => {
+  // ---- Mount/reattach an xterm instance per session container ----
+  const initInstance = useCallback((session: SessionMeta, container: HTMLDivElement | null) => {
     if (!container) return;
-    // already initialized, skip
-    if (instancesRef.current.has(tabId)) {
-      // container may change, reattach
-      const inst = instancesRef.current.get(tabId)!;
-      if (containersRef.current.get(tabId) !== container) {
-        containersRef.current.set(tabId, container);
+    const existing = instancesRef.current.get(session.id);
+    if (existing) {
+      if (containersRef.current.get(session.id) !== container) {
+        containersRef.current.set(session.id, container);
         container.innerHTML = "";
-        inst.terminal.open(container);
-        inst.fitAddon.fit();
+        existing.terminal.open(container);
+        existing.fitAddon.fit();
       }
       return;
     }
-
-    containersRef.current.set(tabId, container);
 
     const term = new Terminal({
       theme: getTerminalTheme(resolvedRef.current),
@@ -136,136 +207,115 @@ export function TerminalPanel({ collapsed, onToggleCollapse }: TerminalPanelProp
       cursorBlink: true,
       disableStdin: false,
       scrollback: 5000,
-      convertEol: true,
+      // PTY emits CRLF natively — don't auto-translate.
+      convertEol: false,
     });
-
-    const fit = new FitAddon();
-    term.loadAddon(fit);
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
     term.open(container);
-    fit.fit();
+    fitAddon.fit();
 
-    const instance: TerminalInstance = {
-      id: tabId,
-      terminal: term,
-      fitAddon: fit,
-      inputBuffer: "",
-    };
+    const ws = wsRef.current;
+    ws?.attach(session.id, term.cols, term.rows);
+    term.onData((data) => ws?.input(session.id, data));
 
-    // 处理用户输入
-    term.onData((data) => {
-      if (data === "\r") {
-        // 回车 — 回调留空，后续可接入 shell
-        // const _command = instance.inputBuffer;
-        instance.inputBuffer = "";
-        term.write("\r\n");
-        // TODO: onCommand?.(_command)
-      } else if (data === "\x7f") {
-        // 退格
-        if (instance.inputBuffer.length > 0) {
-          instance.inputBuffer = instance.inputBuffer.slice(0, -1);
-          term.write("\b \b");
-        }
-      } else if (data >= " " || data === "\t") {
-        instance.inputBuffer += data;
-        term.write(data);
-      }
+    const observer = new ResizeObserver(() => {
+      fitAddon.fit();
+      ws?.resize(session.id, term.cols, term.rows);
     });
-
-    instancesRef.current.set(tabId, instance);
-
-    // ResizeObserver
-    const observer = new ResizeObserver(() => fit.fit());
     observer.observe(container);
 
-    // 监听 terminalBus 事件 — 第一个 tab (id=0) 接收所有事件
-    if (tabId === 0) {
-      const unsubscribe = terminalBus.subscribe((event) => {
-        switch (event.type) {
-          case "start":
-            term.writeln(`\x1b[36m$ ${event.command}\x1b[0m`);
-            break;
-          case "chunk":
-            term.write(event.data);
-            break;
-          case "exit":
-            if (event.exitCode !== 0) {
-              term.writeln(`\r\n\x1b[31m[process exited with code ${event.exitCode}]\x1b[0m`);
-            }
-            break;
-          case "clear":
-            term.clear();
-            break;
-        }
-      });
-
-      // 存储 unsubscribe 用于清理
-      (instance as any)._unsubscribe = unsubscribe;
-      (instance as any)._observer = observer;
-    } else {
-      (instance as any)._observer = observer;
-    }
+    instancesRef.current.set(session.id, { terminal: term, fitAddon, observer, attached: true });
+    containersRef.current.set(session.id, container);
   }, []);
 
-  // change tab fit
+  // ---- Refit the active terminal when tab/collapsed state changes ----
   useEffect(() => {
-    const instance = instancesRef.current.get(activeTab);
-    if (instance) {
-      requestAnimationFrame(() => instance.fitAddon.fit());
-    }
-  }, [activeTab, collapsed]);
+    if (!activeId) return;
+    const inst = instancesRef.current.get(activeId);
+    if (!inst) return;
+    requestAnimationFrame(() => inst.fitAddon.fit());
+  }, [activeId, collapsed]);
 
-  // theme change update all terminals
+  // ---- Theme repaint ----
   useEffect(() => {
     const theme = getTerminalTheme(resolved);
-    instancesRef.current.forEach((inst) => {
-      const id = requestAnimationFrame(() => {
+    for (const inst of instancesRef.current.values()) {
+      requestAnimationFrame(() => {
         inst.terminal.options.theme = theme;
         inst.terminal.refresh(0, inst.terminal.rows - 1);
       });
-      return () => cancelAnimationFrame(id);
-    });
+    }
   }, [resolved]);
 
-  // cleanup
+  // ---- Final cleanup on unmount ----
   useEffect(() => {
     return () => {
-      instancesRef.current.forEach((inst) => {
-        (inst as any)._unsubscribe?.();
-        (inst as any)._observer?.disconnect();
+      for (const inst of instancesRef.current.values()) {
+        inst.observer.disconnect();
         inst.terminal.dispose();
-      });
+      }
       instancesRef.current.clear();
+      containersRef.current.clear();
     };
   }, []);
+
+  // ---- User actions ----
+  const userTabCount = sessions.filter((s) => s.owner === "user").length;
+
+  const addTerminal = useCallback(() => {
+    if (userTabCount >= MAX_USER_TERMINALS) return;
+    const draftId = crypto.randomUUID();
+    const draft: DisplaySession = {
+      id: draftId,
+      conversationId,
+      pid: 0,
+      command: "bash -l",
+      owner: "user",
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    setSessions((prev) => [...prev, draft]);
+    setActiveId(draftId);
+    wsRef.current?.create({ draftId, cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
+  }, [userTabCount, conversationId]);
+
+  const removeTerminal = useCallback((id: string) => {
+    const session = sessions.find((s) => s.id === id);
+    if (!session) return;
+    // Always drop the tab locally on click — the xterm instance cleanup runs
+    // from the `sessions` diff effect. If it's a running server-backed session
+    // we fire-and-forget the kill; the server's `session_ended` arrives later
+    // and becomes a no-op since the id is already gone.
+    if (session.status === "running") wsRef.current?.kill(id);
+    else if (session.status !== "pending") wsRef.current?.detach(id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setActiveId((current) => (current === id ? null : current));
+  }, [sessions]);
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 border-b border-border bg-card px-2 py-1">
-        <TabItem
-          id={1000}
-          name="DEV"
-          isActive={activeTab === 1000}
-          onClick={setActiveTab}
-          icon={<Zap className="size-3.5 text-[#E5C07B]" />}
-        />
+        {sessions.length === 0 && (
+          <div className="px-3 py-1 text-xs text-muted-foreground">No active sessions</div>
+        )}
 
-        {tabs.map((tabId) => {
-          const isActive = tabId === activeTab;
-          return (
-            <TabItem
-              key={tabId}
-              id={tabId}
-              name={`Terminal ${tabId}`}
-              isActive={isActive}
-              onClick={setActiveTab}
-              icon={<TerminalSquare className="size-3.5" />}
-              onClose={removeTerminal}
-            />
-          );
-        })}
+        {sessions.map((session) => (
+          <TabItem
+            key={session.id}
+            id={session.id}
+            label={tabLabel(session)}
+            isActive={session.id === activeId}
+            status={session.status}
+            owner={session.owner}
+            onClick={setActiveId}
+            onClose={removeTerminal}
+          />
+        ))}
 
-        {/* Add terminal button */}
-        {tabs.length < MAX_TERMINALS && (
+        {userTabCount < MAX_USER_TERMINALS && (
           <button
             className="flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
             onClick={addTerminal}
@@ -275,7 +325,6 @@ export function TerminalPanel({ collapsed, onToggleCollapse }: TerminalPanelProp
           </button>
         )}
 
-        {/* Collapse button — pushed to the right */}
         {onToggleCollapse && (
           <button
             className="ml-auto flex items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
@@ -286,65 +335,88 @@ export function TerminalPanel({ collapsed, onToggleCollapse }: TerminalPanelProp
           </button>
         )}
       </div>
-      {collapsed ? (
-        <div className="relative flex-1 overflow-hidden bg-card">
-          {tabs.map((tabId) => (
+
+      <div className="relative flex-1 overflow-hidden bg-card p-2">
+        {sessions.map((session) =>
+          session.status === "pending" ? (
             <div
-              key={tabId}
-              ref={(el) => {
-                if (el) initTerminal(tabId, el);
-              }}
-              className={cn("absolute inset-0", tabId === activeTab ? "block" : "hidden")}
+              key={session.id}
+              className={cn(
+                "absolute inset-2 flex items-center justify-center gap-2 text-sm text-muted-foreground",
+                session.id === activeId ? "flex" : "hidden",
+              )}
+            >
+              <Loader2 className="size-4 animate-spin" />
+              <span>Starting session…</span>
+            </div>
+          ) : (
+            <div
+              key={session.id}
+              ref={(el) => initInstance(session as SessionMeta, el)}
+              className={cn("absolute inset-2", session.id === activeId ? "block" : "hidden")}
             />
-          ))}
-        </div>
-      ) : null}
+          ),
+        )}
+      </div>
     </div>
   );
 }
 
+function tabLabel(session: DisplaySession): string {
+  if (session.status === "pending") return "Starting…";
+  if (session.owner === "user") return `Terminal ${session.pid}`;
+  // Truncate long agent commands in the tab label.
+  const cmd = session.command.length > 24 ? `${session.command.slice(0, 21)}…` : session.command;
+  return cmd || "agent";
+}
+
 function TabItem({
   id,
-  name,
+  label,
   isActive,
+  status,
+  owner,
   onClick,
   onClose,
-  icon,
 }: {
-  id: number;
-  name: string;
+  id: string;
+  label: string;
   isActive: boolean;
-  onClick: (id: number) => void;
-  onClose?: (id: number) => void;
-  icon?: React.ReactNode;
+  status: DisplaySession["status"];
+  owner: "agent" | "user";
+  onClick: (id: string) => void;
+  onClose: (id: string) => void;
 }) {
+  const isPending = status === "pending";
+  const BaseIcon = owner === "agent" ? Zap : TerminalSquare;
   return (
     <div
-      key={id}
       className={cn(
         "group flex items-center gap-1.5 rounded-full px-3 py-1 text-xs cursor-pointer transition-colors",
         isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
       )}
       onClick={() => onClick(id)}
     >
-      {icon ?? <TerminalSquare className="size-3.5" />}
-      <span>{name}</span>
-      {onClose && (
-        <button
-          className="ml-0.5 rounded transition-opacity hover:bg-accent cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose(id);
-          }}
-        >
-          <X className="size-3" />
-        </button>
+      {isPending ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <BaseIcon className={cn("size-3.5", owner === "agent" && "text-[#E5C07B]")} />
       )}
+      <span>{label}</span>
+      <button
+        className="ml-0.5 rounded transition-opacity hover:bg-accent cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose(id);
+        }}
+      >
+        <X className="size-3" />
+      </button>
     </div>
   );
 }
 
-/** 小型 toggle 按钮，用于收起后在右下角展示 */
+/** Toggle button shown at the bottom-right when the terminal panel is collapsed. */
 export function TerminalToggleButton({ onClick }: { onClick: () => void }) {
   return (
     <button

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
+import { websocket } from "hono/bun";
 import { env } from "./env.js";
 import { errorHandler, notFoundHandler, ok } from "./http/index.js";
 import { auth } from "./auth.js";
@@ -11,6 +12,7 @@ import { snapshotRouter } from "./routes/snapshot.js";
 import { attachmentRouter } from "./routes/attachment.js";
 import { userRouter } from "./routes/user.js";
 import { settingRouter } from "./routes/setting.js";
+import { terminalWsRouter } from "./routes/terminal-ws.js";
 
 const app = new Hono();
 
@@ -22,6 +24,9 @@ app.get("/api/health", (c) => ok(c, { status: "ok" }));
 
 // better-auth handler — handles /api/auth/sign-in/*, /callback/*, /session, etc.
 app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
+
+// WebSocket routes authenticate per-upgrade via cookie (see terminal-ws).
+app.route("/api/terminal", terminalWsRouter);
 
 // Everything below requires an authenticated session.
 app.use("/api/*", requireAuth);
@@ -45,5 +50,6 @@ const BUN_IDLE_TIMEOUT_SEC = 120;
 export default {
   port: env.PORT,
   fetch: app.fetch,
+  websocket,
   idleTimeout: BUN_IDLE_TIMEOUT_SEC,
 };

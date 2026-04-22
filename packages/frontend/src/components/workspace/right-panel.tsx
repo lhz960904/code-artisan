@@ -26,13 +26,13 @@ export function RightPanel({ conversationId }: RightPanelProps) {
   return (
     <div className="h-full overflow-hidden">
       {view === "preview" && <PreviewPanel />}
-      {view === "code" && <CodeView />}
+      {view === "code" && <CodeView conversationId={conversationId} />}
       {view === "database" && <DatabasePanel />}
     </div>
   );
 }
 
-function CodeView() {
+function CodeView({ conversationId }: { conversationId: string }) {
   const terminalPanelRef = usePanelRef();
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
@@ -81,7 +81,11 @@ function CodeView() {
             setTerminalCollapsed(size.asPercentage === 0);
           }}
         >
-          <TerminalPanel collapsed={terminalCollapsed} onToggleCollapse={toggleTerminal} />
+          <TerminalPanel
+            conversationId={conversationId}
+            collapsed={terminalCollapsed}
+            onToggleCollapse={toggleTerminal}
+          />
         </ResizablePanel>
       </ResizablePanelGroup>
       {terminalCollapsed && (

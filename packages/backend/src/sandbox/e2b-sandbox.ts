@@ -6,13 +6,10 @@
  * to E2B microVMs via the SDK.
  */
 import { Sandbox as E2BSDK, FileType } from "@e2b/code-interpreter";
-import type { CommandHandle as E2BCommandHandle } from "@e2b/code-interpreter";
 import type {
   Sandbox,
   ExecOptions,
   ExecResult,
-  SpawnOptions,
-  ProcessHandle,
   WriteFileOptions,
   FileEntry,
   GlobResult,
@@ -22,16 +19,46 @@ import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
+/** E2B's `pty.create` default is 60s — way too short for an interactive shell
+ *  or a dev server. Set to 1h, which is the max sandbox lifetime on Hobby
+ *  accounts (Pro goes up to 24h); either way the sandbox's own idle-kill
+ *  timer will terminate the PTY long before this upper bound fires.
+ *
+ *  Phase 2: a long-lived PTY (e.g. dev server across multiple agent turns)
+ *  also needs the sandbox to be kept alive beyond 10min idle — see
+ *  §8.1 in docs/shell-session-redesign.md for keepalive / pause-resume. */
+const DEFAULT_PTY_TIMEOUT_MS = 60 * 60 * 1000;
 const LIST_DIR_LIMIT = 500;
 const GREP_MAX_LINES = 500;
 const GLOB_MAX_FILES = 500;
 
+export interface PtyHandle {
+  readonly pid: number;
+  sendInput(data: string): Promise<void>;
+  resize(cols: number, rows: number): Promise<void>;
+  /** E2B only supports SIGKILL; signal arg accepted for API symmetry. */
+  kill(signal?: "SIGTERM" | "SIGKILL"): Promise<void>;
+  isAlive(): boolean;
+  wait(): Promise<number>;
+}
+
+export interface PtyCreateOpts {
+  cols: number;
+  rows: number;
+  cwd?: string;
+  env?: Record<string, string>;
+  onData: (data: string) => void;
+  onExit?: (exitCode: number) => void;
+}
+
 export class E2BSandbox implements Sandbox {
   readonly sdk: E2BSDK;
 
-  /** Fires inside `spawn()` whenever a background process starts. Set by
-   *  `AgentTurnService` to fan the handle's stdout/stderr into SSE events. */
-  onProcessStart?: (handle: ProcessHandle, command: string) => void;
+  /** PTY namespace — backend-only API, not part of the agent `Sandbox` interface.
+   *  Consumed by ShellSessionManager to back long-running shell sessions. */
+  readonly pty = {
+    create: (opts: PtyCreateOpts): Promise<PtyHandle> => this._createPty(opts),
+  };
 
   constructor(sdk: E2BSDK) {
     this.sdk = sdk;
@@ -41,9 +68,50 @@ export class E2BSandbox implements Sandbox {
     return this.sdk.sandboxId;
   }
 
+  private async _createPty(opts: PtyCreateOpts): Promise<PtyHandle> {
+    const decoder = new TextDecoder();
+    const handle = await this.sdk.pty.create({
+      cols: opts.cols,
+      rows: opts.rows,
+      cwd: opts.cwd ?? SANDBOX_WORKSPACE_ROOT,
+      envs: opts.env,
+      timeoutMs: DEFAULT_PTY_TIMEOUT_MS,
+      onData: (data) => opts.onData(decoder.decode(data, { stream: true })),
+    });
+
+    let alive = true;
+    const exitPromise = handle
+      .wait()
+      .then((r) => {
+        alive = false;
+        const code = r.exitCode ?? 0;
+        opts.onExit?.(code);
+        return code;
+      })
+      .catch((err: unknown) => {
+        alive = false;
+        const code = (err as { exitCode?: number }).exitCode ?? -1;
+        opts.onExit?.(code);
+        return code;
+      });
+
+    const pid = handle.pid;
+    const sdk = this.sdk;
+    const encoder = new TextEncoder();
+
+    return {
+      pid,
+      sendInput: (data: string) => sdk.pty.sendInput(pid, encoder.encode(data)),
+      resize: (cols: number, rows: number) => sdk.pty.resize(pid, { cols, rows }),
+      kill: async () => {
+        await sdk.pty.kill(pid);
+      },
+      isAlive: () => alive,
+      wait: () => exitPromise,
+    };
+  }
+
   async exec(command: string, options?: ExecOptions): Promise<ExecResult> {
-    // Default cwd to the project workspace so AI-issued commands (npm install,
-    // ls, cat src/...) land where files live, without needing `cd` everywhere.
     const result = await this.sdk.commands.run(command, {
       cwd: options?.cwd ?? SANDBOX_WORKSPACE_ROOT,
       timeoutMs: options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS,
@@ -53,28 +121,6 @@ export class E2BSandbox implements Sandbox {
       stderr: result.stderr,
       exitCode: result.exitCode,
     };
-  }
-
-  async spawn(command: string, options?: SpawnOptions): Promise<ProcessHandle> {
-    const stdoutQueue = new StreamQueue<string>();
-    const stderrQueue = new StreamQueue<string>();
-
-    const handle = await this.sdk.commands.run(command, {
-      cwd: options?.cwd ?? SANDBOX_WORKSPACE_ROOT,
-      background: true,
-      onStdout: (data) => stdoutQueue.push(data),
-      onStderr: (data) => stderrQueue.push(data),
-    });
-
-    // Close queues once the process terminates so their AsyncIterables end.
-    handle.wait().catch(() => undefined).finally(() => {
-      stdoutQueue.close();
-      stderrQueue.close();
-    });
-
-    const wrapped = new E2BProcessHandle(handle, stdoutQueue, stderrQueue, this.sdk);
-    this.onProcessStart?.(wrapped, command);
-    return wrapped;
   }
 
   async readFile(path: string): Promise<string> {
@@ -179,84 +225,3 @@ export class E2BSandbox implements Sandbox {
 }
 
 export { DEFAULT_SANDBOX_LIFETIME_MS };
-
-class E2BProcessHandle implements ProcessHandle {
-  readonly pid: number;
-  readonly stdout: AsyncIterable<string>;
-  readonly stderr: AsyncIterable<string>;
-
-  constructor(
-    private handle: E2BCommandHandle,
-    stdoutQueue: StreamQueue<string>,
-    stderrQueue: StreamQueue<string>,
-    private sdk: E2BSDK,
-  ) {
-    this.pid = handle.pid;
-    this.stdout = { [Symbol.asyncIterator]: () => stdoutQueue.iterator() };
-    this.stderr = { [Symbol.asyncIterator]: () => stderrQueue.iterator() };
-  }
-
-  async wait(): Promise<number> {
-    try {
-      const result = await this.handle.wait();
-      return result.exitCode ?? 0;
-    } catch (err) {
-      // CommandExitError carries the exit code on non-zero termination.
-      const code = (err as { exitCode?: number }).exitCode;
-      if (typeof code === "number") return code;
-      throw err;
-    }
-  }
-
-  isAlive(): boolean {
-    return this.handle.exitCode === undefined;
-  }
-
-  async kill(_signal?: "SIGTERM" | "SIGKILL"): Promise<void> {
-    // E2B only supports SIGKILL; signal arg is accepted for API symmetry.
-    await this.handle.kill();
-  }
-
-  async exposePort(port: number): Promise<string> {
-    return this.sdk.getHost(port);
-  }
-}
-
-/** Minimal async queue: `push` from producers, iterate as AsyncGenerator,
- *  `close` to signal end-of-stream. Used to bridge E2B's callback-based
- *  stdout/stderr API into our AsyncIterable ProcessHandle shape. */
-class StreamQueue<T> {
-  private values: T[] = [];
-  private pending: Array<(result: IteratorResult<T>) => void> = [];
-  private closed = false;
-
-  push(value: T): void {
-    if (this.closed) return;
-    const resolver = this.pending.shift();
-    if (resolver) resolver({ value, done: false });
-    else this.values.push(value);
-  }
-
-  close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    while (this.pending.length > 0) {
-      this.pending.shift()!({ value: undefined as unknown as T, done: true });
-    }
-  }
-
-  async *iterator(): AsyncGenerator<T> {
-    while (true) {
-      if (this.values.length > 0) {
-        yield this.values.shift()!;
-        continue;
-      }
-      if (this.closed) return;
-      const result = await new Promise<IteratorResult<T>>((resolve) => {
-        this.pending.push(resolve);
-      });
-      if (result.done) return;
-      yield result.value;
-    }
-  }
-}

@@ -4,7 +4,6 @@ import type { Attachment, StoredMessage, StoredUserMessage, TextContent, WebAgen
 import { API_BASE } from "@/api/client";
 import { conversationKeys, conversationMessagesOptions, quotaKeys, type ConversationResponse } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { terminalBus } from "@/lib/terminal-bus";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "streaming" | "error";
 
@@ -117,20 +116,6 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
         case "file_delete": {
           const { deleteFile } = useWorkspaceStore.getState();
           for (const path of event.paths) deleteFile(path);
-          break;
-        }
-        case "terminal_start": {
-          useWorkspaceStore.getState().startTerminalSession(event.id, event.command);
-          terminalBus.emit({ type: "start", id: event.id, command: event.command });
-          break;
-        }
-        case "terminal_chunk": {
-          terminalBus.emit({ type: "chunk", id: event.id, stream: event.stream, data: event.data });
-          break;
-        }
-        case "terminal_exit": {
-          useWorkspaceStore.getState().exitTerminalSession(event.id, event.exitCode);
-          terminalBus.emit({ type: "exit", id: event.id, exitCode: event.exitCode });
           break;
         }
         case "quota_exceeded":

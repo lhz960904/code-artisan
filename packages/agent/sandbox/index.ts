@@ -2,8 +2,6 @@ export type {
   Sandbox,
   ExecOptions,
   ExecResult,
-  SpawnOptions,
-  ProcessHandle,
   WriteFileOptions,
   FileEntry,
   GlobResult,
