@@ -149,9 +149,11 @@ function TokenBalance({ remaining }: { remaining: number }) {
 }
 
 function formatTokens(n: number) {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
+  const symbol = n < 0 ? "-" : "";
+  n = Math.abs(n);
+  if (n >= 1_000_000) return `${symbol}${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${symbol}${(n / 1_000).toFixed(1)}K`;
+  return `${symbol}${String(n)}`;
 }
 
 function UserAvatar() {
