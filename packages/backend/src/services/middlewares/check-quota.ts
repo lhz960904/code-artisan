@@ -49,6 +49,12 @@ async function loadQuota(userId: string): Promise<CachedQuota> {
   }
 }
 
+/** Returns true if the user has no tokens remaining. Uses the same LRU cache. */
+export async function isQuotaExceeded(userId: string): Promise<boolean> {
+  const quota = quotaCache.get(userId) ?? (await loadQuota(userId));
+  return quota.totalTokens - quota.usedTokens <= 0;
+}
+
 /**
  * Check quota before every LLM call. If quota is exhausted, signal the
  * agent to stop cooperatively.

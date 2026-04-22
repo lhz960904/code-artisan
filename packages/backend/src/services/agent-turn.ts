@@ -20,7 +20,7 @@ import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
-import { checkQuotaMiddleware } from "./middlewares/check-quota";
+import { checkQuotaMiddleware, isQuotaExceeded } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { generateTitleMiddleware } from "./middlewares/generate-title";
 
@@ -43,6 +43,12 @@ export class AgentTurnService {
     const [expandedUserMessage] = buildAgentMessages([userMessage]);
 
     yield { type: "user_message_saved", messageId: userMessageId };
+
+    // Server-side pre-flight: stop before any model invocation.
+    if (await isQuotaExceeded(this.conversation.userId)) {
+      yield { type: "quota_exceeded" };
+      return;
+    }
 
     // Wire terminal streaming: whenever the bash tool starts a background
     // process via sandbox.spawn(), fan its stdout/stderr into SSE events.
