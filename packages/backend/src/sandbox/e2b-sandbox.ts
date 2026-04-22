@@ -20,7 +20,8 @@ import type {
 } from "@code-artisan/agent";
 import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 
-const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
+// 5 minutes covers npm install, builds, and other long one-shot commands.
+const DEFAULT_EXEC_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
 const LIST_DIR_LIMIT = 500;
 const GREP_MAX_LINES = 500;

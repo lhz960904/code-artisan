@@ -40,10 +40,11 @@ app.get("*", serveStatic({ root: "./dist/public", path: "index.html" }));
 
 console.log(`Server running on http://localhost:${env.PORT}`);
 
-const BUN_IDLE_TIMEOUT_SEC = 120;
-
 export default {
   port: env.PORT,
   fetch: app.fetch,
-  idleTimeout: BUN_IDLE_TIMEOUT_SEC,
+  // 0 disables idle timeout so SSE streams are not severed by Bun while
+  // the agent is waiting for a long tool call (npm install, builds, etc.).
+  // The SSE heartbeat at 15s handles proxy/LB keepalive.
+  idleTimeout: 0,
 };
