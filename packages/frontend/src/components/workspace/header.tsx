@@ -14,7 +14,8 @@ import {
 import { conversationDetailOptions, quotaOptions } from "@/api";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useTheme } from "@/contexts/theme-context";
-import { useWorkspaceStore, type WorkspaceView } from "@/stores/workspace";
+import { useWorkspaceStore } from "@/stores/workspace";
+import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   conversationId: string;
@@ -62,27 +63,27 @@ function HeaderShell({ children }: { children: React.ReactNode }) {
 function ViewSwitcher() {
   const view = useWorkspaceStore((s) => s.view);
   const setView = useWorkspaceStore((s) => s.setView);
-  const previewUrl = useWorkspaceStore((s) => s.previewUrl);
-  const effective: WorkspaceView = view === "preview" && !previewUrl ? "code" : view;
+  const views = ["preview", "code", "database"] as const;
+  const activeIndex = Math.max(views.indexOf(view), 0);
 
   return (
     <div
-      className="absolute top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background p-0.5"
+      className="absolute top-1/2 grid -translate-y-1/2 grid-cols-3 items-center rounded-md border border-border bg-background p-0.5"
       style={{ left: "calc(var(--chat-panel-width, 28%))" }}
     >
-      <SwitcherBtn
-        active={effective === "preview"}
-        disabled={!previewUrl}
-        onClick={() => setView("preview")}
-        title="Preview"
-      >
-        <Eye className="h-3.5 w-3.5" />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0.5 left-0.5 top-0.5 w-[calc((100%-4px)/3)] rounded-[5px] bg-muted transition-transform duration-300 ease-out"
+        style={{ transform: `translateX(${activeIndex * 100}%)` }}
+      />
+      <SwitcherBtn active={view === "preview"} onClick={() => setView("preview")} title="Preview">
+        <Eye />
       </SwitcherBtn>
-      <SwitcherBtn active={effective === "code"} onClick={() => setView("code")} title="Code">
-        <Code2 className="h-3.5 w-3.5" />
+      <SwitcherBtn active={view === "code"} onClick={() => setView("code")} title="Code">
+        <Code2 />
       </SwitcherBtn>
-      <SwitcherBtn active={effective === "database"} onClick={() => setView("database")} title="Database">
-        <Database className="h-3.5 w-3.5" />
+      <SwitcherBtn active={view === "database"} onClick={() => setView("database")} title="Database">
+        <Database />
       </SwitcherBtn>
     </div>
   );
@@ -102,18 +103,22 @@ function SwitcherBtn({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <Button
+      variant="ghost"
+      size="sm"
       disabled={disabled}
       title={title}
+      onClick={onClick}
       className={cn(
-        "flex h-6 w-6 items-center justify-center rounded transition-colors",
-        active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-        disabled && "cursor-not-allowed opacity-40 hover:text-muted-foreground",
+        "relative z-10 h-7 w-8 px-0 transition-colors hover:bg-transparent cursor-pointer",
+        disabled && "cursor-not-allowed opacity-40",
+        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
       )}
+      tabIndex={disabled ? -1 : 0}
+      type="button"
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -136,14 +141,10 @@ function HeaderBrand({ title, children }: { title?: string; children?: React.Rea
 
 function TokenBalance({ remaining }: { remaining: number }) {
   return (
-    <button
-      type="button"
-      title={`${remaining.toLocaleString()} tokens remaining`}
-      className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:bg-accent"
-    >
+    <Button type="button" title={`${remaining.toLocaleString()} tokens remaining`} variant="outline" size="sm">
       <Coins className="h-3.5 w-3.5 text-muted-foreground" />
       <span className="tabular-nums">{formatTokens(remaining)}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -175,7 +176,7 @@ function UserAvatar() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex h-7 w-7 shrink-0 overflow-hidden rounded-full outline-none ring-offset-background transition-shadow hover:ring-2 hover:ring-ring hover:ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex h-8 w-8 shrink-0 overflow-hidden rounded-full outline-none ring-offset-background transition-shadow hover:ring-2 hover:ring-ring hover:ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           {user.image ? (
             <img src={user.image} alt={label} className="h-full w-full object-cover" />

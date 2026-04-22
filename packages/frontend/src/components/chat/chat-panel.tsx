@@ -6,6 +6,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { Sender } from "@/components/chat/sender";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -17,6 +18,8 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialSentForRef = useRef<string | null>(null);
+  const pendingChatMessage = useWorkspaceStore((s) => s.pendingChatMessage);
+  const setPendingChatMessage = useWorkspaceStore((s) => s.setPendingChatMessage);
 
   // invoke agent immediately if there is pending prompt
   useEffect(() => {
@@ -27,6 +30,13 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     initialSentForRef.current = conversationId;
     sendMessage(pending.prompt, pending.attachments.length > 0 ? pending.attachments : undefined);
   }, [conversationId, status, sendMessage]);
+
+  // send pending chat message triggered by workspace UI (e.g. Preview panel "Start Server" button)
+  useEffect(() => {
+    if (status !== "ready" || !pendingChatMessage) return;
+    setPendingChatMessage(null);
+    sendMessage(pendingChatMessage);
+  }, [pendingChatMessage, status, sendMessage, setPendingChatMessage]);
 
   // scroll to bottom when messages change
   useEffect(() => {
