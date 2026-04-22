@@ -6,10 +6,13 @@
  * to E2B microVMs via the SDK.
  */
 import { Sandbox as E2BSDK, FileType } from "@e2b/code-interpreter";
+import type { CommandHandle as E2BCommandHandle } from "@e2b/code-interpreter";
 import type {
   Sandbox,
   ExecOptions,
   ExecResult,
+  SpawnOptions,
+  ProcessHandle,
   WriteFileOptions,
   FileEntry,
   GlobResult,
@@ -25,6 +28,10 @@ const GLOB_MAX_FILES = 500;
 
 export class E2BSandbox implements Sandbox {
   readonly sdk: E2BSDK;
+
+  /** Fires inside `spawn()` whenever a background process starts. Set by
+   *  `AgentTurnService` to fan the handle's stdout/stderr into SSE events. */
+  onProcessStart?: (handle: ProcessHandle, command: string) => void;
 
   constructor(sdk: E2BSDK) {
     this.sdk = sdk;
@@ -46,6 +53,28 @@ export class E2BSandbox implements Sandbox {
       stderr: result.stderr,
       exitCode: result.exitCode,
     };
+  }
+
+  async spawn(command: string, options?: SpawnOptions): Promise<ProcessHandle> {
+    const stdoutQueue = new StreamQueue<string>();
+    const stderrQueue = new StreamQueue<string>();
+
+    const handle = await this.sdk.commands.run(command, {
+      cwd: options?.cwd ?? SANDBOX_WORKSPACE_ROOT,
+      background: true,
+      onStdout: (data) => stdoutQueue.push(data),
+      onStderr: (data) => stderrQueue.push(data),
+    });
+
+    // Close queues once the process terminates so their AsyncIterables end.
+    handle.wait().catch(() => undefined).finally(() => {
+      stdoutQueue.close();
+      stderrQueue.close();
+    });
+
+    const wrapped = new E2BProcessHandle(handle, stdoutQueue, stderrQueue, this.sdk);
+    this.onProcessStart?.(wrapped, command);
+    return wrapped;
   }
 
   async readFile(path: string): Promise<string> {
@@ -150,3 +179,84 @@ export class E2BSandbox implements Sandbox {
 }
 
 export { DEFAULT_SANDBOX_LIFETIME_MS };
+
+class E2BProcessHandle implements ProcessHandle {
+  readonly pid: number;
+  readonly stdout: AsyncIterable<string>;
+  readonly stderr: AsyncIterable<string>;
+
+  constructor(
+    private handle: E2BCommandHandle,
+    stdoutQueue: StreamQueue<string>,
+    stderrQueue: StreamQueue<string>,
+    private sdk: E2BSDK,
+  ) {
+    this.pid = handle.pid;
+    this.stdout = { [Symbol.asyncIterator]: () => stdoutQueue.iterator() };
+    this.stderr = { [Symbol.asyncIterator]: () => stderrQueue.iterator() };
+  }
+
+  async wait(): Promise<number> {
+    try {
+      const result = await this.handle.wait();
+      return result.exitCode ?? 0;
+    } catch (err) {
+      // CommandExitError carries the exit code on non-zero termination.
+      const code = (err as { exitCode?: number }).exitCode;
+      if (typeof code === "number") return code;
+      throw err;
+    }
+  }
+
+  isAlive(): boolean {
+    return this.handle.exitCode === undefined;
+  }
+
+  async kill(_signal?: "SIGTERM" | "SIGKILL"): Promise<void> {
+    // E2B only supports SIGKILL; signal arg is accepted for API symmetry.
+    await this.handle.kill();
+  }
+
+  async exposePort(port: number): Promise<string> {
+    return this.sdk.getHost(port);
+  }
+}
+
+/** Minimal async queue: `push` from producers, iterate as AsyncGenerator,
+ *  `close` to signal end-of-stream. Used to bridge E2B's callback-based
+ *  stdout/stderr API into our AsyncIterable ProcessHandle shape. */
+class StreamQueue<T> {
+  private values: T[] = [];
+  private pending: Array<(result: IteratorResult<T>) => void> = [];
+  private closed = false;
+
+  push(value: T): void {
+    if (this.closed) return;
+    const resolver = this.pending.shift();
+    if (resolver) resolver({ value, done: false });
+    else this.values.push(value);
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    while (this.pending.length > 0) {
+      this.pending.shift()!({ value: undefined as unknown as T, done: true });
+    }
+  }
+
+  async *iterator(): AsyncGenerator<T> {
+    while (true) {
+      if (this.values.length > 0) {
+        yield this.values.shift()!;
+        continue;
+      }
+      if (this.closed) return;
+      const result = await new Promise<IteratorResult<T>>((resolve) => {
+        this.pending.push(resolve);
+      });
+      if (result.done) return;
+      yield result.value;
+    }
+  }
+}

@@ -68,6 +68,9 @@ export type WebAgentEvent =
   | { type: "quota_exceeded" }
   | { type: "file_update"; files: Array<{ path: string; content: string }> }
   | { type: "file_delete"; paths: string[] }
+  | { type: "terminal_start"; id: string; command: string }
+  | { type: "terminal_chunk"; id: string; stream: "stdout" | "stderr"; data: string }
+  | { type: "terminal_exit"; id: string; exitCode: number }
   | { type: "error"; message: string };
 
 /**

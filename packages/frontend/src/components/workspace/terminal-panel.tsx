@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { useWorkspaceStore } from "@/stores/workspace";
 import { useTheme } from "@/contexts/theme-context";
+import { terminalBus } from "@/lib/terminal-bus";
 
 function getTerminalTheme() {
   const style = getComputedStyle(document.documentElement);
@@ -23,8 +23,6 @@ export function TerminalPanel() {
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  const writtenCountRef = useRef(0);
-  const terminalHistory = useWorkspaceStore((s) => s.terminalHistory);
   const { resolved } = useTheme();
 
   useEffect(() => {
@@ -50,12 +48,31 @@ export function TerminalPanel() {
     const observer = new ResizeObserver(() => fit.fit());
     observer.observe(termRef.current);
 
+    const unsubscribe = terminalBus.subscribe((event) => {
+      switch (event.type) {
+        case "start":
+          term.writeln(`\x1b[36m$ ${event.command}\x1b[0m`);
+          break;
+        case "chunk":
+          term.write(event.data);
+          break;
+        case "exit":
+          if (event.exitCode !== 0) {
+            term.writeln(`\r\n\x1b[31m[process exited with code ${event.exitCode}]\x1b[0m`);
+          }
+          break;
+        case "clear":
+          term.clear();
+          break;
+      }
+    });
+
     return () => {
+      unsubscribe();
       observer.disconnect();
       term.dispose();
       xtermRef.current = null;
       fitRef.current = null;
-      writtenCountRef.current = 0;
     };
   }, []);
 
@@ -68,28 +85,6 @@ export function TerminalPanel() {
     });
     return () => cancelAnimationFrame(id);
   }, [resolved]);
-
-  useEffect(() => {
-    const term = xtermRef.current;
-    if (!term) return;
-
-    const newEntries = terminalHistory.slice(writtenCountRef.current);
-    for (const entry of newEntries) {
-      term.writeln(`\x1b[32m$ ${entry.command}\x1b[0m`);
-      if (entry.output) {
-        for (const line of entry.output.split("\n")) {
-          term.writeln(line);
-        }
-      }
-      if (entry.error) {
-        for (const line of entry.error.split("\n")) {
-          term.writeln(`\x1b[31m${line}\x1b[0m`);
-        }
-      }
-      term.writeln("");
-    }
-    writtenCountRef.current = terminalHistory.length;
-  }, [terminalHistory]);
 
   return <div ref={termRef} className="h-full w-full bg-background" />;
 }

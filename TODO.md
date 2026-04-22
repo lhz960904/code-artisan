@@ -9,10 +9,10 @@
 
 ### Sandbox 长驻进程
 
-- [ ] Sandbox 接口加 `spawn()`：Process 句柄（pull 输出、isAlive、kill、wait、端口暴露）
-- [ ] LocalSandbox 实现（直通 localhost）
-- [ ] E2BSandbox 实现（background cmd + `getHost(port)` 公网 URL）
-- [ ] 恢复 `start_server` 工具
+- [x] Sandbox 接口加 `spawn()`：Process 句柄（stdout/stderr AsyncIterable、isAlive、kill、wait、exposePort）
+- [x] LocalSandbox 实现（Bun.spawn 直通 localhost）
+- [x] E2BSandbox 实现（`commands.run(background: true)` + `getHost(port)` 公网 URL）
+- [x] bash 工具加 `run_in_background` 参数（对齐 Claude Code，不再做独立 start_server）
 
 ### 中间件
 
@@ -28,7 +28,7 @@
 - [x] 新建聊天的名字修改，采取 backend 流式返回 title 事件，做更改
 - [x] workspace file tree UI 交互优化，即时响应流式数据
 - [x] workspace editor panel UI 交互优化，即时响应流式数据
-- [ ] workspace terminal panel UI 交互优化，即时响应流式数据
+- [x] workspace terminal panel UI 交互优化，即时响应流式数据
 
 ### 工程化
 

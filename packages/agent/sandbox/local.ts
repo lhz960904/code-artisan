@@ -4,6 +4,8 @@ import type {
   Sandbox,
   ExecOptions,
   ExecResult,
+  SpawnOptions,
+  ProcessHandle,
   WriteFileOptions,
   FileEntry,
   GlobResult,
@@ -51,6 +53,18 @@ export class LocalSandbox implements Sandbox {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async spawn(command: string, options?: SpawnOptions): Promise<ProcessHandle> {
+    const cwd = options?.cwd ?? this.cwd;
+
+    const proc = Bun.spawn(["bash", "-c", command], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    return new LocalProcessHandle(proc);
   }
 
   async readFile(path: string): Promise<string> {
@@ -134,5 +148,51 @@ export class LocalSandbox implements Sandbox {
     } catch (err) {
       return { matches: [], error: String(err) };
     }
+  }
+}
+
+class LocalProcessHandle implements ProcessHandle {
+  readonly pid: number;
+  readonly stdout: AsyncIterable<string>;
+  readonly stderr: AsyncIterable<string>;
+
+  constructor(private proc: Bun.Subprocess<"ignore", "pipe", "pipe">) {
+    this.pid = proc.pid;
+    this.stdout = decodeStream(proc.stdout);
+    this.stderr = decodeStream(proc.stderr);
+  }
+
+  wait(): Promise<number> {
+    return this.proc.exited;
+  }
+
+  isAlive(): boolean {
+    return this.proc.exitCode === null && !this.proc.killed;
+  }
+
+  async kill(signal: "SIGTERM" | "SIGKILL" = "SIGTERM"): Promise<void> {
+    this.proc.kill(signal);
+    await this.proc.exited;
+  }
+
+  async exposePort(_port: number): Promise<string> {
+    throw new Error("LocalSandbox does not support exposePort — use a remote sandbox (e.g. E2BSandbox).");
+  }
+}
+
+async function* decodeStream(stream: ReadableStream<Uint8Array>): AsyncIterable<string> {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value, { stream: true });
+      if (text) yield text;
+    }
+    const tail = decoder.decode();
+    if (tail) yield tail;
+  } finally {
+    reader.releaseLock();
   }
 }

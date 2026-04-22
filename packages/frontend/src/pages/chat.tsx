@@ -1,5 +1,4 @@
 import { createRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
 import {
   conversationDetailOptions,
   conversationMessagesOptions,
@@ -9,11 +8,14 @@ import {
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { authedRoute } from "@/pages/layout/authed";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { terminalBus } from "@/lib/terminal-bus";
 
 export const chatRoute = createRoute({
   getParentRoute: () => authedRoute,
   path: "/chat/$conversationId",
   loader: ({ context: { queryClient }, params }) => {
+    useWorkspaceStore.getState().reset();
+    terminalBus.emit({ type: "clear" });
     queryClient.ensureQueryData(conversationDetailOptions(params.conversationId));
     queryClient.ensureQueryData(conversationMessagesOptions(params.conversationId));
     queryClient.ensureQueryData(fileSnapshotsOptions(params.conversationId));
@@ -24,11 +26,5 @@ export const chatRoute = createRoute({
 
 export function ChatPage() {
   const { conversationId } = chatRoute.useParams();
-  const reset = useWorkspaceStore((s) => s.reset);
-
-  useEffect(() => {
-    reset();
-  }, [conversationId, reset]);
-
   return <WorkspaceLayout conversationId={conversationId} />;
 }

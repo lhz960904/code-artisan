@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import type { FileSnapshot } from "@/api";
 
-interface TerminalEntry {
+export interface TerminalSession {
+  id: string;
   command: string;
-  output: string;
-  error?: string;
+  status: "running" | "exited";
+  exitCode?: number;
 }
 
 export type WorkspaceView = "preview" | "code" | "database";
@@ -18,7 +19,7 @@ interface WorkspaceState {
   files: Map<string, string>;
   openTabs: string[];
   activeTab: string | null;
-  terminalHistory: TerminalEntry[];
+  terminalSessions: TerminalSession[];
   previewUrl: string | null;
   view: WorkspaceView;
   pendingReveal: PendingReveal | null;
@@ -29,7 +30,8 @@ interface WorkspaceState {
   setActiveTab: (path: string) => void;
   updateFile: (path: string, content: string) => void;
   deleteFile: (path: string) => void;
-  appendTerminal: (entry: TerminalEntry) => void;
+  startTerminalSession: (id: string, command: string) => void;
+  exitTerminalSession: (id: string, exitCode: number) => void;
   setPreviewUrl: (url: string | null) => void;
   setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
@@ -41,7 +43,7 @@ const freshState = () => ({
   files: new Map<string, string>(),
   openTabs: [] as string[],
   activeTab: null as string | null,
-  terminalHistory: [] as TerminalEntry[],
+  terminalSessions: [] as TerminalSession[],
   previewUrl: null as string | null,
   view: "code" as WorkspaceView,
   pendingReveal: null as PendingReveal | null,
@@ -93,8 +95,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return { files: nextFiles, openTabs: nextTabs, activeTab: nextActive };
     }),
 
-  appendTerminal: (entry) =>
-    set((s) => ({ terminalHistory: [...s.terminalHistory, entry] })),
+  startTerminalSession: (id, command) =>
+    set((s) => ({
+      terminalSessions: [...s.terminalSessions, { id, command, status: "running" }],
+    })),
+
+  exitTerminalSession: (id, exitCode) =>
+    set((s) => ({
+      terminalSessions: s.terminalSessions.map((t) =>
+        t.id === id ? { ...t, status: "exited", exitCode } : t,
+      ),
+    })),
 
   setPreviewUrl: (url) => set({ previewUrl: url }),
 

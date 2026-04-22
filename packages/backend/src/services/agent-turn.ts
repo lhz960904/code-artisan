@@ -6,7 +6,7 @@ import {
   createAgent,
   Message,
   microCompactMiddleware,
-  Sandbox,
+  ProcessHandle,
   UserMessage,
   webFetchTool,
   webSearchTool,
@@ -14,6 +14,7 @@ import {
 import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
 import { getSandboxPool } from "../sandbox";
+import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
@@ -43,6 +44,12 @@ export class AgentTurnService {
 
     yield { type: "user_message_saved", messageId: userMessageId };
 
+    // Wire terminal streaming: whenever the bash tool starts a background
+    // process via sandbox.spawn(), fan its stdout/stderr into SSE events.
+    sandboxResult.sandbox.onProcessStart = (handle, command) => {
+      this._relayBackgroundProcess(handle, command);
+    };
+
     if (!this.agent) {
       this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles);
     }
@@ -70,7 +77,7 @@ export class AgentTurnService {
     this.pendingEvents = [];
   }
 
-  private _buildAgent(resumeMessages: Message[], sandbox: Sandbox, initialFiles: Map<string, string> | null): Agent {
+  private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {
     const provider = new AnthropicProvider("minimax-m2.5", {
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseURL: process.env.ANTHROPIC_BASE_URL,
@@ -118,6 +125,7 @@ export class AgentTurnService {
         `The shell's default working directory is already \`${SANDBOX_WORKSPACE_ROOT}\`. Run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${SANDBOX_WORKSPACE_ROOT}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.`,
         `Do not read or write files outside \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. dotfiles in /home/user, system paths) — they are invisible to the user and won't be persisted.`,
         `Binary assets (images, fonts, archives, media files) are NOT persisted across sessions — only text files are. For images, prefer inline SVG or external CDN URLs (e.g. unsplash, placehold.co) over curl/wget downloads. For fonts, prefer Google Fonts / self-hosting CDN links over local font files.`,
+        `For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — the command returns immediately with a PID and its output streams live into the user's terminal panel. Do NOT background one-shot commands; those must run foreground so you receive their output directly.`,
       ].join("\n\n"),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
@@ -127,7 +135,7 @@ export class AgentTurnService {
     });
   }
 
-  private async _setupSandbox(): Promise<{ sandbox: Sandbox; initialFiles: Map<string, string> | null }> {
+  private async _setupSandbox(): Promise<{ sandbox: E2BSandbox; initialFiles: Map<string, string> | null }> {
     const pool = getSandboxPool();
     const [sandbox, snapshots] = await Promise.all([
       pool.acquire(this.conversation.sandboxId ?? undefined),
@@ -153,6 +161,38 @@ export class AgentTurnService {
     }
 
     return { sandbox, initialFiles };
+  }
+
+  /**
+   * Fan a newly-spawned process's stdout/stderr into SSE terminal events.
+   * Called by the sandbox's `onProcessStart` hook for each background bash.
+   */
+  private _relayBackgroundProcess(handle: ProcessHandle, command: string): void {
+    const terminalId = randomUUID();
+    this.pendingEvents.push({ type: "terminal_start", id: terminalId, command });
+
+    const relayStream = async (stream: AsyncIterable<string>, kind: "stdout" | "stderr") => {
+      try {
+        for await (const chunk of stream) {
+          this.pendingEvents.push({ type: "terminal_chunk", id: terminalId, stream: kind, data: chunk });
+        }
+      } catch (err) {
+        console.error(`[AgentTurnService] terminal ${kind} stream error:`, err);
+      }
+    };
+
+    void relayStream(handle.stdout, "stdout");
+    void relayStream(handle.stderr, "stderr");
+
+    handle.wait().then(
+      (exitCode) => {
+        this.pendingEvents.push({ type: "terminal_exit", id: terminalId, exitCode });
+      },
+      (err) => {
+        console.error(`[AgentTurnService] terminal wait error:`, err);
+        this.pendingEvents.push({ type: "terminal_exit", id: terminalId, exitCode: -1 });
+      },
+    );
   }
 
   /** Insert a message to db; returns the row id (caller may supply one to pre-bind). */
