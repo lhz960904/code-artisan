@@ -21,7 +21,7 @@ import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
-import { checkQuotaMiddleware } from "./middlewares/check-quota";
+import { checkQuotaMiddleware, isQuotaExceeded } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { generateTitleMiddleware } from "./middlewares/generate-title";
 
@@ -75,7 +75,10 @@ export class AgentTurnService {
       yield { ...event, messageId };
       if (isAssistant) assistantMessageId = null;
     }
-    this.pendingEvents = [];
+    // Drain any events pushed after the last agent yield (e.g. quota_exceeded)
+    while (this.pendingEvents.length > 0) {
+      yield this.pendingEvents.shift()!;
+    }
   }
 
   private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {

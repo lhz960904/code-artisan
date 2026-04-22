@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  Attachment,
-  StoredMessage,
-  StoredUserMessage,
-  TextContent,
-  WebAgentEvent,
-} from "@code-artisan/shared";
+import type { Attachment, StoredMessage, StoredUserMessage, TextContent, WebAgentEvent } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
-import { conversationKeys, conversationMessagesOptions, type ConversationResponse } from "@/api/queries";
+import { conversationKeys, conversationMessagesOptions, quotaKeys, type ConversationResponse } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { terminalBus } from "@/lib/terminal-bus";
 
@@ -28,10 +22,7 @@ export interface UseChatReturn {
   error: Error | null;
 }
 
-export function useChat(
-  conversationId: string | null,
-  options: UseChatOptions = {},
-): UseChatReturn {
+export function useChat(conversationId: string | null, options: UseChatOptions = {}): UseChatReturn {
   const queryClient = useQueryClient();
 
   const { data: messages = [], isPending } = useQuery({
@@ -53,9 +44,8 @@ export function useChat(
   const updateMessages = useCallback(
     (updater: (prev: StoredMessage[]) => StoredMessage[]) => {
       if (!conversationId) return;
-      queryClient.setQueryData<StoredMessage[]>(
-        conversationKeys.messages(conversationId),
-        (prev) => updater(prev ?? []),
+      queryClient.setQueryData<StoredMessage[]>(conversationKeys.messages(conversationId), (prev) =>
+        updater(prev ?? []),
       );
     },
     [conversationId, queryClient],
@@ -83,9 +73,7 @@ export function useChat(
           const optimisticId = optimisticUserIdRef.current;
           if (!optimisticId) break;
           optimisticUserIdRef.current = null;
-          updateMessages((prev) =>
-            prev.map((m) => (m.id === optimisticId ? { ...m, id: event.messageId } : m)),
-          );
+          updateMessages((prev) => prev.map((m) => (m.id === optimisticId ? { ...m, id: event.messageId } : m)));
           break;
         }
         case "partial": {
@@ -101,8 +89,7 @@ export function useChat(
         case "message": {
           // Skip the "running" flash on the final assistant text (no tool_use) — stream close flips straight to "ready".
           const isFinalAssistant =
-            event.message.role === "assistant" &&
-            !event.message.content.some((block) => block.type === "tool_use");
+            event.message.role === "assistant" && !event.message.content.some((block) => block.type === "tool_use");
           if (!isFinalAssistant) setStatus("running");
           upsertMessage({
             ...event.message,
@@ -114,14 +101,11 @@ export function useChat(
         }
         case "title_update": {
           if (!conversationId) break;
-          queryClient.setQueryData<ConversationResponse>(
-            conversationKeys.detail(conversationId),
-            (prev) => (prev ? { ...prev, title: event.title } : prev),
+          queryClient.setQueryData<ConversationResponse>(conversationKeys.detail(conversationId), (prev) =>
+            prev ? { ...prev, title: event.title } : prev,
           );
-          queryClient.setQueryData<ConversationResponse[]>(
-            conversationKeys.all(),
-            (prev) =>
-              prev?.map((c) => (c.id === conversationId ? { ...c, title: event.title } : c)),
+          queryClient.setQueryData<ConversationResponse[]>(conversationKeys.all(), (prev) =>
+            prev?.map((c) => (c.id === conversationId ? { ...c, title: event.title } : c)),
           );
           break;
         }
@@ -152,6 +136,8 @@ export function useChat(
         case "quota_exceeded":
           setStatus("error");
           setError(new Error("Token quota exceeded"));
+          // Invalidate so the header token balance refreshes to 0 immediately.
+          void queryClient.invalidateQueries({ queryKey: quotaKeys.detail() });
           break;
         case "error":
           setStatus("error");

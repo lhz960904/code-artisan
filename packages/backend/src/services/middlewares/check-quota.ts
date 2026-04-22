@@ -49,16 +49,26 @@ async function loadQuota(userId: string): Promise<CachedQuota> {
   }
 }
 
+/** Returns true if the user has no tokens remaining. Uses the same LRU cache. */
+export async function isQuotaExceeded(userId: string): Promise<boolean> {
+  const quota = quotaCache.get(userId) ?? (await loadQuota(userId));
+  return quota.totalTokens - quota.usedTokens <= 0;
+}
+
 /**
  * Check quota before every LLM call. If quota is exhausted, signal the
  * agent to stop cooperatively.
  */
 export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): AgentMiddleware {
   return {
+    beforeAgentRun: async () => {
+      if (await isQuotaExceeded(userId)) {
+        onExceeded?.();
+        return { shouldStop: true };
+      }
+    },
     beforeModel: async ({ agentContext }) => {
-      // LRUCache.get() with updateAgeOnGet:true already refreshes recency.
-      const quota = quotaCache.get(userId) ?? (await loadQuota(userId));
-      if (quota.totalTokens - quota.usedTokens <= 0) {
+      if (await isQuotaExceeded(userId)) {
         agentContext.shouldStop = true;
         onExceeded?.();
       }
