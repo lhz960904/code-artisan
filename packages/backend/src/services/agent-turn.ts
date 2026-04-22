@@ -74,7 +74,11 @@ export class AgentTurnService {
       yield { ...event, messageId };
       if (isAssistant) assistantMessageId = null;
     }
-    this.pendingEvents = [];
+    // Drain any events pushed after the last agent yield (e.g. quota_exceeded
+    // when shouldStop=true causes the agent to exit without yielding again).
+    while (this.pendingEvents.length > 0) {
+      yield this.pendingEvents.shift()!;
+    }
   }
 
   private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {

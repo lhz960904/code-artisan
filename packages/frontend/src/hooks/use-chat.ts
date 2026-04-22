@@ -8,7 +8,7 @@ import type {
   WebAgentEvent,
 } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
-import { conversationKeys, conversationMessagesOptions, type ConversationResponse } from "@/api/queries";
+import { conversationKeys, conversationMessagesOptions, quotaKeys, type ConversationResponse, type QuotaResponse } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { terminalBus } from "@/lib/terminal-bus";
 
@@ -152,6 +152,8 @@ export function useChat(
         case "quota_exceeded":
           setStatus("error");
           setError(new Error("Token quota exceeded"));
+          // Invalidate so the header token balance refreshes to 0 immediately.
+          void queryClient.invalidateQueries({ queryKey: quotaKeys.detail() });
           break;
         case "error":
           setStatus("error");
@@ -200,6 +202,14 @@ export function useChat(
   const sendMessage = useCallback(
     async (content: string, attachments?: Attachment[]) => {
       if (!conversationId || status === "submitted" || status === "running") return;
+
+      // Pre-flight: block send when quota is known to be exhausted.
+      const quota = queryClient.getQueryData<QuotaResponse>(quotaKeys.detail());
+      if (quota && quota.remaining <= 0) {
+        setStatus("error");
+        setError(new Error("Token quota exceeded"));
+        return;
+      }
 
       // Cancel any in-flight GET /message/:id so the loader prefetch can't
       // settle after us and overwrite the optimistic user message + early
