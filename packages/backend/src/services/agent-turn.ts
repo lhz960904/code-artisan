@@ -15,6 +15,7 @@ import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
 import { getSandboxPool } from "../sandbox";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
+import { TerminalTools } from "../sandbox/terminal-tools.js";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
@@ -125,12 +126,17 @@ export class AgentTurnService {
         `The shell's default working directory is already \`${SANDBOX_WORKSPACE_ROOT}\`. Run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${SANDBOX_WORKSPACE_ROOT}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.`,
         `Do not read or write files outside \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. dotfiles in /home/user, system paths) — they are invisible to the user and won't be persisted.`,
         `Binary assets (images, fonts, archives, media files) are NOT persisted across sessions — only text files are. For images, prefer inline SVG or external CDN URLs (e.g. unsplash, placehold.co) over curl/wget downloads. For fonts, prefer Google Fonts / self-hosting CDN links over local font files.`,
-        `For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — the command returns immediately with a PID and its output streams live into the user's terminal panel. Do NOT background one-shot commands; those must run foreground so you receive their output directly.`,
+        `For long-running processes (dev servers, test watchers, etc.), use the terminal tools instead of bash:`,
+        `- Always call \`terminal_list\` at session start to discover existing terminals before creating new ones.`,
+        `- Use \`terminal_create\` to create a named PTY session (e.g. label: "dev-server") and run commands in it.`,
+        `- Use \`terminal_read\` after starting a command to confirm it succeeded — never assume success blindly.`,
+        `- Use \`terminal_write\` to send input to a running terminal. To restart a server: send Ctrl+C ("\\x03") first, then the new command.`,
+        `- Use \`get_preview_url\` to get the URL after a dev server starts — do not guess the port from output.`,
+        `- For one-shot commands (ls, grep, cat, npm install), use \`bash\` directly — these are faster and return clean output.`,
       ].join("\n\n"),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
-      // TODO: how to integration mcp tools and skills, if need to put in sandbox?
-      tools: [webSearchTool, webFetchTool],
+      tools: [webSearchTool, webFetchTool, ...new TerminalTools(sandbox.terminalManager).tools],
       skillsDirs: [],
     });
   }

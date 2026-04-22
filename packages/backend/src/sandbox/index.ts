@@ -4,3 +4,5 @@ export {
   getSandboxPool,
   shutdownSandboxPool,
 } from "./provider.js";
+export { TerminalManager } from "./terminal-manager.js";
+export { TerminalTools } from "./terminal-tools.js";

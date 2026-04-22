@@ -4,6 +4,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useTheme } from "@/contexts/theme-context";
 import { terminalBus } from "@/lib/terminal-bus";
+import type { TerminalClientMessage, TerminalServerMessage } from "@code-artisan/shared";
+
+interface TerminalPanelProps {
+  conversationId?: string;
+}
 
 function getTerminalTheme() {
   const style = getComputedStyle(document.documentElement);
@@ -19,10 +24,11 @@ function getTerminalTheme() {
   };
 }
 
-export function TerminalPanel() {
+export function TerminalPanel({ conversationId }: TerminalPanelProps) {
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const { resolved } = useTheme();
 
   useEffect(() => {
@@ -32,8 +38,8 @@ export function TerminalPanel() {
       theme: getTerminalTheme(),
       fontSize: 12,
       fontFamily: "'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace",
-      cursorBlink: false,
-      disableStdin: true,
+      cursorBlink: true,
+      disableStdin: false,
       scrollback: 5000,
     });
 
@@ -45,10 +51,17 @@ export function TerminalPanel() {
     xtermRef.current = term;
     fitRef.current = fit;
 
-    const observer = new ResizeObserver(() => fit.fit());
+    const observer = new ResizeObserver(() => {
+      fit.fit();
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        const msg: TerminalClientMessage = { type: "resize", cols: term.cols, rows: term.rows };
+        wsRef.current.send(JSON.stringify(msg));
+      }
+    });
     observer.observe(termRef.current);
 
-    const unsubscribe = terminalBus.subscribe((event) => {
+    // --- SSE-based terminal bus (legacy bash run_in_background) ---
+    const unsubscribeSSE = terminalBus.subscribe((event) => {
       switch (event.type) {
         case "start":
           term.writeln(`\x1b[36m$ ${event.command}\x1b[0m`);
@@ -67,14 +80,51 @@ export function TerminalPanel() {
       }
     });
 
+    // --- PTY WebSocket (new terminal_create sessions) ---
+    let ws: WebSocket | null = null;
+
+    if (conversationId) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${protocol}//${window.location.host}/api/terminal/${conversationId}`);
+      wsRef.current = ws;
+
+      ws.binaryType = "arraybuffer";
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(String(event.data)) as TerminalServerMessage;
+          if (msg.type === "output" || msg.type === "history") {
+            term.write(new Uint8Array(msg.data));
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        term.writeln("\r\n\x1b[33m[terminal disconnected]\x1b[0m");
+      };
+
+      // Forward user keystrokes to the active PTY session
+      term.onData((data) => {
+        if (ws?.readyState === WebSocket.OPEN) {
+          const msg: TerminalClientMessage = { type: "input", data };
+          ws.send(JSON.stringify(msg));
+        }
+      });
+    }
+
     return () => {
-      unsubscribe();
+      unsubscribeSSE();
       observer.disconnect();
+      ws?.close();
+      wsRef.current = null;
       term.dispose();
       xtermRef.current = null;
       fitRef.current = null;
     };
-  }, []);
+  }, [conversationId]);
 
   useEffect(() => {
     const term = xtermRef.current;

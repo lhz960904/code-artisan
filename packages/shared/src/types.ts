@@ -73,6 +73,30 @@ export type WebAgentEvent =
   | { type: "terminal_exit"; id: string; exitCode: number }
   | { type: "error"; message: string };
 
+export type TerminalStatus = "running" | "idle" | "error" | "exited";
+
+/** Summary of a managed terminal session, returned by terminal_list tool. */
+export interface TerminalSessionInfo {
+  id: string;
+  label: string;
+  status: TerminalStatus;
+  exitCode?: number;
+  /** Last ~20 lines of output (ANSI stripped) for AI to read. */
+  outputTail: string;
+}
+
+/** WebSocket messages: client → server */
+export type TerminalClientMessage =
+  | { type: "input"; data: string }
+  | { type: "resize"; cols: number; rows: number }
+  | { type: "signal"; signal: "SIGINT" | "SIGTERM" };
+
+/** WebSocket messages: server → client */
+export type TerminalServerMessage =
+  | { type: "output"; sessionId: string; data: number[] }
+  | { type: "session_update"; session: TerminalSessionInfo }
+  | { type: "history"; data: number[] };
+
 /**
  * ------------------------------------------------------------
  * MCP Types

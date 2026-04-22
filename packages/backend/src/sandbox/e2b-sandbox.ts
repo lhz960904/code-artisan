@@ -19,6 +19,7 @@ import type {
   GrepResult,
 } from "@code-artisan/agent";
 import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
+import { TerminalManager } from "./terminal-manager.js";
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
@@ -28,6 +29,7 @@ const GLOB_MAX_FILES = 500;
 
 export class E2BSandbox implements Sandbox {
   readonly sdk: E2BSDK;
+  readonly terminalManager: TerminalManager;
 
   /** Fires inside `spawn()` whenever a background process starts. Set by
    *  `AgentTurnService` to fan the handle's stdout/stderr into SSE events. */
@@ -35,6 +37,7 @@ export class E2BSandbox implements Sandbox {
 
   constructor(sdk: E2BSDK) {
     this.sdk = sdk;
+    this.terminalManager = new TerminalManager(sdk);
   }
 
   get sandboxId(): string {

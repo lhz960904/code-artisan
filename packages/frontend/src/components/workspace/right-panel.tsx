@@ -32,13 +32,13 @@ export function RightPanel({ conversationId }: RightPanelProps) {
   return (
     <div className="h-full overflow-hidden">
       {effective === "preview" && <PreviewPanel />}
-      {effective === "code" && <CodeView />}
+      {effective === "code" && <CodeView conversationId={conversationId} />}
       {effective === "database" && <DatabasePanel />}
     </div>
   );
 }
 
-function CodeView() {
+function CodeView({ conversationId }: { conversationId: string }) {
   return (
     <ResizablePanelGroup orientation="vertical" id="workspace-code-vertical" panelIds={["editor-area", "terminal"]}>
       <ResizablePanel id="editor-area" defaultSize="70%" minSize="30%">
@@ -60,7 +60,7 @@ function CodeView() {
       </ResizablePanel>
       <ResizableHandle className="aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:bg-border" />
       <ResizablePanel id="terminal" defaultSize="30%" minSize="15%">
-        <TerminalPanel />
+        <TerminalPanel conversationId={conversationId} />
       </ResizablePanel>
     </ResizablePanelGroup>
   );

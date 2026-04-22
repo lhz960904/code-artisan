@@ -11,6 +11,7 @@ import { snapshotRouter } from "./routes/snapshot.js";
 import { attachmentRouter } from "./routes/attachment.js";
 import { userRouter } from "./routes/user.js";
 import { settingRouter } from "./routes/setting.js";
+import { terminalRouter, terminalWebSocket } from "./routes/terminal.js";
 
 const app = new Hono();
 
@@ -32,6 +33,7 @@ app.route("/api/snapshot", snapshotRouter);
 app.route("/api/attachment", attachmentRouter);
 app.route("/api/user", userRouter);
 app.route("/api/setting", settingRouter);
+app.route("/api/terminal", terminalRouter);
 
 // Serve frontend static files (production)
 app.use("*", serveStatic({ root: "./dist/public" }));
@@ -45,5 +47,6 @@ const BUN_IDLE_TIMEOUT_SEC = 120;
 export default {
   port: env.PORT,
   fetch: app.fetch,
+  websocket: terminalWebSocket,
   idleTimeout: BUN_IDLE_TIMEOUT_SEC,
 };
