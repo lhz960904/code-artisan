@@ -61,10 +61,14 @@ export async function isQuotaExceeded(userId: string): Promise<boolean> {
  */
 export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): AgentMiddleware {
   return {
+    beforeAgentRun: async () => {
+      if (await isQuotaExceeded(userId)) {
+        onExceeded?.();
+        return { shouldStop: true };
+      }
+    },
     beforeModel: async ({ agentContext }) => {
-      // LRUCache.get() with updateAgeOnGet:true already refreshes recency.
-      const quota = quotaCache.get(userId) ?? (await loadQuota(userId));
-      if (quota.totalTokens - quota.usedTokens <= 0) {
+      if (await isQuotaExceeded(userId)) {
         agentContext.shouldStop = true;
         onExceeded?.();
       }

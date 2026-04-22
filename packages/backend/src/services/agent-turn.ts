@@ -44,12 +44,6 @@ export class AgentTurnService {
 
     yield { type: "user_message_saved", messageId: userMessageId };
 
-    // Server-side pre-flight: stop before any model invocation.
-    if (await isQuotaExceeded(this.conversation.userId)) {
-      yield { type: "quota_exceeded" };
-      return;
-    }
-
     // Wire terminal streaming: whenever the bash tool starts a background
     // process via sandbox.spawn(), fan its stdout/stderr into SSE events.
     sandboxResult.sandbox.onProcessStart = (handle, command) => {
