@@ -8,7 +8,8 @@ export interface TerminalSession {
   exitCode?: number;
 }
 
-export type WorkspaceView = "preview" | "code" | "database";
+const WORKSPACE_VIEWS = ["preview", "code", "database"] as const;
+export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number];
 
 interface PendingReveal {
   path: string;
@@ -42,6 +43,19 @@ interface WorkspaceState {
   reset: () => void;
 }
 
+const WORKSPACE_VIEW_STORAGE_KEY = "workspace:view";
+
+function readPersistedView(): WorkspaceView {
+  if (typeof window === "undefined") return "code";
+  const view = window.localStorage.getItem(WORKSPACE_VIEW_STORAGE_KEY);
+  return WORKSPACE_VIEWS.includes(view as WorkspaceView) ? (view as WorkspaceView) : "code";
+}
+
+function persistView(view: WorkspaceView) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(WORKSPACE_VIEW_STORAGE_KEY, view);
+}
+
 const freshState = () => ({
   files: new Map<string, string>(),
   snapshotsLoaded: false,
@@ -50,7 +64,7 @@ const freshState = () => ({
   terminalSessions: [] as TerminalSession[],
   previewUrl: null as string | null,
   pendingChatMessage: null as string | null,
-  view: "code" as WorkspaceView,
+  view: readPersistedView(),
   pendingReveal: null as PendingReveal | null,
 });
 
@@ -75,8 +89,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   closeTab: (path) =>
     set((s) => {
       const next = s.openTabs.filter((p) => p !== path);
-      const nextActive =
-        s.activeTab === path ? (next.length > 0 ? next[next.length - 1] : null) : s.activeTab;
+      const nextActive = s.activeTab === path ? (next.length > 0 ? next[next.length - 1] : null) : s.activeTab;
       return { openTabs: next, activeTab: nextActive };
     }),
 
@@ -107,14 +120,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   exitTerminalSession: (id, exitCode) =>
     set((s) => ({
-      terminalSessions: s.terminalSessions.map((t) =>
-        t.id === id ? { ...t, status: "exited", exitCode } : t,
-      ),
+      terminalSessions: s.terminalSessions.map((t) => (t.id === id ? { ...t, status: "exited", exitCode } : t)),
     })),
 
   setPreviewUrl: (url) => set({ previewUrl: url }),
 
-  setView: (view) => set({ view }),
+  setView: (view) => {
+    persistView(view);
+    set({ view });
+  },
 
   setSnapshots: (snapshots) => {
     const fileMap = new Map<string, string>();

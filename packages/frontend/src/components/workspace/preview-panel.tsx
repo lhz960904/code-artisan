@@ -2,9 +2,10 @@ import { Globe, ExternalLink, RefreshCw, Play, MonitorX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 
 function isWebProject(files: Map<string, string>): boolean {
-  const pkgJson = files.get("package.json");
+  const pkgJson = files.get(`${SANDBOX_WORKSPACE_ROOT}/package.json`);
   if (!pkgJson) return false;
   try {
     const pkg = JSON.parse(pkgJson) as { scripts?: Record<string, string> };
@@ -33,9 +34,11 @@ export function PreviewPanel() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
         <MonitorX className="h-10 w-10 opacity-30" />
-        <p className="text-sm font-medium">不支持预览</p>
-        <p className="max-w-[240px] text-center text-xs opacity-60">
-          此项目未检测到 Web 入口，预览仅支持包含 <code className="rounded bg-muted px-1 py-0.5 text-[11px]">package.json</code> 的前端项目。
+        <p className="text-sm font-medium">Preview not supported</p>
+        <p className="mtext-center text-xs opacity-60">No web entry point was detected for this project.</p>
+        <p className="text-center text-xs opacity-60">
+          Preview is only available for frontend projects that include
+          <code className="rounded bg-muted px-1 py-0.5">package.json</code>.
         </p>
       </div>
     );
@@ -46,18 +49,18 @@ export function PreviewPanel() {
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-background text-muted-foreground">
         <Globe className="h-10 w-10 opacity-30" />
         <div className="flex flex-col items-center gap-1">
-          <p className="text-sm font-medium text-foreground">开发服务器未运行</p>
+          <p className="text-sm font-medium text-foreground">Development server is not running</p>
           <p className="max-w-[240px] text-center text-xs opacity-60">
-            启动后可在此处实时预览项目效果
+            Start it to preview your project here in real time
           </p>
         </div>
         <Button
           size="sm"
           className="gap-1.5"
-          onClick={() => setPendingChatMessage("请启动这个项目的开发服务器")}
+          onClick={() => setPendingChatMessage("Please start this project's development server")}
         >
           <Play className="h-3.5 w-3.5" />
-          启动开发服务器
+          Start development server
         </Button>
       </div>
     );
@@ -94,7 +97,7 @@ export function PreviewPanel() {
       </div>
       <iframe
         src={previewUrl}
-        className="flex-1 bg-white"
+        className="flex-1 bg-white h-full"
         sandbox="allow-scripts allow-forms allow-popups"
         title="Preview"
       />
