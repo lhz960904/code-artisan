@@ -14,7 +14,10 @@ import type { ShellSessionManager } from "../shell-session";
  *
  *  Binding `session_id` lets the manager auto-clear the preview when the
  *  dev-server session exits (crash / kill / user-closed tab). */
-export function createExposePortTool(opts: { manager: ShellSessionManager }): FunctionTool {
+export function createExposePortTool(opts: {
+  conversationId: string;
+  manager: ShellSessionManager;
+}): FunctionTool {
   return defineTool({
     name: "expose_port",
     description:
@@ -34,7 +37,11 @@ export function createExposePortTool(opts: { manager: ShellSessionManager }): Fu
         const sandbox = ctx.sandbox as E2BSandbox;
         const host = await sandbox.sdk.getHost(port);
         const url = `https://${host}`;
-        opts.manager.setPreview(sandbox.sandboxId, { url, port, sessionId: session_id });
+        opts.manager.setPreview(sandbox.sandboxId, opts.conversationId, {
+          url,
+          port,
+          sessionId: session_id,
+        });
         return `Port ${port} exposed at ${url}. The user will see it in their preview panel after switching to it.`;
       } catch (err) {
         return `Failed to expose port ${port}: ${err instanceof Error ? err.message : String(err)}`;

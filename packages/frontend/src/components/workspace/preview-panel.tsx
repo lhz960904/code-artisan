@@ -83,7 +83,7 @@ export function PreviewPanel() {
       <iframe
         src={previewUrl}
         className="flex-1 bg-white h-full"
-        sandbox="allow-scripts allow-forms allow-popups"
+        sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-modals allow-downloads"
         title="Preview"
       />
     </div>

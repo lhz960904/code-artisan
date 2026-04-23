@@ -29,6 +29,7 @@ type ServerMessage =
   | { op: "exit"; sessionId: string; exitCode: number }
   | { op: "session_started"; meta: SessionMeta }
   | { op: "session_ended"; sessionId: string; exitCode: number }
+  | { op: "preview_updated"; url: string | null }
   | { op: "created"; draftId?: string; meta: SessionMeta }
   | { op: "create_failed"; draftId?: string; message: string }
   | { op: "error"; message: string; cause?: string };
@@ -79,7 +80,11 @@ conversationWsRouter.get(
     }
 
     const [conversion] = await db
-      .select({ id: conversations.id, userId: conversations.userId })
+      .select({
+        id: conversations.id,
+        userId: conversations.userId,
+        sandboxId: conversations.sandboxId,
+      })
       .from(conversations)
       .where(and(eq(conversations.id, conversationId), eq(conversations.userId, sessionRes.user.id)))
       .limit(1);
@@ -105,8 +110,14 @@ conversationWsRouter.get(
           if (event.kind === "session_started") send(ws, { op: "session_started", meta: event.meta });
           else if (event.kind === "session_ended")
             send(ws, { op: "session_ended", sessionId: event.sessionId, exitCode: event.exitCode });
+          else if (event.kind === "preview_updated")
+            send(ws, { op: "preview_updated", url: event.preview?.url ?? null });
         });
         send(ws, { op: "sessions", sessions: manager.list(conversationId) });
+        // Push the initial preview state so a freshly-mounted panel reflects
+        // an existing dev server without waiting for the next change event.
+        const preview = conversion.sandboxId ? manager.getPreview(conversion.sandboxId) : null;
+        send(ws, { op: "preview_updated", url: preview?.url ?? null });
       },
       onMessage: async (evt, ws) => {
         let msg: ClientMessage;

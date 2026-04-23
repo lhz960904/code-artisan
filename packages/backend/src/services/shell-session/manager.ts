@@ -21,7 +21,8 @@ export interface CreateSessionOptions {
 
 export type ConversationEvent =
   | { kind: "session_started"; meta: SessionMeta }
-  | { kind: "session_ended"; sessionId: string; exitCode: number };
+  | { kind: "session_ended"; sessionId: string; exitCode: number }
+  | { kind: "preview_updated"; preview: PreviewState | null };
 
 export type ConversationListener = (event: ConversationEvent) => void;
 
@@ -64,7 +65,9 @@ export class ShellSessionManager {
           exitCode,
         });
         const preview = this.previews.get(sandboxId);
-        if (preview?.sessionId === session.id) this.clearPreview(sandboxId);
+        if (preview?.sessionId === session.id) {
+          this.clearPreview(sandboxId, session.conversationId);
+        }
         this.remove(session.conversationId, session.id);
       },
     });
@@ -172,16 +175,18 @@ export class ShellSessionManager {
   }
 
   // ---- Preview ----
-  // Keyed by sandboxId — preview lives as long as the sandbox does. No live
-  // broadcast: the chat page picks up changes by re-fetching conversation
-  // detail on mount and at end-of-turn.
+  // Keyed by sandboxId — preview lives as long as the sandbox does. Changes
+  // are broadcast as `preview_updated` events on the owning conversation's
+  // listener channel so the frontend preview panel updates in real time.
 
-  setPreview(sandboxId: string, state: PreviewState): void {
+  setPreview(sandboxId: string, conversationId: string, state: PreviewState): void {
     this.previews.set(sandboxId, state);
+    this.emitConversation(conversationId, { kind: "preview_updated", preview: state });
   }
 
-  clearPreview(sandboxId: string): void {
+  clearPreview(sandboxId: string, conversationId: string): void {
     this.previews.delete(sandboxId);
+    this.emitConversation(conversationId, { kind: "preview_updated", preview: null });
   }
 
   getPreview(sandboxId: string): PreviewState | null {

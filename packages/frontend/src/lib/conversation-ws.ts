@@ -19,6 +19,7 @@ export type ServerMessage =
   | { op: "exit"; sessionId: string; exitCode: number }
   | { op: "session_started"; meta: SessionMeta }
   | { op: "session_ended"; sessionId: string; exitCode: number }
+  | { op: "preview_updated"; url: string | null }
   | { op: "created"; draftId?: string; meta: SessionMeta }
   | { op: "create_failed"; draftId?: string; message: string }
   | { op: "error"; message: string; cause?: string };

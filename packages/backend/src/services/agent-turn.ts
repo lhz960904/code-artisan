@@ -123,7 +123,7 @@ export class AgentTurnService {
         createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
         createBashOutputTool({ manager: getShellSessionManager() }),
         createKillShellTool({ manager: getShellSessionManager() }),
-        createExposePortTool({ manager: getShellSessionManager() }),
+        createExposePortTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
         webSearchTool,
         webFetchTool,
       ],

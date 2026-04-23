@@ -4,6 +4,7 @@ import {
   type ConversationWsListener,
   type SessionMeta,
 } from "@/lib/conversation-ws";
+import { useWorkspaceStore } from "@/stores/workspace";
 
 export type DisplaySession = Omit<SessionMeta, "status"> & { status: SessionMeta["status"] | "pending" };
 
@@ -42,6 +43,9 @@ export function ConversationWsProvider({ conversationId, children }: Conversatio
           break;
         case "session_ended":
           setSessions((prev) => prev.filter((s) => s.id !== event.sessionId));
+          break;
+        case "preview_updated":
+          useWorkspaceStore.getState().setPreviewUrl(event.url);
           break;
         case "created": {
           const { draftId, meta } = event;
