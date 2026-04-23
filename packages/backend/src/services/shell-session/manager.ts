@@ -25,14 +25,27 @@ export type ConversationEvent =
 
 export type ConversationListener = (event: ConversationEvent) => void;
 
+/** Stored under the sandbox id, not the conversation id, so the URL lives
+ *  exactly as long as the sandbox does — survives page reloads (the chat
+ *  page's conversation-detail query reads it back), dies whenever the
+ *  sandbox is evicted/expired. */
+export interface PreviewState {
+  url: string;
+  port: number;
+  /** Owning shell session — preview auto-clears when this session ends. */
+  sessionId?: string;
+}
+
 export class ShellSessionManager {
   private readonly sessions = new Map<string, ShellSession>();
   private readonly byConversation = new Map<string, Set<string>>();
   private readonly conversationListeners = new Map<string, Set<ConversationListener>>();
+  private readonly previews = new Map<string, PreviewState>();
 
   async create(opts: CreateSessionOptions): Promise<ShellSession> {
     const id = randomUUID();
     const command = opts.command ?? DEFAULT_SHELL_COMMAND;
+    const sandboxId = opts.sandbox.sandboxId;
 
     let session: ShellSession | null = null;
 
@@ -50,6 +63,8 @@ export class ShellSessionManager {
           sessionId: session.id,
           exitCode,
         });
+        const preview = this.previews.get(sandboxId);
+        if (preview?.sessionId === session.id) this.clearPreview(sandboxId);
         this.remove(session.conversationId, session.id);
       },
     });
@@ -154,6 +169,23 @@ export class ShellSessionManager {
     if (!ids) return;
     ids.delete(sessionId);
     if (ids.size === 0) this.byConversation.delete(conversationId);
+  }
+
+  // ---- Preview ----
+  // Keyed by sandboxId — preview lives as long as the sandbox does. No live
+  // broadcast: the chat page picks up changes by re-fetching conversation
+  // detail on mount and at end-of-turn.
+
+  setPreview(sandboxId: string, state: PreviewState): void {
+    this.previews.set(sandboxId, state);
+  }
+
+  clearPreview(sandboxId: string): void {
+    this.previews.delete(sandboxId);
+  }
+
+  getPreview(sandboxId: string): PreviewState | null {
+    return this.previews.get(sandboxId) ?? null;
   }
 }
 

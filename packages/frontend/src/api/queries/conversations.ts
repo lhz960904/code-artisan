@@ -12,6 +12,8 @@ export interface ConversationResponse {
   agentRunning: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Only populated by GET /conversation/:id. List endpoint omits it. */
+  previewUrl?: string | null;
 }
 
 export interface FileSnapshot {

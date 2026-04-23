@@ -4,6 +4,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { conversations, messages, fileSnapshots } from "../db/schema.js";
 import { ok, created, notFound, validate } from "../http/index.js";
+import { getShellSessionManager } from "../services/shell-session";
 
 const conversationRouter = new Hono();
 
@@ -21,7 +22,11 @@ conversationRouter.post("/", validate("json", z.object({ title: z.string().optio
 // List conversations
 conversationRouter.get("/", async (c) => {
   const user = c.get("user");
-  const result = await db.select().from(conversations).where(eq(conversations.userId, user.id)).orderBy(desc(conversations.updatedAt));
+  const result = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, user.id))
+    .orderBy(desc(conversations.updatedAt));
   return ok(c, result);
 });
 
@@ -34,7 +39,8 @@ conversationRouter.get("/:id", validate("param", z.object({ id: z.uuid() })), as
     .from(conversations)
     .where(and(eq(conversations.id, id), eq(conversations.userId, user.id)));
   if (!conversation) return notFound(c, "Conversation not found");
-  return ok(c, conversation);
+  const preview = conversation.sandboxId ? getShellSessionManager().getPreview(conversation.sandboxId) : null;
+  return ok(c, { ...conversation, previewUrl: preview?.url ?? null });
 });
 
 // Update conversation

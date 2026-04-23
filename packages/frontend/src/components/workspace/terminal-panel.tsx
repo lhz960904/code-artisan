@@ -403,15 +403,17 @@ function TabItem({
         <BaseIcon className={cn("size-3.5", owner === "agent" && "text-[#E5C07B]")} />
       )}
       <span>{label}</span>
-      <button
-        className="ml-0.5 rounded transition-opacity hover:bg-accent cursor-pointer"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose(id);
-        }}
-      >
-        <X className="size-3" />
-      </button>
+      {owner !== "agent" && (
+        <button
+          className="ml-0.5 rounded transition-opacity hover:bg-accent cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose(id);
+          }}
+        >
+          <X className="size-3" />
+        </button>
+      )}
     </div>
   );
 }

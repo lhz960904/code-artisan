@@ -15,7 +15,7 @@ export function createWebBashTool(opts: {
   return defineTool({
     name: "bash",
     description:
-      "Execute a bash command in the sandbox. Foreground by default — output is returned synchronously. Pass `run_in_background: true` for long-running processes (dev servers, watchers) — the call returns immediately with a session id, and output is captured in a PTY-backed session. Use `bash_output` to read pending output and check status; use `kill_shell` to stop it.",
+      "Execute a bash command in the sandbox. Foreground by default — output is returned synchronously. Pass `run_in_background: true` for long-running processes (dev servers, watchers) — the call returns immediately with a session id, and output is captured in a PTY-backed session. Use `bash_output` to read pending output and check status; use `kill_shell` to stop it. After a backgrounded web server prints its listen line, call `expose_port` (with the same session id) to surface a public URL in the user's preview panel.",
     parameters: z.object({
       description: z
         .string()
@@ -40,7 +40,7 @@ export function createWebBashTool(opts: {
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
           });
-          return `Started background session=${session.id} pid=${session.pid}. Use bash_output to read output and verify the process is running.`;
+          return `Started background session=${session.id} pid=${session.pid}. Use bash_output to read output and verify the process is running. If this is a web server, once you see a "listening on :PORT" line, call expose_port({ port, session_id: "${session.id}" }) so the user's preview panel picks it up.`;
         } catch (err) {
           return `Failed to start background process: ${err instanceof Error ? err.message : String(err)}`;
         }

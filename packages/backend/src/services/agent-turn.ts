@@ -23,7 +23,12 @@ import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { generateTitleMiddleware } from "./middlewares/generate-title";
 import { getShellSessionManager } from "./shell-session";
-import { createWebBashTool, createBashOutputTool, createKillShellTool } from "./web-tools";
+import {
+  createWebBashTool,
+  createBashOutputTool,
+  createKillShellTool,
+  createExposePortTool,
+} from "./web-tools";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -132,6 +137,7 @@ export class AgentTurnService {
         createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
         createBashOutputTool({ manager: getShellSessionManager() }),
         createKillShellTool({ manager: getShellSessionManager() }),
+        createExposePortTool({ manager: getShellSessionManager() }),
         webSearchTool,
         webFetchTool,
       ],

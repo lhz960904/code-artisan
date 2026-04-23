@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { createRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   conversationDetailOptions,
   conversationMessagesOptions,
@@ -24,5 +26,14 @@ export const chatRoute = createRoute({
 
 export function ChatPage() {
   const { conversationId } = chatRoute.useParams();
+  const { data: conversation } = useQuery(conversationDetailOptions(conversationId));
+
+  // Seed the preview URL from server state — the manager keys it by sandboxId,
+  // so this rehydrates a still-alive preview after a page reload.
+  const previewUrl = conversation?.previewUrl ?? null;
+  useEffect(() => {
+    useWorkspaceStore.getState().setPreviewUrl(previewUrl);
+  }, [previewUrl, conversationId]);
+
   return <WorkspaceLayout conversationId={conversationId} />;
 }

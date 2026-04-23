@@ -103,7 +103,8 @@ terminalWsRouter.get(
       onOpen: (_evt, ws) => {
         state.conversationUnsubscribe = manager.subscribeConversation(conversationId, (event) => {
           if (event.kind === "session_started") send(ws, { op: "session_started", meta: event.meta });
-          else send(ws, { op: "session_ended", sessionId: event.sessionId, exitCode: event.exitCode });
+          else if (event.kind === "session_ended")
+            send(ws, { op: "session_ended", sessionId: event.sessionId, exitCode: event.exitCode });
         });
         send(ws, { op: "sessions", sessions: manager.list(conversationId) });
       },

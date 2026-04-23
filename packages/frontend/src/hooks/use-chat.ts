@@ -216,6 +216,10 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
         await readStream(res.body, abort.signal);
 
         setStatus((prev) => (prev === "error" ? prev : "ready"));
+        // Re-fetch the conversation detail so any preview URL the agent
+        // exposed during the turn (or cleared via session exit) gets seeded
+        // into the workspace store via ChatPage's effect.
+        void queryClient.invalidateQueries({ queryKey: conversationKeys.detail(conversationId) });
         optionsRef.current.onFinish?.();
       } catch (err) {
         if (abort.signal.aborted) return;
