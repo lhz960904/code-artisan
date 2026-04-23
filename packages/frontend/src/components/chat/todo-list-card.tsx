@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown, Circle, ListChecks, Loader2, Terminal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TOOL_CONFIG } from "@/components/chat/tool-call-item";
@@ -15,6 +15,13 @@ export function TodoListCard({ list, isLive }: TodoListCardProps) {
   const total = list.todos.length;
   const allDone = total > 0 && completed === total;
   const interrupted = !isLive && list.todos.some((todo) => todo.status === "in_progress");
+  const inProgressId = list.todos.find((todo) => todo.status === "in_progress")?.id ?? null;
+  const [expandedId, setExpandedId] = useState<string | null>(inProgressId);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (inProgressId) setExpandedId(inProgressId);
+  }, [inProgressId]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -37,22 +44,37 @@ export function TodoListCard({ list, isLive }: TodoListCardProps) {
       </div>
       <div>
         {list.todos.map((todo) => (
-          <TodoRow key={todo.id} todo={todo} isLive={isLive} />
+          <TodoRow
+            key={todo.id}
+            todo={todo}
+            isLive={isLive}
+            open={expandedId === todo.id}
+            onToggle={() => setExpandedId((current) => (current === todo.id ? null : todo.id))}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function TodoRow({ todo, isLive }: { todo: TodoItem; isLive?: boolean }) {
-  const [open, setOpen] = useState(todo.status === "in_progress");
+function TodoRow({
+  todo,
+  isLive,
+  open,
+  onToggle,
+}: {
+  todo: TodoItem;
+  isLive?: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const hasSteps = todo.steps.length > 0;
 
   return (
     <div className="border-b border-border/60 last:border-b-0">
       <button
         type="button"
-        onClick={() => hasSteps && setOpen((v) => !v)}
+        onClick={() => hasSteps && onToggle()}
         disabled={!hasSteps}
         className={cn(
           "flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition-colors",
