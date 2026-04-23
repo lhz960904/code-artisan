@@ -42,7 +42,7 @@
 
 - [ ] 权限系统 + Confirm 模式（工具审批流程）
 - [x] 多 LLM Provider（OpenAI / DeepSeek）
-- [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
+- [x] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] Custom Rules（用户自定义 system prompt 规则）
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
 - [ ] 支持 mcp 工具
