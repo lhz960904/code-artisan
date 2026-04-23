@@ -211,19 +211,26 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
       // Fast path: caller pre-seeded the manifest (e.g. from just-restored
       // snapshots). The sandbox state is authoritative — but we just wrote
       // it, so a remote scan would only re-read what we already have.
+      // `touchMarker` is independent of the hashing work — run in parallel.
       if (opts.initialManifest && opts.initialManifest.size > 0) {
-        for (const [absPath, content] of opts.initialManifest) {
-          if (content.length > maxFileSize) continue;
-          const relPath = toRel(absPath);
-          const hash = await hashString(content);
-          manifest.set(relPath, { hash, content });
-        }
-        await touchMarker(opts.sandbox);
+        await Promise.all([
+          touchMarker(opts.sandbox),
+          (async () => {
+            for (const [absPath, content] of opts.initialManifest!) {
+              if (content.length > maxFileSize) continue;
+              const relPath = toRel(absPath);
+              const hash = await hashString(content);
+              manifest.set(relPath, { hash, content });
+            }
+          })(),
+        ]);
         return;
       }
       // Cold path: enumerate sandbox files and seed the manifest. We hash
       // locally after readFile, so no sandbox-side sha256sum is needed.
-      const paths = await listAllPaths(opts.sandbox);
+      // listAllPaths + touchMarker are independent exec roundtrips — parallel
+      // saves one full RTT on a fresh/empty sandbox (the common first-turn case).
+      const [paths] = await Promise.all([listAllPaths(opts.sandbox), touchMarker(opts.sandbox)]);
       for (const relPath of paths) {
         if (isBinaryPath(relPath)) continue;
         try {
@@ -236,7 +243,6 @@ export function fileTrackerMiddleware(opts: FileTrackerOptions): AgentMiddleware
           console.error("[FileTracker] baseline readFile failed:", relPath, err);
         }
       }
-      await touchMarker(opts.sandbox);
     },
 
     afterToolUse: async ({ toolUse }) => {

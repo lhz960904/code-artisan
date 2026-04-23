@@ -2,13 +2,14 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import type { Attachment } from "@code-artisan/shared";
+import type { Attachment, WebAgentEvent } from "@code-artisan/shared";
 import { SUPPORTED_MODELS } from "@code-artisan/shared";
 
 import { db } from "../db/index.js";
 import { conversations, messages } from "../db/schema.js";
 import { ok, notFound, validate } from "../http/index.js";
 import { AgentTurnService } from "../services/agent-turn.js";
+import { maybeGenerateTitle } from "../services/generate-title.js";
 import { buildUserMessage } from "../utils/message.js";
 
 const MAX_ATTACHMENTS = 5;
@@ -73,9 +74,22 @@ messageRouter.post(
         await stream.writeSSE({ data: "" });
       }, HEARTBEAT_MS);
 
+      const titlePromise = maybeGenerateTitle(conversation, userMessage, model).catch((err) => {
+        console.error("[message.stream] title generation failed:", err);
+        return null;
+      });
+
       try {
         for await (const event of turnService.run(userMessage)) {
           await stream.writeSSE({ data: JSON.stringify(event) });
+        }
+        // Wait for the title LLM call to finish, then emit it. Title is
+        // guaranteed for this stream — internal errors already resolve to null.
+        const title = await titlePromise;
+        if (title) {
+          await stream.writeSSE({
+            data: JSON.stringify({ type: "title_update", title } satisfies WebAgentEvent),
+          });
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
