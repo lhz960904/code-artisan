@@ -99,7 +99,7 @@ export function AppSidebar() {
         </Link>
       </div>
 
-      <ScrollArea className="flex-1 px-3">
+      <ScrollArea className="min-h-0 flex-1 px-3">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent</div>
         <div className="space-y-0.5">
           {conversations.map((conversation) => {
@@ -198,7 +198,7 @@ export function AppSidebarSkeleton() {
       <div className="px-3 pb-2">
         <Skeleton className="h-7 w-full" />
       </div>
-      <div className="flex-1 space-y-1 px-3">
+      <div className="min-h-0 flex-1 space-y-1 px-3">
         <Skeleton className="mb-2 h-3 w-16" />
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-7 w-full" />
