@@ -1,6 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type { AgentMiddleware } from "@code-artisan/agent";
-import type { UserMessage } from "@code-artisan/shared";
+import type { AgentMiddleware, LLMProvider, UserMessage } from "@code-artisan/agent";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "../../db";
@@ -8,8 +6,7 @@ import { conversations } from "../../db/schema";
 
 type Conversation = typeof conversations.$inferSelect;
 
-const TITLE_MODEL = "minimax-m2.5";
-const TITLE_MAX_TOKENS = 40;
+const TITLE_MAX_TOKENS = 1000;
 const TITLE_MAX_CHARS = 80;
 
 const TITLE_PROMPT = [
@@ -26,20 +23,22 @@ function extractUserText(message: UserMessage): string {
   return parts.join("\n").trim();
 }
 
-async function generateTitle(userMessage: UserMessage): Promise<string | null> {
+async function generateTitle(model: LLMProvider, userMessage: UserMessage): Promise<string | null> {
   const text = extractUserText(userMessage);
   if (!text) return null;
 
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  });
-
   try {
-    const res = await client.messages.create({
-      model: TITLE_MODEL,
-      max_tokens: TITLE_MAX_TOKENS,
-      messages: [{ role: "user", content: `${TITLE_PROMPT}\n\n${text}` }],
+    const res = await model.invoke({
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: `${TITLE_PROMPT}\n\n${text}` }],
+        },
+      ],
+      options: {
+        max_tokens: TITLE_MAX_TOKENS,
+        thinking: { type: "disabled" },
+      },
     });
     const block = res.content.find((b) => b.type === "text");
     if (!block || block.type !== "text") return null;
@@ -73,18 +72,16 @@ export interface GenerateTitleMiddlewareOptions {
  * `.returning()` — if the user manually set a title in parallel, we skip
  * the event emission instead of clobbering their value.
  */
-export function generateTitleMiddleware(
-  opts: GenerateTitleMiddlewareOptions,
-): AgentMiddleware {
+export function generateTitleMiddleware(opts: GenerateTitleMiddlewareOptions): AgentMiddleware {
   return {
     beforeAgentRun: async ({ agentContext }) => {
       if (opts.conversation.title) return;
-      const userMessage = [...agentContext.messages]
-        .reverse()
-        .find((m) => m.role === "user") as UserMessage | undefined;
+      const userMessage = [...agentContext.messages].reverse().find((m) => m.role === "user") as
+        | UserMessage
+        | undefined;
       if (!userMessage) return;
 
-      const title = await generateTitle(userMessage);
+      const title = await generateTitle(agentContext.model, userMessage);
       if (!title) return;
 
       const updated = await db
