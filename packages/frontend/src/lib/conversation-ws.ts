@@ -23,9 +23,9 @@ export type ServerMessage =
   | { op: "create_failed"; draftId?: string; message: string }
   | { op: "error"; message: string; cause?: string };
 
-export type TerminalEvent = ServerMessage | { op: "open" } | { op: "close" };
+export type ConversationWsEvent = ServerMessage | { op: "open" } | { op: "close" };
 
-export type TerminalWsListener = (event: TerminalEvent) => void;
+export type ConversationWsListener = (event: ConversationWsEvent) => void;
 
 type ClientMessage =
   | { op: "hello" }
@@ -41,12 +41,12 @@ const RECONNECT_MAX_MS = 5000;
 
 function buildUrl(conversationId: string): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/api/terminal/ws?conversationId=${encodeURIComponent(conversationId)}`;
+  return `${proto}//${window.location.host}/api/conversation-ws/ws?conversationId=${encodeURIComponent(conversationId)}`;
 }
 
-export class TerminalWsClient {
+export class ConversationWsClient {
   private ws: WebSocket | null = null;
-  private readonly listeners = new Set<TerminalWsListener>();
+  private readonly listeners = new Set<ConversationWsListener>();
   private closed = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -97,11 +97,11 @@ export class TerminalWsClient {
     });
   }
 
-  private emit(event: TerminalEvent): void {
+  private emit(event: ConversationWsEvent): void {
     for (const listener of this.listeners) listener(event);
   }
 
-  subscribe(listener: TerminalWsListener): () => void {
+  subscribe(listener: ConversationWsListener): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);

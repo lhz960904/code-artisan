@@ -3,11 +3,13 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { useTheme } from "@/contexts/theme-context";
-import { TerminalWsClient, type SessionMeta } from "@/lib/terminal-ws";
+import { type SessionMeta } from "@/lib/conversation-ws";
+import {
+  useConversationWs,
+  type DisplaySession,
+} from "@/components/workspace/conversation-ws-context";
 import { Plus, X, ChevronDown, ChevronUp, TerminalSquare, Zap, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type DisplaySession = Omit<SessionMeta, "status"> & { status: SessionMeta["status"] | "pending" };
 
 const MAX_USER_TERMINALS = 3;
 const DEFAULT_COLS = 120;
@@ -82,9 +84,8 @@ interface TerminalPanelProps {
 }
 
 export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: TerminalPanelProps) {
-  const [sessions, setSessions] = useState<DisplaySession[]>([]);
+  const { client, sessions, setSessions, subscribe } = useConversationWs();
   const [activeId, setActiveId] = useState<string | null>(null);
-  const wsRef = useRef<TerminalWsClient | null>(null);
   const instancesRef = useRef<Map<string, TerminalInstance>>(new Map());
   const containersRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const { resolved } = useTheme();
@@ -92,53 +93,15 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
   // eslint-disable-next-line react-hooks/refs
   resolvedRef.current = resolved;
 
-  // ---- WebSocket lifecycle ----
+  // ---- Per-mount subscription: panel-local concerns only ----
+  // Sessions list / session_started / session_ended / created list-update
+  // are owned by ConversationWsProvider. Here we only handle:
+  //   - data/snapshot → write into the (only-while-mounted) xterm instances
+  //   - created → swap activeId from draftId to the real session id
+  //   - create_failed → clear activeId if it was the failed draft
   useEffect(() => {
-    const client = new TerminalWsClient(conversationId);
-    wsRef.current = client;
-    const unsubscribe = client.subscribe((event) => {
+    return subscribe((event) => {
       switch (event.op) {
-        case "sessions":
-          setSessions((prev) => {
-            // Preserve any local drafts — server has no record of them yet.
-            const drafts = prev.filter((s) => s.status === "pending");
-            return [...event.sessions, ...drafts];
-          });
-          break;
-        case "session_started":
-          setSessions((prev) =>
-            prev.some((s) => s.id === event.meta.id) ? prev : [...prev, event.meta],
-          );
-          break;
-        case "session_ended":
-          // Auto-close the tab when the underlying PTY exits (agent kill,
-          // user kill, or crash). The xterm scrollback is torn down with it,
-          // so if the user wants to keep crash output they should copy it
-          // before killing.
-          setSessions((prev) => prev.filter((s) => s.id !== event.sessionId));
-          break;
-        case "created": {
-          const { draftId, meta } = event;
-          // `session_started` is broadcast to *all* subscribers (including us)
-          // and typically arrives before `created`, so the real meta may
-          // already be in state. Drop both the draft and any duplicate, then
-          // append the authoritative meta once.
-          setSessions((prev) => {
-            const cleaned = prev.filter((s) => s.id !== draftId && s.id !== meta.id);
-            return [...cleaned, meta];
-          });
-          setActiveId((current) => (current && draftId && current === draftId ? meta.id : current));
-          break;
-        }
-        case "create_failed": {
-          const { draftId, message } = event;
-          if (draftId) {
-            setSessions((prev) => prev.filter((s) => s.id !== draftId));
-            setActiveId((current) => (current === draftId ? null : current));
-          }
-          console.warn("[terminal-ws] create failed:", message);
-          break;
-        }
         case "snapshot": {
           const inst = instancesRef.current.get(event.sessionId);
           if (inst && event.data) inst.terminal.write(event.data);
@@ -149,19 +112,21 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
           if (inst) inst.terminal.write(event.data);
           break;
         }
-        case "error":
-          console.warn("[terminal-ws]", event.message, event.cause);
+        case "created": {
+          const { draftId, meta } = event;
+          setActiveId((current) => (current && draftId && current === draftId ? meta.id : current));
+          break;
+        }
+        case "create_failed":
+          if (event.draftId) {
+            setActiveId((current) => (current === event.draftId ? null : current));
+          }
           break;
         default:
           break;
       }
     });
-    return () => {
-      unsubscribe();
-      client.close();
-      wsRef.current = null;
-    };
-  }, [conversationId]);
+  }, [subscribe]);
 
   // ---- Auto-select an active tab when one becomes available / disappears ----
   useEffect(() => {
@@ -215,19 +180,18 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
     term.open(container);
     fitAddon.fit();
 
-    const ws = wsRef.current;
-    ws?.attach(session.id, term.cols, term.rows);
-    term.onData((data) => ws?.input(session.id, data));
+    client?.attach(session.id, term.cols, term.rows);
+    term.onData((data) => client?.input(session.id, data));
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit();
-      ws?.resize(session.id, term.cols, term.rows);
+      client?.resize(session.id, term.cols, term.rows);
     });
     observer.observe(container);
 
     instancesRef.current.set(session.id, { terminal: term, fitAddon, observer, attached: true });
     containersRef.current.set(session.id, container);
-  }, []);
+  }, [client]);
 
   // ---- Refit the active terminal when tab/collapsed state changes ----
   useEffect(() => {
@@ -279,21 +243,24 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
     };
     setSessions((prev) => [...prev, draft]);
     setActiveId(draftId);
-    wsRef.current?.create({ draftId, cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
-  }, [userTabCount, conversationId]);
+    client?.create({ draftId, cols: DEFAULT_COLS, rows: DEFAULT_ROWS });
+  }, [userTabCount, conversationId, client, setSessions]);
 
-  const removeTerminal = useCallback((id: string) => {
-    const session = sessions.find((s) => s.id === id);
-    if (!session) return;
-    // Always drop the tab locally on click — the xterm instance cleanup runs
-    // from the `sessions` diff effect. If it's a running server-backed session
-    // we fire-and-forget the kill; the server's `session_ended` arrives later
-    // and becomes a no-op since the id is already gone.
-    if (session.status === "running") wsRef.current?.kill(id);
-    else if (session.status !== "pending") wsRef.current?.detach(id);
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    setActiveId((current) => (current === id ? null : current));
-  }, [sessions]);
+  const removeTerminal = useCallback(
+    (id: string) => {
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      // Always drop the tab locally on click. The xterm instance cleanup runs
+      // from the `sessions` diff effect. If it's a running server-backed
+      // session we fire-and-forget the kill; the server's `session_ended`
+      // arrives later and becomes a no-op since the id is already gone.
+      if (session.status === "running") client?.kill(id);
+      else if (session.status !== "pending") client?.detach(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      setActiveId((current) => (current === id ? null : current));
+    },
+    [sessions, client, setSessions],
+  );
 
   return (
     <div className="flex h-full flex-col">

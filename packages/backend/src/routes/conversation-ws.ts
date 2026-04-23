@@ -52,9 +52,9 @@ function sendError(ws: WSContext, message: string, cause?: unknown): void {
   ws.send(JSON.stringify(payload));
 }
 
-export const terminalWsRouter = new Hono();
+export const conversationWsRouter = new Hono();
 
-terminalWsRouter.get(
+conversationWsRouter.get(
   "/ws",
   upgradeWebSocket(async (c) => {
     const url = new URL(c.req.url);

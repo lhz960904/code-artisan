@@ -12,7 +12,7 @@ import { snapshotRouter } from "./routes/snapshot.js";
 import { attachmentRouter } from "./routes/attachment.js";
 import { userRouter } from "./routes/user.js";
 import { settingRouter } from "./routes/setting.js";
-import { terminalWsRouter } from "./routes/terminal-ws.js";
+import { conversationWsRouter } from "./routes/conversation-ws.js";
 
 const app = new Hono();
 
@@ -25,8 +25,7 @@ app.get("/api/health", (c) => ok(c, { status: "ok" }));
 // better-auth handler — handles /api/auth/sign-in/*, /callback/*, /session, etc.
 app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 
-// WebSocket routes authenticate per-upgrade via cookie (see terminal-ws).
-app.route("/api/terminal", terminalWsRouter);
+app.route("/api/conversation-ws", conversationWsRouter);
 
 // Everything below requires an authenticated session.
 app.use("/api/*", requireAuth);
