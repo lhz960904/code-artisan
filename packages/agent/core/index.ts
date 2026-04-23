@@ -7,6 +7,7 @@ import type { AgentOptions } from "../types";
 import { Agent } from "./agent";
 import { createTodoSystem } from "../middlewares/todo";
 import { loopDetectionMiddleware } from "../middlewares/loop-detection";
+import { composeSystemPrompt } from "../prompts";
 
 function mergeTools(builtins: Tool[], userTools?: Tool[]): Tool[] {
   if (!userTools?.length) return builtins;
@@ -27,7 +28,7 @@ export function createAgent(options: AgentOptions): Agent {
   ];
 
   const agent = new Agent({
-    prompt: options.prompt ?? "You are a helpful coding assistant.",
+    prompt: options.prompt ?? composeSystemPrompt(),
     model: options.model,
     maxSteps: options.maxSteps,
     tools: mergeTools(

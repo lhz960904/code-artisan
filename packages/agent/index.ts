@@ -22,6 +22,18 @@ export {
 export * from "./types";
 export * from "./sandbox";
 
+export {
+  composeSystemPrompt,
+  DEFAULT_IDENTITY,
+  SYSTEM_SECTION,
+  DOING_TASKS_SECTION,
+  EXECUTING_ACTIONS_SECTION,
+  USING_TOOLS_SECTION,
+  TONE_STYLE_SECTION,
+  COMMUNICATING_SECTION,
+} from "./prompts";
+export type { SystemPromptOptions } from "./prompts";
+
 export { loopDetectionMiddleware } from "./middlewares/loop-detection";
 export type { LoopDetectionOptions } from "./middlewares/loop-detection";
 export { microCompactMiddleware } from "./middlewares/micro-compact";

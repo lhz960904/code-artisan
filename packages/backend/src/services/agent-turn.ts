@@ -10,8 +10,8 @@ import {
   webFetchTool,
   webSearchTool,
 } from "@code-artisan/agent";
-import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
+import { buildWebSystemPrompt } from "../prompts";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
@@ -23,12 +23,7 @@ import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { generateTitleMiddleware } from "./middlewares/generate-title";
 import { getShellSessionManager } from "./shell-session";
-import {
-  createWebBashTool,
-  createBashOutputTool,
-  createKillShellTool,
-  createExposePortTool,
-} from "./web-tools";
+import { createWebBashTool, createBashOutputTool, createKillShellTool, createExposePortTool } from "./web-tools";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -122,14 +117,7 @@ export class AgentTurnService {
     return createAgent({
       model: provider,
       sandbox: sandbox,
-      prompt: [
-        `You are a helpful coding assistant operating inside an isolated sandbox.`,
-        `Your project workspace is at \`${SANDBOX_WORKSPACE_ROOT}\`. Treat it as the root of the user's project — all source files, configs, and generated artefacts belong under it.`,
-        `The shell's default working directory is already \`${SANDBOX_WORKSPACE_ROOT}\`. Run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${SANDBOX_WORKSPACE_ROOT}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.`,
-        `Do not read or write files outside \`${SANDBOX_WORKSPACE_ROOT}\` (e.g. dotfiles in /home/user, system paths) — they are invisible to the user and won't be persisted.`,
-        `Binary assets (images, fonts, archives, media files) are NOT persisted across sessions — only text files are. For images, prefer inline SVG or external CDN URLs (e.g. unsplash, placehold.co) over curl/wget downloads. For fonts, prefer Google Fonts / self-hosting CDN links over local font files.`,
-        `For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — you get a session id, and output streams live into the user's terminal panel. After starting a server, wait ~2s and call \`bash_output\` to verify it booted (check status + last output). If the session already exited with non-zero code, diagnose from the tail before retrying. Use \`kill_shell\` to stop a session. Do NOT background one-shot commands whose output you need immediately.`,
-      ].join("\n\n"),
+      prompt: buildWebSystemPrompt(),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
       // TODO: how to integration mcp tools and skills, if need to put in sandbox?
@@ -146,10 +134,7 @@ export class AgentTurnService {
   }
 
   private async _setupSandbox(): Promise<{ sandbox: E2BSandbox; initialFiles: Map<string, string> | null }> {
-    const { sandbox, snapshots } = await acquireConversationSandbox(
-      this.conversation.id,
-      this.conversation.sandboxId,
-    );
+    const { sandbox, snapshots } = await acquireConversationSandbox(this.conversation.id, this.conversation.sandboxId);
     const initialFiles: Map<string, string> | null =
       snapshots.length > 0 ? new Map(snapshots.map((s) => [s.path, s.content])) : null;
     return { sandbox, initialFiles };

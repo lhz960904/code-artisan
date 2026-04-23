@@ -33,11 +33,13 @@
 ### 工程化
 
 - [ ] Prompt 优化
-- [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist/…）
+- [ ] Sub Agent 功能、后台任务
+- [ ] 记忆系统
+- [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist）
 
 ## P2 — 增强
 
-- [ ] Confirm 模式（工具审批流程）
+- [ ] 权限系统 + Confirm 模式（工具审批流程）
 - [ ] 多 LLM Provider（OpenAI / DeepSeek）
 - [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] Custom Rules（用户自定义 system prompt 规则）
