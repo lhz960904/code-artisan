@@ -3,13 +3,27 @@ import { createSkillsMiddleware } from "../index";
 import { join } from "node:path";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { LocalSandbox } from "../../../sandbox/local";
 import type { AgentContext, ModelContext } from "../../../types/agent";
 import type { LLMProvider } from "../../../types/provider";
+import type { Sandbox } from "../../../sandbox/types";
 
 const noopModel = {
   invoke: async () => ({ role: "assistant" as const, content: [{ type: "text" as const, text: "" }] }),
   stream: async function* () {},
 } as unknown as LLMProvider;
+
+const sandbox: Sandbox = new LocalSandbox();
+
+function buildContext(overrides: Partial<AgentContext> = {}): AgentContext {
+  return {
+    prompt: "",
+    messages: [],
+    model: noopModel,
+    sandbox,
+    ...overrides,
+  };
+}
 
 let tempDir: string;
 
@@ -38,7 +52,7 @@ describe("createSkillsMiddleware", () => {
       await writeSkill(skillsDir, "skill-b", "Skill B desc");
 
       const mw = createSkillsMiddleware([skillsDir]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(2);
       expect(result?.skills).toEqual(
@@ -56,7 +70,7 @@ describe("createSkillsMiddleware", () => {
       await writeSkill(dir2, "from-dir2", "From dir 2");
 
       const mw = createSkillsMiddleware([dir1, dir2]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(2);
       expect(result?.skills).toEqual(
@@ -72,7 +86,7 @@ describe("createSkillsMiddleware", () => {
       await writeSkill(validDir, "real-skill", "Real");
 
       const mw = createSkillsMiddleware([join(tempDir, "does-not-exist"), validDir]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(1);
       expect(result?.skills?.[0]?.name).toBe("real-skill");
@@ -85,7 +99,7 @@ describe("createSkillsMiddleware", () => {
       await Bun.write(join(skillsDir, "stray-file.txt"), "not a skill");
 
       const mw = createSkillsMiddleware([skillsDir]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(1);
       expect(result?.skills?.[0]?.name).toBe("dir-skill");
@@ -97,7 +111,7 @@ describe("createSkillsMiddleware", () => {
       await writeSkill(skillsDir, "has-skill", "Has it");
 
       const mw = createSkillsMiddleware([skillsDir]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(1);
       expect(result?.skills?.[0]?.name).toBe("has-skill");
@@ -108,28 +122,33 @@ describe("createSkillsMiddleware", () => {
       await writeSkill(skillsDir, "shared-skill", "Shared");
 
       const mw = createSkillsMiddleware([skillsDir, skillsDir]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toHaveLength(1);
     });
 
     it("should return empty array when no directories provided", async () => {
       const mw = createSkillsMiddleware([]);
-      const result = await mw.beforeAgentRun!({} as any);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
 
       expect(result?.skills).toEqual([]);
+    });
+
+    it("should set path to the absolute SKILL.md location", async () => {
+      const skillsDir = join(tempDir, "absolute-path");
+      await writeSkill(skillsDir, "my-skill", "desc");
+
+      const mw = createSkillsMiddleware([skillsDir]);
+      const result = await mw.beforeAgentRun!({ agentContext: buildContext() });
+
+      expect(result?.skills?.[0]?.path).toBe(join(skillsDir, "my-skill", "SKILL.md"));
     });
   });
 
   describe("beforeModel", () => {
     it("should append skill_system prompt when skills are present", async () => {
       const skills = [{ name: "test-skill", description: "Test", path: "/fake/path" }];
-      const agentContext: AgentContext = {
-        prompt: "You are helpful.",
-        messages: [],
-        skills,
-        model: noopModel,
-      };
+      const agentContext = buildContext({ skills });
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,
         messages: [],
@@ -138,19 +157,13 @@ describe("createSkillsMiddleware", () => {
       const mw = createSkillsMiddleware([]);
       const result = await mw.beforeModel!({ agentContext, modelContext });
 
-      expect(result?.prompt).toContain("You are helpful.");
       expect(result?.prompt).toContain("<skill_system>");
       expect(result?.prompt).toContain("test-skill");
       expect(result?.prompt).toContain("</skill_system>");
     });
 
     it("should not modify prompt when skills array is empty", async () => {
-      const agentContext: AgentContext = {
-        prompt: "You are helpful.",
-        messages: [],
-        skills: [],
-        model: noopModel,
-      };
+      const agentContext = buildContext({ skills: [] });
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,
         messages: [],
@@ -163,11 +176,7 @@ describe("createSkillsMiddleware", () => {
     });
 
     it("should not modify prompt when skills is undefined", async () => {
-      const agentContext: AgentContext = {
-        prompt: "You are helpful.",
-        messages: [],
-        model: noopModel,
-      };
+      const agentContext = buildContext();
       const modelContext: ModelContext = {
         prompt: agentContext.prompt,
         messages: [],

@@ -119,7 +119,6 @@ export class AgentTurnService {
       prompt: buildWebSystemPrompt(),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
-      // TODO: how to integration mcp tools and skills, if need to put in sandbox?
       tools: [
         createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
         createBashOutputTool({ manager: getShellSessionManager() }),
@@ -128,7 +127,7 @@ export class AgentTurnService {
         webSearchTool,
         webFetchTool,
       ],
-      skillsDirs: [],
+      skillsDirs: ["/opt/skills"],
     });
   }
 

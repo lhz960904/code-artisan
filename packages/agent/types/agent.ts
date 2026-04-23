@@ -40,6 +40,10 @@ export interface AgentContext {
   model: LLMProvider;
   /** The tools to use to invoke the agent. */
   tools?: Tool[];
+  /** The execution environment — same instance tools receive via ToolContext.
+   *  Exposed to middlewares that need to read files, list dirs, or exec
+   *  commands inside the sandbox (e.g. loading skills from a sandbox path). */
+  sandbox: Sandbox;
   /** The skills to use to invoke the agent. */
   skills?: SkillFrontmatter[];
   /**

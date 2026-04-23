@@ -43,6 +43,7 @@ export class Agent {
       messages: this.messages,
       model: this.model,
       tools: this.tools,
+      sandbox: this.sandbox,
     };
 
     if (params.initMessages?.length) {

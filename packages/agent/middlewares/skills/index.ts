@@ -1,49 +1,52 @@
-import { readSkillFrontMatter, type SkillFrontmatter } from "./skill-reader";
-import type { Dirent } from "node:fs";
-import fs, { exists } from "node:fs/promises";
-import os from "node:os";
-import { join } from "node:path";
+import matter from "gray-matter";
 import type { AgentMiddleware } from "../../types/middleware";
+import type { SkillFrontmatter } from "./skill-reader";
 
 /**
- * Loads skills from one or more `skillsDirs`.
+ * Loads skills from one or more `skillsDirs` inside the agent's sandbox.
+ * Each entry must be an absolute path in the sandbox file system. Each
+ * first-level subdirectory containing a `SKILL.md` is treated as a skill.
  */
 export function createSkillsMiddleware(skillsDirs: string[]): AgentMiddleware {
   return {
-    beforeAgentRun: async () => {
+    beforeAgentRun: async ({ agentContext }) => {
+      const { sandbox } = agentContext;
       const skills: SkillFrontmatter[] = [];
-      const seenSkillFiles = new Set<string>();
+      const seen = new Set<string>();
 
-      for (let skillsDir of skillsDirs) {
-        if (skillsDir.startsWith("~")) {
-          skillsDir = join(os.homedir(), skillsDir.slice(1));
-        }
-        if (!(await exists(skillsDir))) {
-          continue;
-        }
+      for (const skillsDir of skillsDirs) {
+        const entries = await sandbox.listDir(skillsDir).catch(() => []);
+        if (entries.length === 0) continue;
 
-        let folders: Dirent[];
-        try {
-          folders = await fs.readdir(skillsDir, { withFileTypes: true });
-        } catch {
-          // Missing/invalid skills directory; treat as empty.
-          continue;
-        }
+        const topDirs = entries.filter(
+          (e) => e.is_dir && !e.path.includes("/"),
+        );
 
-        for (const folder of folders) {
-          const skillFilePath = join(skillsDir, folder.name, "SKILL.md");
-          if (!folder.isDirectory()) continue;
-          if (seenSkillFiles.has(skillFilePath)) continue;
-          if (!(await exists(skillFilePath))) continue;
+        for (const dir of topDirs) {
+          const skillRelativePath = `${dir.path}/SKILL.md`;
+          const hasSkillFile = entries.some(
+            (e) => !e.is_dir && e.path === skillRelativePath,
+          );
+          if (!hasSkillFile) continue;
 
-          seenSkillFiles.add(skillFilePath);
-          const frontmatter = await readSkillFrontMatter(skillFilePath);
-          skills.push(frontmatter);
+          const skillFullPath = `${skillsDir}/${skillRelativePath}`;
+          if (seen.has(skillFullPath)) continue;
+          seen.add(skillFullPath);
+
+          try {
+            const content = await sandbox.readFile(skillFullPath);
+            const parsed = matter(content);
+            skills.push({
+              ...(parsed.data as Omit<SkillFrontmatter, "path">),
+              path: skillFullPath,
+            });
+          } catch {
+            continue;
+          }
         }
       }
-      return {
-        skills,
-      };
+
+      return { skills };
     },
 
     beforeModel: async ({ agentContext, modelContext }) => {
