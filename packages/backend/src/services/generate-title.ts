@@ -1,8 +1,9 @@
-import { AnthropicProvider, type LLMProvider, type UserMessage } from "@code-artisan/agent";
+import type { LLMProvider, UserMessage } from "@code-artisan/agent";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "../db";
 import { conversations } from "../db/schema";
+import { createModelProvider } from "./model-provider";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -37,7 +38,6 @@ async function callModel(model: LLMProvider, userMessage: UserMessage): Promise<
       ],
       options: {
         max_tokens: TITLE_MAX_TOKENS,
-        thinking: { type: "disabled" },
       },
     });
     const block = res.content.find((b) => b.type === "text");
@@ -72,10 +72,7 @@ export async function maybeGenerateTitle(
 ): Promise<string | null> {
   if (conversation.title) return null;
 
-  const model = new AnthropicProvider(modelId, {
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    baseURL: process.env.ANTHROPIC_BASE_URL,
-  });
+  const model = createModelProvider(modelId);
 
   const title = await callModel(model, userMessage);
   if (!title) return null;

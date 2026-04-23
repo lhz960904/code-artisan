@@ -4,6 +4,8 @@ export { LLMProvider } from "./types/provider";
 export type { ModelInvokeParams } from "./types/provider";
 export { AnthropicProvider } from "./community/anthropic/index";
 export type { AnthropicProviderOptions } from "./community/anthropic/index";
+export { OpenAIProvider } from "./community/openai/index";
+export type { OpenAIProviderOptions } from "./community/openai/index";
 
 export { defineTool } from "./tools/tool";
 export type { FunctionTool, ToolContext } from "./tools/tool";

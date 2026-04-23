@@ -81,6 +81,8 @@ export function parseAssistantMessage(response: Anthropic.Message): AssistantMes
     content: [],
   };
 
+  if (!response || !Array.isArray(response.content)) return result;
+
   for (const block of response.content) {
     if (block.type === "text") {
       result.content.push({ type: "text", text: block.text });

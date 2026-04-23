@@ -1,7 +1,6 @@
 import {
   Agent,
   AgentMiddleware,
-  AnthropicProvider,
   autoCompactMiddleware,
   createAgent,
   Message,
@@ -10,6 +9,7 @@ import {
   webFetchTool,
   webSearchTool,
 } from "@code-artisan/agent";
+import { createModelProvider } from "./model-provider";
 import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
 import { buildWebSystemPrompt } from "../prompts";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
@@ -82,10 +82,7 @@ export class AgentTurnService {
   }
 
   private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {
-    const provider = new AnthropicProvider(this.turnOptions.model, {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseURL: process.env.ANTHROPIC_BASE_URL,
-    });
+    const provider = createModelProvider(this.turnOptions.model);
 
     const middlewares: AgentMiddleware[] = [
       microCompactMiddleware(),
