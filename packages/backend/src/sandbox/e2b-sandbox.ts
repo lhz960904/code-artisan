@@ -19,6 +19,9 @@ import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
+/** Custom E2B template: extends code-interpreter with Bun + preloaded
+ *  Skills at /opt/skills. See `sandbox/e2b.Dockerfile`. */
+const E2B_TEMPLATE_NAME = "code-artisan";
 /** E2B's `pty.create` default is 60s — way too short for an interactive shell
  *  or a dev server. Set to 1h, which is the max sandbox lifetime on Hobby
  *  accounts (Pro goes up to 24h); either way the sandbox's own idle-kill
@@ -206,7 +209,7 @@ export class E2BSandbox implements Sandbox {
 
   /** Create a fresh E2B sandbox with the project workspace pre-created. */
   static async create(timeoutMs: number = DEFAULT_SANDBOX_LIFETIME_MS): Promise<E2BSandbox> {
-    const sdk = await E2BSDK.create({ timeoutMs });
+    const sdk = await E2BSDK.create(E2B_TEMPLATE_NAME, { timeoutMs });
     // Ensure workspaceRoot exists before any exec uses it as default cwd.
     // Using files.makeDir (not exec) avoids the chicken-and-egg with default cwd.
     try {
