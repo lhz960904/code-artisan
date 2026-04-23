@@ -1,12 +1,15 @@
 import { useRef, useEffect } from "react";
 import { AlertCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageList } from "@/components/chat/message-list";
 import { Sender } from "@/components/chat/sender";
 import { Skeleton } from "@/components/ui/skeleton";
+import { modelsOptions } from "@/api/queries";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useModelPrefsStore } from "@/stores/model-prefs";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -15,6 +18,8 @@ interface ChatPanelProps {
 export function ChatPanel({ conversationId }: ChatPanelProps) {
   const fileUpload = useFileUpload();
   const { messages, status, isLoading, sendMessage, error } = useChat(conversationId);
+  const { data: models } = useQuery(modelsOptions());
+  const { model, setModel } = useModelPrefsStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialSentForRef = useRef<string | null>(null);
@@ -28,15 +33,18 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
     const pending = usePendingPromptStore.getState().consumeForConversation(conversationId);
     if (!pending) return;
     initialSentForRef.current = conversationId;
-    sendMessage(pending.prompt, pending.attachments.length > 0 ? pending.attachments : undefined);
-  }, [conversationId, status, sendMessage]);
+    sendMessage(pending.prompt, {
+      attachments: pending.attachments.length > 0 ? pending.attachments : undefined,
+      model,
+    });
+  }, [conversationId, status, sendMessage, model]);
 
   // send pending chat message triggered by workspace UI (e.g. Preview panel "Start Server" button)
   useEffect(() => {
     if (status !== "ready" || !pendingChatMessage) return;
     setPendingChatMessage(null);
-    sendMessage(pendingChatMessage);
-  }, [pendingChatMessage, status, sendMessage, setPendingChatMessage]);
+    sendMessage(pendingChatMessage, { model });
+  }, [pendingChatMessage, status, sendMessage, setPendingChatMessage, model]);
 
   // scroll to bottom when messages change
   useEffect(() => {
@@ -50,7 +58,10 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   const handleSend = async (content: string) => {
     const attachments = fileUpload.hasFiles ? fileUpload.attachments : undefined;
     fileUpload.clear();
-    sendMessage(content, attachments && attachments.length > 0 ? attachments : undefined);
+    sendMessage(content, {
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      model,
+    });
   };
 
   return (
@@ -79,6 +90,9 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
           onAddFiles={fileUpload.addFiles}
           onRemoveFile={fileUpload.removeFile}
           isUploading={fileUpload.isUploading}
+          models={models}
+          modelId={model}
+          onModelChange={setModel}
         />
       </div>
     </div>

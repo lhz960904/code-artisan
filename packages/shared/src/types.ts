@@ -1,4 +1,5 @@
 export { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "./constants";
+export { SUPPORTED_MODELS, DEFAULT_MODEL_ID, findModel, type ModelInfo, type ModelProvider } from "./models";
 
 export type {
   Message,

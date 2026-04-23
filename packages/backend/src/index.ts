@@ -13,6 +13,7 @@ import { attachmentRouter } from "./routes/attachment.js";
 import { userRouter } from "./routes/user.js";
 import { settingRouter } from "./routes/setting.js";
 import { conversationWsRouter } from "./routes/conversation-ws.js";
+import { modelsRouter } from "./routes/models.js";
 
 const app = new Hono();
 
@@ -26,6 +27,8 @@ app.get("/api/health", (c) => ok(c, { status: "ok" }));
 app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/conversation-ws", conversationWsRouter);
+// Public: static model catalog (user-tier filtering will add optional session lookup later).
+app.route("/api/models", modelsRouter);
 
 // Everything below requires an authenticated session.
 app.use("/api/*", requireAuth);

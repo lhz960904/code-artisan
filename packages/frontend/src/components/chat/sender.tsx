@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import {
   Plus,
   Paperclip,
-  Sparkles,
   ChevronDown,
   Lock,
   ArrowRight,
@@ -10,6 +9,7 @@ import {
   Loader2,
   Wand2,
 } from "lucide-react";
+import type { ModelInfo, ModelProvider } from "@code-artisan/shared";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,13 +20,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AttachmentPreview } from "@/components/chat/attachment-preview";
 import type { FileAttachment } from "@/hooks/use-file-upload";
+import anthropicIcon from "@/assets/model-icons/anthropic.svg";
+import moonshotIcon from "@/assets/model-icons/moonshot.svg";
 
-export interface ModelOption {
-  id: string;
-  label: string;
-  icon?: React.ReactNode;
-  locked?: boolean;
-}
+const PROVIDER_ICON: Record<ModelProvider, string> = {
+  anthropic: anthropicIcon,
+  moonshot: moonshotIcon,
+};
 
 export interface SenderProps {
   value?: string;
@@ -42,23 +42,14 @@ export interface SenderProps {
   onRemoveFile?: (id: string) => void;
   isUploading?: boolean;
 
-  models?: ModelOption[];
-  modelId?: string;
-  defaultModelId?: string;
-  onModelChange?: (id: string) => void;
+  models: ModelInfo[];
+  modelId: string;
+  onModelChange: (id: string) => void;
 
   size?: "default" | "large";
   submitLabel?: string;
   className?: string;
 }
-
-const DEFAULT_MODELS: ModelOption[] = [
-  { id: "sonnet-4-6", label: "Sonnet 4.6" },
-  { id: "haiku-4-5", label: "Haiku 4.5", locked: true },
-  { id: "opus-4-6", label: "Opus 4.6", locked: true },
-  { id: "opus-4-7", label: "Opus 4.7", locked: true },
-  { id: "codex", label: "Codex", locked: true },
-];
 
 // ----- file-local hooks -----
 
@@ -107,12 +98,16 @@ function PlusMenu({ onAttach }: { onAttach: () => void }) {
   );
 }
 
+function ProviderIcon({ provider, className }: { provider: ModelProvider; className?: string }) {
+  return <img src={PROVIDER_ICON[provider]} alt={provider} className={cn("size-4 rounded-sm", className)} />;
+}
+
 function ModelPicker({
   models,
   value,
   onChange,
 }: {
-  models: ModelOption[];
+  models: ModelInfo[];
   value: string;
   onChange: (id: string) => void;
 }) {
@@ -125,14 +120,14 @@ function ModelPicker({
           variant="ghost"
           size="sm"
           aria-label="Select model"
-          className="gap-1 rounded-md font-display text-xs text-muted-foreground hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground"
+          className="gap-1.5 rounded-md font-display text-xs text-muted-foreground hover:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground"
         >
-          <Sparkles className="size-3.5 text-primary" />
+          {selected && <ProviderIcon provider={selected.provider} className="size-3.5" />}
           {selected?.label}
           <ChevronDown className="size-3" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-60 p-1.5">
+      <DropdownMenuContent side="top" align="start" className="w-65 p-1.5">
         {models.map((m) => {
           const isActive = m.id === value;
           return (
@@ -144,7 +139,7 @@ function ModelPicker({
               }}
               className="gap-2 px-2.5 py-2"
             >
-              <Sparkles className="!text-primary" />
+              <ProviderIcon provider={m.provider} />
               <span className="flex-1 text-left">{m.label}</span>
               {isActive && (
                 <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-primary">
@@ -224,9 +219,8 @@ export function Sender({
   onAddFiles,
   onRemoveFile,
   isUploading,
-  models = DEFAULT_MODELS,
-  modelId: modelIdProp,
-  defaultModelId = "sonnet-4-6",
+  models,
+  modelId,
   onModelChange,
   size = "default",
   submitLabel,
@@ -235,9 +229,6 @@ export function Sender({
   const [inner, setInner] = useState("");
   const value = valueProp ?? inner;
   const isControlled = valueProp !== undefined;
-
-  const [modelIdInner, setModelIdInner] = useState(defaultModelId);
-  const modelId = modelIdProp ?? modelIdInner;
 
   const [isDragging, setIsDragging] = useState(false);
 
@@ -315,11 +306,6 @@ export function Sender({
     [onAddFiles],
   );
 
-  const handleModelChange = (id: string) => {
-    if (modelIdProp === undefined) setModelIdInner(id);
-    onModelChange?.(id);
-  };
-
   return (
     <div
       onDragOver={handleDragOver}
@@ -374,7 +360,7 @@ export function Sender({
       <div className="mt-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-1">
           <PlusMenu onAttach={() => fileInputRef.current?.click()} />
-          <ModelPicker models={models} value={modelId} onChange={handleModelChange} />
+          <ModelPicker models={models} value={modelId} onChange={onModelChange} />
         </div>
         <SendButton
           size={size}

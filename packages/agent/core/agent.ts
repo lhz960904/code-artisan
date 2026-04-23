@@ -28,6 +28,7 @@ export class Agent {
 
   private _running: boolean = false;
   private _abortController: AbortController | null = null;
+  private _modelOptions: Record<string, unknown> | undefined;
 
   constructor(params: AgentOptions) {
     this.prompt = params.prompt || "";
@@ -72,12 +73,13 @@ export class Agent {
    *  - `mode: "token"` (default): partial snapshots + message events
    *  - `mode: "message"`: message events only
    */
-  stream(message: UserMessage, options: { mode: "message" }): AsyncGenerator<AgentMessageEvent>;
-  stream(message: UserMessage, options?: { mode?: "token" }): AsyncGenerator<AgentEvent>;
-  async *stream(message: UserMessage, options: { mode?: "token" | "message" } = {}): AsyncGenerator<AgentEvent> {
+  stream(message: UserMessage, options: { mode: "message"; modelOptions?: Record<string, unknown> }): AsyncGenerator<AgentMessageEvent>;
+  stream(message: UserMessage, options?: { mode?: "token"; modelOptions?: Record<string, unknown> }): AsyncGenerator<AgentEvent>;
+  async *stream(message: UserMessage, options: { mode?: "token" | "message"; modelOptions?: Record<string, unknown> } = {}): AsyncGenerator<AgentEvent> {
     const mode = options.mode ?? "token";
     if (this._running) throw new Error("Agent is already running");
     this._abortController = new AbortController();
+    this._modelOptions = options.modelOptions;
     this._appendMessage(message);
     await this._beforeAgentRun();
     this._running = true;
@@ -114,6 +116,7 @@ export class Agent {
     } finally {
       this._running = false;
       this._abortController = null;
+      this._modelOptions = undefined;
     }
   }
 
@@ -147,6 +150,7 @@ export class Agent {
     for await (const snapshot of this.model.stream({
       messages: this._buildModelMessages(modelContext),
       tools: modelContext.tools,
+      options: this._modelOptions,
       signal: this._abortController?.signal,
     })) {
       lastSnapshot = snapshot;

@@ -27,12 +27,19 @@ import { createWebBashTool, createBashOutputTool, createKillShellTool, createExp
 
 type Conversation = typeof conversations.$inferSelect;
 
+export interface AgentTurnOptions {
+  model: string;
+}
+
 export class AgentTurnService {
   private agent: Agent | null = null;
 
   private pendingEvents: WebAgentEvent[] = [];
 
-  constructor(private conversation: Conversation) {}
+  constructor(
+    private conversation: Conversation,
+    private turnOptions: AgentTurnOptions,
+  ) {}
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
     const [userMessageId, resumeMessages, sandboxResult] = await Promise.all([
@@ -76,7 +83,7 @@ export class AgentTurnService {
   }
 
   private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {
-    const provider = new AnthropicProvider("minimax-m2.5", {
+    const provider = new AnthropicProvider(this.turnOptions.model, {
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseURL: process.env.ANTHROPIC_BASE_URL,
     });

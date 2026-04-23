@@ -29,10 +29,11 @@
 - [x] workspace file tree UI 交互优化，即时响应流式数据
 - [x] workspace editor panel UI 交互优化，即时响应流式数据
 - [x] workspace terminal panel UI 交互优化，即时响应流式数据
+- [x] 支持切换模型
 
 ### 工程化
 
-- [ ] Prompt 优化
+- [x] Prompt 优化
 - [ ] Sub Agent 功能、后台任务
 - [ ] 记忆系统
 - [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist）
@@ -40,7 +41,7 @@
 ## P2 — 增强
 
 - [ ] 权限系统 + Confirm 模式（工具审批流程）
-- [ ] 多 LLM Provider（OpenAI / DeepSeek）
+- [x] 多 LLM Provider（OpenAI / DeepSeek）
 - [ ] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] Custom Rules（用户自定义 system prompt 规则）
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）

@@ -12,11 +12,16 @@ export interface UseChatOptions {
   onError?: (error: Error) => void;
 }
 
+export interface SendMessageOptions {
+  attachments?: Attachment[];
+  model: string;
+}
+
 export interface UseChatReturn {
   messages: StoredMessage[];
   status: ChatStatus;
   isLoading: boolean;
-  sendMessage: (content: string, attachments?: Attachment[]) => void;
+  sendMessage: (content: string, options: SendMessageOptions) => void;
   stop: () => void;
   error: Error | null;
 }
@@ -169,8 +174,9 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
   );
 
   const sendMessage = useCallback(
-    async (content: string, attachments?: Attachment[]) => {
+    async (content: string, options: SendMessageOptions) => {
       if (!conversationId || status === "submitted" || status === "running") return;
+      const { attachments, model } = options;
 
       // Cancel any in-flight GET /message/:id so the loader prefetch can't
       // settle after us and overwrite the optimistic user message + early
@@ -205,7 +211,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, attachments }),
+          body: JSON.stringify({ content, attachments, model }),
           signal: abort.signal,
         });
 

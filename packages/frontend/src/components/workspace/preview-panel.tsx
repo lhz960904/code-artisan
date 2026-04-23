@@ -18,7 +18,7 @@ export function PreviewPanel() {
     );
   }
 
-  if (!Object.keys(files).length) {
+  if (files.size === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-background text-muted-foreground">
         <MonitorX className="h-10 w-10 opacity-30" />

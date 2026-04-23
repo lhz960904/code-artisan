@@ -1,6 +1,7 @@
 import { createRoute } from "@tanstack/react-router";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { conversationsListOptions } from "@/api";
+import { useQuery } from "@tanstack/react-query";
+import { conversationsListOptions, modelsOptions } from "@/api";
 import { authedRoute } from "./layout/authed";
 import { AppSidebar, AppSidebarSkeleton } from "@/components/layout/app-sidebar";
 import { Sender } from "@/components/chat/sender";
@@ -12,6 +13,7 @@ import {
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useStartConversation } from "@/hooks/use-start-conversation";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
+import { useModelPrefsStore } from "@/stores/model-prefs";
 
 export const dashboardRoute = createRoute({
   getParentRoute: () => authedRoute,
@@ -27,6 +29,8 @@ export function DashboardPage() {
   const { start, busy } = useStartConversation();
   const [prompt, setPrompt] = useState("");
   const hydratedRef = useRef(false);
+  const { data: models } = useQuery(modelsOptions());
+  const { model, setModel } = useModelPrefsStore();
 
   useEffect(() => {
     if (hydratedRef.current) return;
@@ -71,6 +75,9 @@ export function DashboardPage() {
                 onAddFiles={fileUpload.addFiles}
                 onRemoveFile={fileUpload.removeFile}
                 isUploading={fileUpload.isUploading}
+                models={models}
+                modelId={model}
+                onModelChange={setModel}
               />
             </div>
           </div>

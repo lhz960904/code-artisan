@@ -1,10 +1,13 @@
 import { createRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { rootRoute } from "./layout/root";
 import { HomeHeader } from "@/components/layout/home-header";
 import { Sender } from "@/components/chat/sender";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useStartConversation } from "@/hooks/use-start-conversation";
+import { modelsOptions } from "@/api/queries";
+import { useModelPrefsStore } from "@/stores/model-prefs";
 
 const TYPING_PREFIX = "Let's build ";
 const TYPING_SUFFIXES = [
@@ -71,6 +74,8 @@ export function HomePage() {
   const fileUpload = useFileUpload();
   const placeholder = useTypingPlaceholder(TYPING_PREFIX, TYPING_SUFFIXES);
   const { start, busy } = useStartConversation();
+  const { data: models } = useQuery(modelsOptions());
+  const { model, setModel } = useModelPrefsStore();
 
   const handleSubmit = (content: string) =>
     start(content, fileUpload.attachments);
@@ -105,6 +110,9 @@ export function HomePage() {
               onAddFiles={fileUpload.addFiles}
               onRemoveFile={fileUpload.removeFile}
               isUploading={fileUpload.isUploading}
+              models={models}
+              modelId={model}
+              onModelChange={setModel}
             />
           </div>
 

@@ -3,6 +3,7 @@ import { streamSSE } from "hono/streaming";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Attachment } from "@code-artisan/shared";
+import { SUPPORTED_MODELS } from "@code-artisan/shared";
 
 import { db } from "../db/index.js";
 import { conversations, messages } from "../db/schema.js";
@@ -17,10 +18,13 @@ const conversationParamSchema = z.object({
   conversationId: z.uuid(),
 });
 
+const SUPPORTED_MODEL_IDS = SUPPORTED_MODELS.map((m) => m.id) as [string, ...string[]];
+
 const sendMessageSchema = z
   .object({
     content: z.string().default(""),
     attachments: z.array(z.custom<Attachment>()).max(MAX_ATTACHMENTS).optional(),
+    model: z.enum(SUPPORTED_MODEL_IDS),
   })
   .refine((d) => d.content.trim().length > 0 || (d.attachments?.length ?? 0) > 0, {
     message: "Message content or attachments required",
@@ -52,8 +56,9 @@ messageRouter.post(
   validate("json", sendMessageSchema),
   async (c) => {
     const { conversationId } = c.req.valid("param");
-    const { content, attachments } = c.req.valid("json");
+    const { content, attachments, model } = c.req.valid("json");
     const user = c.get("user");
+
     const [conversation] = await db
       .select()
       .from(conversations)
@@ -61,7 +66,7 @@ messageRouter.post(
     if (!conversation) {
       return notFound(c, "Conversation not found");
     }
-    const turnService = new AgentTurnService(conversation);
+    const turnService = new AgentTurnService(conversation, { model });
     const userMessage = buildUserMessage(content, attachments ?? []);
     return streamSSE(c, async (stream) => {
       const interval = setInterval(async () => {
