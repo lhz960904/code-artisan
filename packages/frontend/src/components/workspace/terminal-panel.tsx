@@ -92,6 +92,9 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
   const resolvedRef = useRef(resolved);
   // eslint-disable-next-line react-hooks/refs
   resolvedRef.current = resolved;
+  const clientRef = useRef(client);
+  // eslint-disable-next-line react-hooks/refs
+  clientRef.current = client;
 
   // ---- Per-mount subscription: panel-local concerns only ----
   // Sessions list / session_started / session_ended / created list-update
@@ -213,11 +216,18 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
   }, [resolved]);
 
   // ---- Final cleanup on unmount ----
+  //
+  // Send `detach` for every attached session so the backend drops its
+  // subscription and forgets this client had ever attached. Without this,
+  // on remount (e.g. switching Preview → Code tabs) the backend short-circuits
+  // the new attach (conversation-ws.ts: `perSession.has(sessionId)` guard) and
+  // the freshly-created xterm never receives a snapshot — terminal looks blank.
   useEffect(() => {
     return () => {
-      for (const inst of instancesRef.current.values()) {
+      for (const [id, inst] of instancesRef.current) {
         inst.observer.disconnect();
         inst.terminal.dispose();
+        clientRef.current?.detach(id);
       }
       instancesRef.current.clear();
       containersRef.current.clear();
