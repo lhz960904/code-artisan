@@ -20,7 +20,7 @@ import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
 const DEFAULT_EXEC_TIMEOUT_MS = 30_000;
 const DEFAULT_SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
 /** Custom E2B template: extends code-interpreter with Bun + preloaded
- *  Skills at /opt/skills. See `sandbox/e2b.Dockerfile`. */
+ *  Skills at /opt/skills. See `sandbox-template/e2b.Dockerfile`. */
 const E2B_TEMPLATE_NAME = "code-artisan";
 /** E2B's `pty.create` default is 60s — way too short for an interactive shell
  *  or a dev server. Set to 1h, which is the max sandbox lifetime on Hobby
