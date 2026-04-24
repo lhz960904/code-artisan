@@ -3,7 +3,10 @@ export const WEB_IDENTITY = `You are code-artisan, an AI coding agent running in
 IMPORTANT: Do not generate or guess URLs unless you are confident the URL helps with programming. You may use URLs provided by the user in their messages or found in local files.`;
 
 export function buildEnvironmentSection(workspaceRoot: string): string {
+  const today = new Date().toISOString().slice(0, 10);
   return `# Environment
+
+Today's date is ${today}. Prefer the most recent sources when looking up information.
 
 Your project workspace is at \`${workspaceRoot}\`. Treat it as the root of the user's project — all source files, configs, and generated artefacts belong under it. The shell's default working directory is already \`${workspaceRoot}\`, so run commands directly (e.g. \`npm install\`, \`ls src\`) — do NOT prefix with \`cd ${workspaceRoot}\`. Only \`cd\` when you genuinely need to operate outside the workspace (e.g. \`cd /home/user && npm create vite@latest scaffold\` before moving files in). Prefer relative paths inside the workspace (\`src/index.ts\`) and absolute paths for anything outside it.
 
