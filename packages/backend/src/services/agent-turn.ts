@@ -23,6 +23,7 @@ import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { getShellSessionManager } from "./shell-session";
 import { createWebBashTool, createBashOutputTool, createKillShellTool, createExposePortTool } from "./web-tools";
+import { agentRunnerRegistry } from "./agent-runner-registry";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -39,6 +40,11 @@ export class AgentTurnService {
     private conversation: Conversation,
     private turnOptions: AgentTurnOptions,
   ) {}
+
+  /** Ask the current agent run to stop. No-op when idle. */
+  cancel(reason: unknown = "user_interrupted"): void {
+    this.agent?.abort(reason);
+  }
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
     const [userMessageId, resumeMessages, sandboxResult] = await Promise.all([
@@ -58,26 +64,36 @@ export class AgentTurnService {
     // Shared id across this turn's partial + message events.
     let assistantMessageId: string | null = null;
 
-    for await (const event of this.agent.stream(expandedUserMessage as UserMessage)) {
+    agentRunnerRegistry.register(this.conversation.id, this);
+    try {
+      for await (const event of this.agent.stream(expandedUserMessage as UserMessage)) {
+        while (this.pendingEvents.length > 0) {
+          yield this.pendingEvents.shift()!;
+        }
+
+        if (event.type === "partial") {
+          if (!assistantMessageId) assistantMessageId = randomUUID();
+          yield { ...event, messageId: assistantMessageId };
+          continue;
+        }
+
+        if (event.type === "interrupted") {
+          yield event;
+          continue;
+        }
+
+        const isAssistant = event.message.role === "assistant";
+        const messageId = isAssistant && assistantMessageId ? assistantMessageId : randomUUID();
+        await this._insertMessage(event.message, messageId);
+        yield { ...event, messageId };
+        if (isAssistant) assistantMessageId = null;
+      }
+      // Drain any events pushed after the last agent yield (e.g. quota_exceeded)
       while (this.pendingEvents.length > 0) {
         yield this.pendingEvents.shift()!;
       }
-
-      if (event.type === "partial") {
-        if (!assistantMessageId) assistantMessageId = randomUUID();
-        yield { ...event, messageId: assistantMessageId };
-        continue;
-      }
-
-      const isAssistant = event.message.role === "assistant";
-      const messageId = isAssistant && assistantMessageId ? assistantMessageId : randomUUID();
-      await this._insertMessage(event.message, messageId);
-      yield { ...event, messageId };
-      if (isAssistant) assistantMessageId = null;
-    }
-    // Drain any events pushed after the last agent yield (e.g. quota_exceeded)
-    while (this.pendingEvents.length > 0) {
-      yield this.pendingEvents.shift()!;
+    } finally {
+      agentRunnerRegistry.unregister(this.conversation.id, this);
     }
   }
 

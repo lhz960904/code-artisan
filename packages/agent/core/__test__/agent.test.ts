@@ -194,7 +194,7 @@ describe("Agent", () => {
       expect(() => agent.abort()).not.toThrow();
     });
 
-    it("abort() aborts the in-flight provider stream with the given reason", async () => {
+    it("abort() ends the stream gracefully with an interrupted event carrying the reason", async () => {
       let captured: AbortSignal | undefined;
       const stream = mock(async function* (params: ModelInvokeParams) {
         captured = params.signal;
@@ -208,14 +208,31 @@ describe("Agent", () => {
       const provider = { invoke: mockInvoke, stream } as unknown as LLMProvider;
       const agent = new Agent({ prompt: "", model: provider });
 
-      const iter = agent.stream(userMessage);
-      const done = iter.next();
+      // Drain the stream into a list of events on a background task so we
+      // can trigger abort after the provider stream has started.
+      const events: Array<{ type: string; reason?: unknown }> = [];
+      const done = (async () => {
+        for await (const event of agent.stream(userMessage)) {
+          events.push(event as { type: string; reason?: unknown });
+        }
+      })();
 
       await new Promise((r) => setTimeout(r, 0));
       expect(captured).toBeDefined();
 
       agent.abort("backend-stop");
-      await expect(done).rejects.toBe("backend-stop");
+      await done;
+
+      // The partial was promoted to a message (with metadata.interrupted),
+      // followed by a terminal `interrupted` event carrying the reason.
+      const last = events[events.length - 1];
+      expect(last.type).toBe("interrupted");
+      expect(last.reason).toBe("backend-stop");
+      const messageEvent = events.find((e) => e.type === "message") as
+        | { type: "message"; message: AssistantMessage }
+        | undefined;
+      expect(messageEvent).toBeDefined();
+      expect(messageEvent!.message.metadata?.interrupted).toBe(true);
     });
 
     it("abort() after a completed stream does not throw", async () => {

@@ -69,6 +69,7 @@ export type WebAgentEvent =
   | { type: "quota_exceeded" }
   | { type: "file_update"; files: Array<{ path: string; content: string }> }
   | { type: "file_delete"; paths: string[] }
+  | { type: "interrupted"; reason?: unknown }
   | { type: "error"; message: string };
 
 /**

@@ -30,7 +30,7 @@
 - [x] workspace editor panel UI 交互优化，即时响应流式数据
 - [x] workspace terminal panel UI 交互优化，即时响应流式数据
 - [x] 支持切换模型
-- [ ] 支持用户中断对话
+- [x] 支持用户中断对话
 
 ### 工程化
 
@@ -38,6 +38,7 @@
 - [ ] Sub Agent 功能、后台任务
 - [ ] 记忆系统
 - [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist）
+- [ ] Plan 模式
 
 ## P2 — 增强
 
@@ -50,6 +51,7 @@
 - [ ] 支持 mcp 工具
 - [ ] 支付功能，限制模型选择
 - [ ] 分享/开放功能
+- [ ] Select 用户选择页面元素回填输入框
 
 ## P3 — 部署 & 求职
 

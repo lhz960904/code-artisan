@@ -9,6 +9,7 @@ import { db } from "../db/index.js";
 import { conversations, messages } from "../db/schema.js";
 import { ok, notFound, validate } from "../http/index.js";
 import { AgentTurnService } from "../services/agent-turn.js";
+import { agentRunnerRegistry } from "../services/agent-runner-registry.js";
 import { maybeGenerateTitle } from "../services/generate-title.js";
 import { buildUserMessage } from "../utils/message.js";
 
@@ -104,14 +105,17 @@ messageRouter.post(
   },
 );
 
-// Stop a running agent
-// messageRouter.post("/:conversationId/stop", validate("param", conversationParamSchema), async (c) => {
-//   const { conversationId } = c.req.valid("param");
-//   const stopped = stopRunner(conversationId);
-//   if (stopped) {
-//     await db.update(conversations).set({ agentRunning: false }).where(eq(conversations.id, conversationId));
-//   }
-//   return ok(c, { stopped });
-// });
+// Stop a running agent for this conversation. No ownership check: the
+// registry only contains conversationIds whose POST /message turn passed
+// ownership at start, so unknown ids naturally no-op with { stopped: false }.
+messageRouter.post(
+  "/:conversationId/stop",
+  validate("param", conversationParamSchema),
+  async (c) => {
+    const { conversationId } = c.req.valid("param");
+    const stopped = agentRunnerRegistry.stop(conversationId);
+    return ok(c, { stopped });
+  },
+);
 
 export { messageRouter };

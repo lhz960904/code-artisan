@@ -25,7 +25,27 @@ export interface AgentMessageEvent {
 }
 
 /**
+ * Terminal lifecycle event: fired when the agent run stops early in
+ * response to `Agent.abort()`. Any partial assistant output is first
+ * promoted to a regular `message` event (with `metadata.interrupted = true`)
+ * so consumers never have to reconstruct dropped state; this event is the
+ * trailing signal that the run ended by interruption rather than natural
+ * completion. No further events follow.
+ *
+ * This is a **terminal** lifecycle event. Future non-terminal lifecycle
+ * events (e.g. `tool_approval_required`, where the run pauses awaiting
+ * an external decision and then continues) will be added as sibling
+ * variants of `AgentEvent` and should not be conflated with this one —
+ * they share the "lifecycle" category but differ in terminality and in
+ * whether they carry a resume callback.
+ */
+export interface AgentInterruptedEvent {
+  type: "interrupted";
+  reason?: unknown;
+}
+
+/**
  * Events yielded by `Agent.stream()`. The stream ends naturally when the
  * generator returns (= done). Errors surface by throwing from the generator.
  */
-export type AgentEvent = AgentPartialEvent | AgentMessageEvent;
+export type AgentEvent = AgentPartialEvent | AgentMessageEvent | AgentInterruptedEvent;

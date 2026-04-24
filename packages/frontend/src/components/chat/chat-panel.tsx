@@ -17,7 +17,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({ conversationId }: ChatPanelProps) {
   const fileUpload = useFileUpload();
-  const { messages, status, isLoading, sendMessage, error } = useChat(conversationId);
+  const { messages, status, isLoading, sendMessage, stop, error } = useChat(conversationId);
   const { data: models } = useQuery(modelsOptions());
   const { model, setModel } = useModelPrefsStore();
 
@@ -86,6 +86,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
         <Sender
           onSubmit={handleSend}
           busy={isBusy}
+          onStop={stop}
           files={fileUpload.files}
           onAddFiles={fileUpload.addFiles}
           onRemoveFile={fileUpload.removeFile}

@@ -7,6 +7,7 @@ import type {
   NonSystemMessage,
   AgentEvent,
   AgentMessageEvent,
+  AgentInterruptedEvent,
 } from "../types/messages";
 import { LLMProvider } from "../types/provider";
 import type { AgentOptions, AgentContext, ModelContext, AgentMiddleware } from "../types";
@@ -63,18 +64,21 @@ export class Agent {
   /** Run the loop and return all assistant/tool messages as one array. */
   async invoke(message: UserMessage): Promise<Array<AssistantMessage | ToolMessage>> {
     const collected: Array<AssistantMessage | ToolMessage> = [];
-    for await (const { message: settled } of this.stream(message, { mode: "message" })) {
-      collected.push(settled);
+    for await (const event of this.stream(message, { mode: "message" })) {
+      if (event.type === "message") collected.push(event.message);
     }
     return collected;
   }
 
   /**
    * Run the loop and yield events.
-   *  - `mode: "token"` (default): partial snapshots + message events
-   *  - `mode: "message"`: message events only
+   *  - `mode: "token"` (default): partial snapshots + message + interrupted
+   *  - `mode: "message"`: message + interrupted (partial suppressed)
+   *
+   * An `interrupted` event always terminates the stream and is emitted in
+   * either mode — it's a lifecycle signal, not a message.
    */
-  stream(message: UserMessage, options: { mode: "message"; modelOptions?: Record<string, unknown> }): AsyncGenerator<AgentMessageEvent>;
+  stream(message: UserMessage, options: { mode: "message"; modelOptions?: Record<string, unknown> }): AsyncGenerator<AgentMessageEvent | AgentInterruptedEvent>;
   stream(message: UserMessage, options?: { mode?: "token"; modelOptions?: Record<string, unknown> }): AsyncGenerator<AgentEvent>;
   async *stream(message: UserMessage, options: { mode?: "token" | "message"; modelOptions?: Record<string, unknown> } = {}): AsyncGenerator<AgentEvent> {
     const mode = options.mode ?? "token";
@@ -89,17 +93,18 @@ export class Agent {
       for (let step = 1; step <= this.maxSteps; step++) {
         // Cooperative stop — a middleware (loop detection, quota, etc.)
         // can set agentContext.shouldStop to exit cleanly after the
-        // previous step completes, without throwing.
+        // previous step completes.
         if (this.agentContext.shouldStop) {
           finished = true;
           this.abort();
           break;
         }
-        this._abortController.signal.throwIfAborted();
+        if (this._abortController.signal.aborted) break;
         await this._beforeAgentStep(step);
 
         const assistantMessage = yield* this._thinkStream(mode);
         yield { type: "message", message: assistantMessage };
+        if (this._abortController.signal.aborted) break;
 
         const toolUses = this._extractToolUses(assistantMessage);
         if (toolUses.length === 0) {
@@ -107,12 +112,24 @@ export class Agent {
           break;
         }
 
-        for await (const toolMessage of this._act(toolUses)) {
-          yield { type: "message", message: toolMessage };
+        try {
+          for await (const toolMessage of this._act(toolUses)) {
+            yield { type: "message", message: toolMessage };
+          }
+        } catch (err) {
+          // _act races pending tools against the abort signal; when it
+          // rejects here and the signal is set, it's our own abort —
+          // break cleanly. Any other error still bubbles.
+          if (this._abortController.signal.aborted) break;
+          throw err;
         }
         await this._afterAgentStep(step);
       }
-      if (!finished) throw new Error("Maximum number of steps reached");
+      const wasAborted = this._abortController.signal.aborted;
+      if (!finished && !wasAborted) throw new Error("Maximum number of steps reached");
+      if (wasAborted) {
+        yield { type: "interrupted", reason: this._abortController.signal.reason };
+      }
       await this._afterAgentRun();
     } finally {
       this._running = false;
@@ -148,14 +165,27 @@ export class Agent {
     await this._beforeModel(modelContext);
 
     let lastSnapshot: AssistantMessage | null = null;
-    for await (const snapshot of this.model.stream({
-      messages: this._buildModelMessages(modelContext),
-      tools: modelContext.tools,
-      options: this._modelOptions,
-      signal: this._abortController?.signal,
-    })) {
-      lastSnapshot = snapshot;
-      if (mode === "token") yield { type: "partial", message: snapshot };
+    try {
+      for await (const snapshot of this.model.stream({
+        messages: this._buildModelMessages(modelContext),
+        tools: modelContext.tools,
+        options: this._modelOptions,
+        signal: this._abortController?.signal,
+      })) {
+        lastSnapshot = snapshot;
+        if (mode === "token") yield { type: "partial", message: snapshot };
+      }
+    } catch (err) {
+      // Provider errors pass through as-is. But if abort was triggered,
+      // promote whatever partial we have into a finalized message so the
+      // stream's `partial → message` contract stays intact (consumers
+      // persist on `message`, not `partial`).
+      if (!this._abortController?.signal.aborted) throw err;
+      const interrupted: AssistantMessage = lastSnapshot ?? { role: "assistant", content: [] };
+      interrupted.metadata = { ...interrupted.metadata, interrupted: true };
+      this._appendMessage(interrupted);
+      await this._afterModel(modelContext, interrupted);
+      return interrupted;
     }
     if (!lastSnapshot) throw new Error("Model produced no output");
 

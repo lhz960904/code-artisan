@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Send,
   Loader2,
+  Square,
   Wand2,
 } from "lucide-react";
 import type { ModelInfo, ModelProvider } from "@code-artisan/shared";
@@ -34,6 +35,8 @@ export interface SenderProps {
   onSubmit: (content: string) => void | Promise<void>;
 
   busy?: boolean;
+  /** When set and `busy`, the send button turns into a stop button that invokes this callback. */
+  onStop?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
 
@@ -161,25 +164,43 @@ function SendButton({
   disabled,
   busy,
   onClick,
+  onStop,
 }: {
   size: "default" | "large";
   label?: string;
   disabled: boolean;
   busy: boolean;
   onClick: () => void;
+  onStop?: () => void;
 }) {
+  // While busy, if the caller wired up onStop, the button acts as a Stop
+  // button — clickable, not disabled.
+  const isStopMode = busy && !!onStop;
+  const actualDisabled = disabled && !isStopMode;
+
+  const handleClick = () => {
+    if (isStopMode) onStop!();
+    else onClick();
+  };
+
   if (size === "large") {
     return (
       <button
         type="button"
-        disabled={disabled}
-        onClick={onClick}
+        disabled={actualDisabled}
+        onClick={handleClick}
+        aria-label={isStopMode ? "Stop generation" : "Send message"}
         className={cn(
           "inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 font-display text-sm font-semibold text-primary-foreground transition-opacity",
-          disabled ? "cursor-not-allowed opacity-60" : "hover:opacity-90",
+          actualDisabled ? "cursor-not-allowed opacity-60" : "hover:opacity-90",
         )}
       >
-        {busy ? (
+        {isStopMode ? (
+          <>
+            Stop
+            <Square className="size-3.5 fill-current" />
+          </>
+        ) : busy ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
           <>
@@ -193,15 +214,21 @@ function SendButton({
   return (
     <button
       type="button"
-      disabled={disabled}
-      onClick={onClick}
-      aria-label="Send message"
+      disabled={actualDisabled}
+      onClick={handleClick}
+      aria-label={isStopMode ? "Stop generation" : "Send message"}
       className={cn(
         "inline-flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity",
-        disabled ? "cursor-not-allowed opacity-60" : "hover:opacity-90",
+        actualDisabled ? "cursor-not-allowed opacity-60" : "hover:opacity-90",
       )}
     >
-      {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+      {isStopMode ? (
+        <Square className="size-3.5 fill-current" />
+      ) : busy ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Send className="size-4" />
+      )}
     </button>
   );
 }
@@ -213,6 +240,7 @@ export function Sender({
   onChange,
   onSubmit,
   busy,
+  onStop,
   placeholder = "How can CodeArtisan help you today?",
   autoFocus,
   files = [],
@@ -372,6 +400,7 @@ export function Sender({
           disabled={!canSubmit}
           busy={Boolean(busy || isUploading)}
           onClick={handleSubmit}
+          onStop={onStop}
         />
       </div>
     </div>

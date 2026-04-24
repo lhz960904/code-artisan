@@ -129,6 +129,9 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
           // Invalidate so the header token balance refreshes to 0 immediately.
           void queryClient.invalidateQueries({ queryKey: quotaKeys.detail() });
           break;
+        case "interrupted":
+          setStatus("ready");
+          break;
         case "error":
           setStatus("error");
           setError(new Error(event.message));
@@ -246,7 +249,15 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
     abortRef.current?.abort();
     abortRef.current = null;
     setStatus("ready");
-  }, []);
+    if (!conversationId) return;
+    // Tell the server to abort the ReAct loop. Fire-and-forget: the local
+    // fetch is already torn down, and the server emits an `interrupted`
+    // event when it settles — we don't need the response here.
+    void fetch(`${API_BASE}/message/${conversationId}/stop`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => {});
+  }, [conversationId]);
 
   // Abort only when conversationId actually changes — StrictMode's dev-only
   // mount→unmount→remount cycle must not kill the first sendMessage's fetch.
