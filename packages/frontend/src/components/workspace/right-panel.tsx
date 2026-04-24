@@ -9,6 +9,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { usePanelRef } from "react-resizable-panels";
 import { fileSnapshotsOptions } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { cn } from "@/lib/utils";
 
 interface RightPanelProps {
   conversationId: string;
@@ -23,11 +24,22 @@ export function RightPanel({ conversationId }: RightPanelProps) {
     if (snapshots) setSnapshots(snapshots);
   }, [snapshots, setSnapshots]);
 
+  // All three views stay mounted; we toggle visibility instead of
+  // unmounting so expensive contents (Preview's iframe, CodeView's
+  // Monaco + xterm) survive view switches. The iframe in particular
+  // would otherwise re-establish TLS + re-download the Vite bundle
+  // every time, causing a noticeable blank flash.
   return (
-    <div className="h-full overflow-hidden">
-      {view === "preview" && <PreviewPanel />}
-      {view === "code" && <CodeView conversationId={conversationId} />}
-      {view === "database" && <DatabasePanel />}
+    <div className="relative h-full overflow-hidden">
+      <div className={cn("absolute inset-0", view === "preview" ? "block" : "hidden")}>
+        <PreviewPanel />
+      </div>
+      <div className={cn("absolute inset-0", view === "code" ? "block" : "hidden")}>
+        <CodeView conversationId={conversationId} />
+      </div>
+      <div className={cn("absolute inset-0", view === "database" ? "block" : "hidden")}>
+        <DatabasePanel />
+      </div>
     </div>
   );
 }
