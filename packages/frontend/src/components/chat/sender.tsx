@@ -23,10 +23,12 @@ import { AttachmentPreview } from "@/components/chat/attachment-preview";
 import type { FileAttachment } from "@/hooks/use-file-upload";
 import anthropicIcon from "@/assets/model-icons/anthropic.svg";
 import moonshotIcon from "@/assets/model-icons/moonshot.svg";
+import deepseekIcon from "@/assets/model-icons/deepseek.svg";
 
 const PROVIDER_ICON: Record<ModelProvider, string> = {
   anthropic: anthropicIcon,
   moonshot: moonshotIcon,
+  deepseek: deepseekIcon,
 };
 
 export interface SenderProps {

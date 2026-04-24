@@ -21,7 +21,7 @@ export function createModelProvider(modelId: string): LLMProvider {
   const apiKey = process.env.LLM_API_KEY;
   const root = process.env.LLM_BASE_URL;
 
-  if (info?.provider === "moonshot") {
+  if (info?.provider === "moonshot" || info?.provider === "deepseek") {
     return new OpenAIProvider(modelId, {
       apiKey,
       baseURL: root ? `${root.replace(/\/+$/, "")}/v1` : undefined,

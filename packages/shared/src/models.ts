@@ -1,4 +1,4 @@
-export type ModelProvider = "anthropic" | "moonshot";
+export type ModelProvider = "anthropic" | "moonshot" | "deepseek";
 
 export interface ModelInfo {
   id: string;
@@ -14,6 +14,8 @@ export const SUPPORTED_MODELS: ModelInfo[] = [
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6", provider: "anthropic" },
   { id: "claude-sonnet-4-6-think", label: "Sonnet 4.6 Thinking", provider: "anthropic" },
   { id: "kimi-k2.6", label: "Kimi K2.6", provider: "moonshot" },
+  { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", provider: "deepseek" },
+  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "deepseek" },
 ];
 
 export const DEFAULT_MODEL_ID = "claude-sonnet-4-6";
