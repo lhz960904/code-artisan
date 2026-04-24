@@ -313,7 +313,10 @@ export function TerminalPanel({ conversationId, collapsed, onToggleCollapse }: T
         )}
       </div>
 
-      <div className="relative flex-1 overflow-hidden bg-card p-2">
+      <div
+        className="relative flex-1 overflow-hidden p-2"
+        style={{ background: getTerminalTheme(resolved).background }}
+      >
         {sessions.map((session) =>
           session.status === "pending" ? (
             <div
