@@ -344,7 +344,11 @@ export function Sender({
         onChange={(e) => setValue(e.target.value)}
         onPaste={handlePaste}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
+          // `isComposing` is true while an IME (e.g. 拼音, 假名, hangul) is
+          // still assembling a character. Enter in that state means "commit
+          // the candidate", not "submit the message" — skip so the browser
+          // can finish composition and the text stays in the field.
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             handleSubmit();
           }

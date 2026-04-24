@@ -116,7 +116,10 @@ export function AppSidebar() {
                     onFocus={(e) => e.currentTarget.select()}
                     onBlur={commitEdit}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") {
+                      // Skip Enter while an IME is still composing — lets
+                      // the input method commit its candidate instead of
+                      // firing the rename.
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                         e.preventDefault();
                         commitEdit();
                       } else if (e.key === "Escape") {
