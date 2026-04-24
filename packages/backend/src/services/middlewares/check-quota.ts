@@ -6,15 +6,12 @@ import { eq, sql } from "drizzle-orm";
 
 /**
  * In-memory quota cache keyed by userId. Saves a DB round-trip on every
- * model call. Source of truth stays in Postgres — we lazy-load on first
- * check, update the cache synchronously after each turn, and fire-and-forget
+ * model call *within a turn*. Source of truth stays in Postgres — the
+ * `beforeAgentRun` hook force-reloads at the start of every turn, so
+ * admin-side top-ups (or any external DB write) take effect on the very
+ * next user message. Within a turn we trust the cache: `afterModel`
+ * bumps it synchronously after every model response and fire-and-forgets
  * the DB write so the agent loop isn't blocked on persistence.
- *
- * Caveats:
- *   - Admin-side quota top-ups aren't picked up until re-load (eviction or
- *     process restart).
- *   - On crash, in-flight token counts may be lost (user gets a tiny freebie).
- * Both are acceptable for MVP.
  */
 interface CachedQuota {
   totalTokens: number;
@@ -23,10 +20,10 @@ interface CachedQuota {
 
 const quotaCache = new LRUCache<string, CachedQuota>({
   max: 1000,
-  // 30-minute TTL so admin-side quota top-ups eventually take effect even
-  // without process restart; active users stay hot via get() auto-refresh.
-  ttl: 30 * 60 * 1000,
-  updateAgeOnGet: true,
+  // Keep entries for a while so single-turn operations share a cache entry
+  // across their internal `beforeModel` checks. `beforeAgentRun` refreshes
+  // from DB, so the cache only has to live long enough to cover one turn.
+  ttl: 5 * 60 * 1000,
 });
 const inflightLoads = new Map<string, Promise<CachedQuota>>();
 
@@ -62,7 +59,12 @@ export async function isQuotaExceeded(userId: string): Promise<boolean> {
 export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): AgentMiddleware {
   return {
     beforeAgentRun: async () => {
-      if (await isQuotaExceeded(userId)) {
+      // Force-reload from DB at the start of every turn so admin-side
+      // top-ups (or any out-of-band quota write) are picked up immediately.
+      // Otherwise a user who exhausts their quota and tops up would stay
+      // blocked until the cache entry expires or the process restarts.
+      const quota = await loadQuota(userId);
+      if (quota.totalTokens - quota.usedTokens <= 0) {
         onExceeded?.();
         return { shouldStop: true };
       }

@@ -226,6 +226,8 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
         // exposed during the turn (or cleared via session exit) gets seeded
         // into the workspace store via ChatPage's effect.
         void queryClient.invalidateQueries({ queryKey: conversationKeys.detail(conversationId) });
+        // Refresh the header token balance — tokens were consumed during the turn.
+        void queryClient.invalidateQueries({ queryKey: quotaKeys.detail() });
         optionsRef.current.onFinish?.();
       } catch (err) {
         if (abort.signal.aborted) return;
