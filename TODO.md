@@ -30,6 +30,7 @@
 - [x] workspace editor panel UI 交互优化，即时响应流式数据
 - [x] workspace terminal panel UI 交互优化，即时响应流式数据
 - [x] 支持切换模型
+- [ ] 支持用户中断对话
 
 ### 工程化
 
@@ -45,7 +46,10 @@
 - [x] Skills 功能（预置 + 用户自定义，注入 system prompt）
 - [ ] Custom Rules（用户自定义 system prompt 规则）
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
+- [ ] 设置面板(项目设置，个人设置)
 - [ ] 支持 mcp 工具
+- [ ] 支付功能，限制模型选择
+- [ ] 分享/开放功能
 
 ## P3 — 部署 & 求职
 
