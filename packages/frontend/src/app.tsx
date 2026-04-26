@@ -5,6 +5,7 @@ import { chatRoute } from "@/pages/chat";
 import { debugMessagesRoute } from "@/pages/debug-messages";
 import { homeRoute } from "@/pages/home";
 import { loginRoute } from "@/pages/login";
+import { pricingRoute } from "@/pages/pricing";
 import { authedRoute } from "@/pages/layout/authed";
 import { rootRoute } from "@/pages/layout/root";
 import { dashboardRoute } from "./pages/dashboard";
@@ -14,6 +15,7 @@ import { dashboardRoute } from "./pages/dashboard";
 const routeTree = rootRoute.addChildren([
   loginRoute,
   homeRoute,
+  pricingRoute,
   debugMessagesRoute,
   authedRoute.addChildren([dashboardRoute, chatRoute]),
 ]);

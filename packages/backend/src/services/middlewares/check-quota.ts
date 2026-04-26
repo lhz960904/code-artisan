@@ -1,4 +1,5 @@
 import type { AgentMiddleware } from "@code-artisan/agent";
+import { findModel } from "@code-artisan/shared";
 import { LRUCache } from "lru-cache";
 import { db } from "../../db";
 import { userQuotas } from "../../db/schema";
@@ -54,9 +55,17 @@ export async function isQuotaExceeded(userId: string): Promise<boolean> {
 
 /**
  * Check quota before every LLM call. If quota is exhausted, signal the
- * agent to stop cooperatively.
+ * agent to stop cooperatively. Token usage is multiplied by the model's
+ * `tokenMultiplier` at billing time so premium models burn the user's
+ * quota faster.
  */
-export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): AgentMiddleware {
+export function checkQuotaMiddleware(
+  userId: string,
+  modelId: string,
+  onExceeded?: () => void,
+): AgentMiddleware {
+  const multiplier = findModel(modelId)?.tokenMultiplier ?? 1;
+
   return {
     beforeAgentRun: async () => {
       // Force-reload from DB at the start of every turn so admin-side
@@ -78,12 +87,12 @@ export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): A
     afterModel: async ({ message }) => {
       const usage = message.usage;
       if (!usage) return;
-      const totalTokenCost = usage.inputTokens + usage.outputTokens;
+      const billedTokens = (usage.inputTokens + usage.outputTokens) * multiplier;
 
       // Bump the in-memory cache immediately so the next beforeModel sees
       // the latest value without waiting for DB.
       const cached = quotaCache.get(userId);
-      if (cached) cached.usedTokens += totalTokenCost;
+      if (cached) cached.usedTokens += billedTokens;
 
       // Persist asynchronously. `sql\`+ N\`` is a DB-side increment, so
       // concurrent turns converge correctly even if their in-memory caches
@@ -92,7 +101,7 @@ export function checkQuotaMiddleware(userId: string, onExceeded?: () => void): A
         try {
           await db
             .update(userQuotas)
-            .set({ usedTokens: sql`${userQuotas.usedTokens} + ${totalTokenCost}` })
+            .set({ usedTokens: sql`${userQuotas.usedTokens} + ${billedTokens}` })
             .where(eq(userQuotas.userId, userId));
         } catch (error) {
           console.error("[checkQuota] db update failed:", error);

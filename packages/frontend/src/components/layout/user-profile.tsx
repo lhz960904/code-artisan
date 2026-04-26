@@ -1,7 +1,5 @@
-import { useNavigate } from "@tanstack/react-router";
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
-import { useSession, signOut } from "@/lib/auth-client";
-import { useSettingsStore } from "@/stores/settings";
+import { useSession } from "@/lib/auth-client";
+import { AccountMenu } from "@/components/account/account-menu";
 
 function getInitials(name?: string | null, email?: string | null) {
   const src = (name ?? email ?? "?").trim();
@@ -12,50 +10,39 @@ function getInitials(name?: string | null, email?: string | null) {
 
 export function UserProfile() {
   const { data } = useSession();
-  const navigate = useNavigate();
-  const openSettings = useSettingsStore((s) => s.openSettings);
 
   if (!data?.user) return null;
   const { name, email, image } = data.user;
 
-  async function handleSignOut() {
-    await signOut();
-    navigate({ to: "/login", search: { redirect: "/" } });
-  }
-
   return (
-    <div className="group flex items-center gap-2 border-t border-border px-3 py-3">
-      {image ? (
-        <img
-          src={image}
-          alt={name || email || ""}
-          className="h-8 w-8 rounded-full object-cover"
-        />
-      ) : (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-          {getInitials(name, email)}
-        </div>
-      )}
-      <div className="flex-1 overflow-hidden">
-        <div className="truncate text-sm font-medium">{name || email}</div>
-        <div className="truncate text-xs text-muted-foreground">免费版</div>
-      </div>
-      <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
-        <button
-          onClick={() => openSettings()}
-          title="Settings"
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <SettingsIcon className="h-4 w-4" />
-        </button>
-        <button
-          onClick={handleSignOut}
-          title="Sign out"
-          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-      </div>
+    <div className="border-t border-border p-2">
+      <AccountMenu
+        contentProps={{ side: "top", align: "start", className: "w-56" }}
+        trigger={
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {image ? (
+              <img
+                src={image}
+                alt={name || email || ""}
+                className="h-8 w-8 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                {getInitials(name, email)}
+              </div>
+            )}
+            <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
+              <div className="truncate text-sm font-medium">{name || email}</div>
+              <span className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                Free
+              </span>
+            </div>
+          </button>
+        }
+      />
     </div>
   );
 }

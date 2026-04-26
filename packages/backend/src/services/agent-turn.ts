@@ -124,7 +124,7 @@ export class AgentTurnService {
         },
       }),
       // check quota exceeded
-      checkQuotaMiddleware(this.conversation.userId, () => {
+      checkQuotaMiddleware(this.conversation.userId, this.turnOptions.model, () => {
         this.pendingEvents.push({ type: "quota_exceeded" });
       }),
       // track file mutations (write tools + bash); stream to web + persist

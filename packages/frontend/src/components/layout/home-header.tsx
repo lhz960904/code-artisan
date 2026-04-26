@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
+import { LogOut, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { Logo } from "@/components/common/logo";
 import {
@@ -117,6 +117,12 @@ function HeaderAuthSlot() {
             )}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/pricing" className="cursor-pointer">
+              <Sparkles className="text-primary" />
+              升级 Pro
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => openSettings()}>
             <SettingsIcon />
             Settings

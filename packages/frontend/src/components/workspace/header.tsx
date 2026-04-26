@@ -1,22 +1,14 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Eye, Code2, Database, Coins, LogOut, Moon, Sun, Monitor, Settings as SettingsIcon } from "lucide-react";
+import { Eye, Code2, Database, Coins } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/common/logo";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { conversationDetailOptions, quotaOptions } from "@/api";
-import { useSession, signOut } from "@/lib/auth-client";
-import { useTheme } from "@/contexts/theme-context";
+import { useSession } from "@/lib/auth-client";
 import { useWorkspaceStore } from "@/stores/workspace";
-import { useSettingsStore } from "@/stores/settings";
 import { Button } from "@/components/ui/button";
+import { AccountMenu } from "@/components/account/account-menu";
 
 interface HeaderProps {
   conversationId: string;
@@ -142,9 +134,11 @@ function HeaderBrand({ title, children }: { title?: string; children?: React.Rea
 
 function TokenBalance({ remaining }: { remaining: number }) {
   return (
-    <Button type="button" title={`${remaining.toLocaleString()} tokens remaining`} variant="outline" size="sm">
-      <Coins className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="tabular-nums">{formatTokens(remaining)}</span>
+    <Button asChild title={`${remaining.toLocaleString()} tokens remaining · 点击升级`} variant="outline" size="sm">
+      <Link to="/pricing">
+        <Coins className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="tabular-nums">{formatTokens(remaining)}</span>
+      </Link>
     </Button>
   );
 }
@@ -159,23 +153,17 @@ function formatTokens(n: number) {
 
 function UserAvatar({ conversationId }: { conversationId: string }) {
   const { data } = useSession();
-  const { theme, setTheme } = useTheme();
-  const navigate = useNavigate();
-  const openSettings = useSettingsStore((s) => s.openSettings);
   const user = data?.user;
 
   if (!user) return <Skeleton className="h-7 w-7 rounded-full" />;
 
   const label = user.name || user.email || "";
 
-  async function handleSignOut() {
-    await signOut();
-    navigate({ to: "/login", search: { redirect: "/" } });
-  }
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <AccountMenu
+      conversationId={conversationId}
+      contentProps={{ align: "end", className: "w-52" }}
+      trigger={
         <button
           type="button"
           className="flex h-8 w-8 shrink-0 overflow-hidden rounded-full outline-none ring-offset-background transition-shadow hover:ring-2 hover:ring-ring hover:ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
@@ -188,61 +176,8 @@ function UserAvatar({ conversationId }: { conversationId: string }) {
             </div>
           )}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <div className="flex items-center justify-between px-2 py-1.5 text-sm">
-          <span className="text-muted-foreground">Theme</span>
-          <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
-            <ThemeBtn active={theme === "light"} onClick={() => setTheme("light")} title="Light">
-              <Sun className="h-3.5 w-3.5" />
-            </ThemeBtn>
-            <ThemeBtn active={theme === "system"} onClick={() => setTheme("system")} title="System">
-              <Monitor className="h-3.5 w-3.5" />
-            </ThemeBtn>
-            <ThemeBtn active={theme === "dark"} onClick={() => setTheme("dark")} title="Dark">
-              <Moon className="h-3.5 w-3.5" />
-            </ThemeBtn>
-          </div>
-        </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => openSettings({ conversationId })}>
-          <SettingsIcon className="mr-2 h-4 w-4" /> Settings
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut} variant="destructive">
-          <LogOut className="mr-2 h-4 w-4" /> Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ThemeBtn({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
-      title={title}
-      className={cn(
-        "flex h-5 w-5 items-center justify-center rounded transition-colors",
-        active ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
+      }
+    />
   );
 }
 
