@@ -4,10 +4,10 @@
 @import "@fontsource/geist-sans/400.css";
 @import "@fontsource/geist-sans/500.css";
 @import "@fontsource/geist-sans/600.css";
-@import "@fontsource/noto-sans/400.css";
-@import "@fontsource/noto-sans/500.css";
-@import "@fontsource/noto-sans/500-italic.css";
-@import "@fontsource/noto-sans/600.css";
+@import "@fontsource/manrope/400.css";
+@import "@fontsource/manrope/500.css";
+@import "@fontsource/manrope/600.css";
+@import "@fontsource/manrope/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 
@@ -53,7 +53,7 @@
   --color-surface-elevated: var(--surface-elevated);
 
   --font-display: "Geist", system-ui, -apple-system, sans-serif;
-  --font-body: "Noto Sans", system-ui, -apple-system, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
@@ -148,7 +148,6 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: var(--font-body);
-    font-feature-settings: "ss01", "ss04", "ss05";
   }
   .font-display {
     font-family: var(--font-display);
