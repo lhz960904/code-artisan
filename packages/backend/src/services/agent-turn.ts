@@ -3,6 +3,7 @@ import {
   AgentMiddleware,
   autoCompactMiddleware,
   createAgent,
+  FunctionTool,
   Message,
   microCompactMiddleware,
   UserMessage,
@@ -24,6 +25,8 @@ import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { getShellSessionManager } from "./shell-session";
 import { createWebBashTool, createBashOutputTool, createKillShellTool, createExposePortTool } from "./web-tools";
 import { agentRunnerRegistry } from "./agent-runner-registry";
+import { McpToolSet } from "../mcp/mcp-tools";
+import { getInstalledMcpServers } from "../mcp/registry";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -36,6 +39,8 @@ export class AgentTurnService {
 
   private pendingEvents: WebAgentEvent[] = [];
 
+  private mcpToolSet: McpToolSet | null = null;
+
   constructor(
     private conversation: Conversation,
     private turnOptions: AgentTurnOptions,
@@ -47,10 +52,11 @@ export class AgentTurnService {
   }
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
-    const [userMessageId, resumeMessages, sandboxResult] = await Promise.all([
+    const [userMessageId, resumeMessages, sandboxResult, mcpTools] = await Promise.all([
       this._insertMessage(userMessage),
       this._buildAgentMessages(),
       this._setupSandbox(),
+      this._setupMcpTools(),
     ]);
 
     const [expandedUserMessage] = buildAgentMessages([userMessage]);
@@ -58,7 +64,7 @@ export class AgentTurnService {
     yield { type: "user_message_saved", messageId: userMessageId };
 
     if (!this.agent) {
-      this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles);
+      this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles, mcpTools);
     }
 
     // Shared id across this turn's partial + message events.
@@ -94,10 +100,19 @@ export class AgentTurnService {
       }
     } finally {
       agentRunnerRegistry.unregister(this.conversation.id, this);
+      if (this.mcpToolSet) {
+        await this.mcpToolSet.close().catch((err) => console.error("[mcp] close error:", err));
+        this.mcpToolSet = null;
+      }
     }
   }
 
-  private _buildAgent(resumeMessages: Message[], sandbox: E2BSandbox, initialFiles: Map<string, string> | null): Agent {
+  private _buildAgent(
+    resumeMessages: Message[],
+    sandbox: E2BSandbox,
+    initialFiles: Map<string, string> | null,
+    mcpTools: FunctionTool[],
+  ): Agent {
     const provider = createModelProvider(this.turnOptions.model);
 
     const middlewares: AgentMiddleware[] = [
@@ -141,6 +156,7 @@ export class AgentTurnService {
         createExposePortTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
         webSearchTool,
         webFetchTool,
+        ...mcpTools,
       ],
       skillsDirs: ["/opt/skills"],
     });
@@ -151,6 +167,13 @@ export class AgentTurnService {
     const initialFiles: Map<string, string> | null =
       snapshots.length > 0 ? new Map(snapshots.map((s) => [s.path, s.content])) : null;
     return { sandbox, initialFiles };
+  }
+
+  private async _setupMcpTools(): Promise<FunctionTool[]> {
+    const configs = await getInstalledMcpServers(this.conversation.userId);
+    if (configs.length === 0) return [];
+    this.mcpToolSet = new McpToolSet();
+    return this.mcpToolSet.initialize(configs);
   }
 
   /** Insert a message to db; returns the row id (caller may supply one to pre-bind). */

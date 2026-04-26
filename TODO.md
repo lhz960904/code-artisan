@@ -1,61 +1,28 @@
 # TODO
 
-## P0 — BUG
+## P0
 
-- [x] dashboard、home 页面 sender 输入进入详情页，流式接口被取消，无法实时渲染
-- [x] backend 持久化文件，目前不支持图片，但有时候 AI 下载的模板中会出现图片，是否需要支持图片持久化
-
-## P1 — 生产可用性
-
-### Sandbox 长驻进程
-
-- [x] Sandbox 接口加 `spawn()`：Process 句柄（stdout/stderr AsyncIterable、isAlive、kill、wait、exposePort）
-- [x] LocalSandbox 实现（Bun.spawn 直通 localhost）
-- [x] E2BSandbox 实现（`commands.run(background: true)` + `getHost(port)` 公网 URL）
-- [x] bash 工具加 `run_in_background` 参数（对齐 Claude Code，不再做独立 start_server）
-
-### 中间件
-
-- [ ] 悬空工具调用：中断恢复时未完成 tool_use 标记为 error
+- [x] 设置面板(项目设置，个人设置)
+- [x] 支持 mcp 工具
+- [ ] 支付功能， 仅付费用户可以尝试 Anthropic 模型
+- [ ] README + 架构图 + Demo 视频
 
 
-### 任务恢复
+## P1
 
-- [ ] **中断对话恢复**：用户重新打开存在 in_progress todo / 无 result 的 tool_use 的会话时，TodoListCard 已显示 `Interrupted` 标签（静态展示），需新增 "Resume" 按钮触发后端从最后一个未完成步骤继续 ReAct loop
-
-### 前端体验
-
-- [x] 新建聊天的名字修改，采取 backend 流式返回 title 事件，做更改
-- [x] workspace file tree UI 交互优化，即时响应流式数据
-- [x] workspace editor panel UI 交互优化，即时响应流式数据
-- [x] workspace terminal panel UI 交互优化，即时响应流式数据
-- [x] 支持切换模型
-- [x] 支持用户中断对话
-
-### 工程化
-
-- [x] Prompt 优化
-- [ ] Sub Agent 功能、后台任务
-- [ ] 记忆系统
-- [ ] `SANDBOX_IGNORED_DIRS` 换成 [`ignore`](https://www.npmjs.com/package/ignore) 包，读项目 `.gitignore` 过滤；空项目 fallback 一个 baseline（node_modules/dist）
-- [ ] Plan 模式
-
-## P2 — 增强
-
-- [ ] 权限系统 + Confirm 模式（工具审批流程）
-- [x] 多 LLM Provider（OpenAI / DeepSeek）
-- [x] Skills 功能（预置 + 用户自定义，注入 system prompt）
-- [ ] Custom Rules（用户自定义 system prompt 规则）
-- [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
-- [ ] 设置面板(项目设置，个人设置)
-- [ ] 支持 mcp 工具
-- [ ] 支付功能，限制模型选择
-- [ ] 分享/开放功能
+- [ ] 部署能力(集成 Vercel)
+- [ ] DB 能力(集成 Supabase?
 - [ ] Select 用户选择页面元素回填输入框
+- [ ] 版本控制
+- [ ] 分享/开放功能 + dashboard 内容丰富
+- [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
+- [ ] Custom Rules（用户自定义 system prompt 规则, Agents.md）
 
-## P3 — 部署 & 求职
+## P3
 
-- [ ] 域名绑定（Cloudflare）
-- [ ] Demo 视频（2-3 分钟）
-- [ ] README + 架构图
-- [ ] 简历项目描述
+- [ ] 中间件 悬空工具调用：中断恢复时未完成 tool_use 标记为 error
+- [ ] 刷新页面后 Resume 流数据
+- [ ] Plan 模式
+- [ ] Sub Agent 功能、后台任务
+- [ ] 增加用户 Confirm 操作
+- [ ] 记忆系统

@@ -4,11 +4,22 @@ import { convertJsonSchemaToZod } from "zod-from-json-schema";
 import * as z from "zod";
 import { defineTool, type FunctionTool } from "@code-artisan/agent";
 
+const MCP_CONNECT_TIMEOUT_MS = 10_000;
+
 export interface McpServerConfig {
   serverId: string;
   command: string;
   args: string[];
   envVars: Record<string, string>;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`MCP "${label}" init timed out after ${ms}ms`)), ms),
+    ),
+  ]);
 }
 
 /**
@@ -27,13 +38,19 @@ export class McpToolSet {
   >();
 
   async initialize(servers: McpServerConfig[]): Promise<FunctionTool[]> {
+    if (servers.length === 0) return [];
+    const settled = await Promise.allSettled(
+      servers.map((server) =>
+        withTimeout(this.connectServer(server), MCP_CONNECT_TIMEOUT_MS, server.serverId),
+      ),
+    );
     const all: FunctionTool[] = [];
-    for (const server of servers) {
-      try {
-        const tools = await this.connectServer(server);
-        all.push(...tools);
-      } catch (err) {
-        console.error(`[mcp] failed to connect ${server.serverId}:`, err);
+    for (let i = 0; i < settled.length; i++) {
+      const result = settled[i];
+      if (result.status === "fulfilled") {
+        all.push(...result.value);
+      } else {
+        console.error(`[mcp] failed to connect ${servers[i].serverId}:`, result.reason);
       }
     }
     return all;

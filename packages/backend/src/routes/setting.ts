@@ -1,40 +1,16 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { readFileSync, existsSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import { and, eq } from "drizzle-orm";
-import type { McpRegistryServer, McpServerListItem } from "@code-artisan/shared";
+import type { McpServerListItem } from "@code-artisan/shared";
 
 import { db } from "../db/index.js";
 import { settings } from "../db/schema.js";
 import { ok, created, badRequest, notFound, validate } from "../http/index.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const SETTINGS_KEY_MCP = "mcp";
-
-interface McpInstalledEntry {
-  envVars: Record<string, string>;
-  installedAt: string;
-}
-type McpSettingsValue = Record<string, McpInstalledEntry>;
-
-function loadRegistry(): McpRegistryServer[] {
-  const registryPath = join(__dirname, "../mcp/mcp-registry.json");
-  if (!existsSync(registryPath)) return [];
-  const data = JSON.parse(readFileSync(registryPath, "utf-8"));
-  return data.servers;
-}
-
-async function readMcpSettings(userId: string): Promise<McpSettingsValue> {
-  const [row] = await db
-    .select({ value: settings.value })
-    .from(settings)
-    .where(and(eq(settings.userId, userId), eq(settings.key, SETTINGS_KEY_MCP)));
-  return (row?.value as McpSettingsValue) ?? {};
-}
+import {
+  SETTINGS_KEY_MCP,
+  loadRegistry,
+  readUserMcpSettings as readMcpSettings,
+  type McpSettingsValue,
+} from "../mcp/registry.js";
 
 async function writeMcpSettings(userId: string, value: McpSettingsValue): Promise<void> {
   await db
