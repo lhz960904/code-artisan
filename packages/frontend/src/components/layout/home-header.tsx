@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings as SettingsIcon } from "lucide-react";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { Logo } from "@/components/common/logo";
 import {
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useSettingsStore } from "@/stores/settings";
 import { cn } from "@/lib/utils";
 
 function getInitials(name?: string | null, email?: string | null) {
@@ -64,6 +65,7 @@ export function HomeHeader() {
 function HeaderAuthSlot() {
   const { data, isPending } = useSession();
   const navigate = useNavigate();
+  const openSettings = useSettingsStore((s) => s.openSettings);
 
   if (isPending) return <div className="ml-1 size-6" aria-hidden />;
 
@@ -114,6 +116,11 @@ function HeaderAuthSlot() {
               <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
             )}
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openSettings()}>
+            <SettingsIcon />
+            Settings
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={handleSignOut}>
             <LogOut />

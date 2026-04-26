@@ -17,7 +17,6 @@ import { useTheme } from "@/contexts/theme-context";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useSettingsStore } from "@/stores/settings";
 import { Button } from "@/components/ui/button";
-import { SettingsDialog } from "@/components/settings";
 
 interface HeaderProps {
   conversationId: string;
@@ -28,17 +27,14 @@ export function Header({ conversationId }: HeaderProps) {
   const { data: quota } = useSuspenseQuery(quotaOptions());
 
   return (
-    <>
-      <HeaderShell>
-        <HeaderBrand title={conversation.title || "Untitled"} />
-        <ViewSwitcher />
-        <div className="flex items-center gap-3">
-          <TokenBalance remaining={quota.remaining} />
-          <UserAvatar />
-        </div>
-      </HeaderShell>
-      <SettingsDialog conversationId={conversationId} />
-    </>
+    <HeaderShell>
+      <HeaderBrand title={conversation.title || "Untitled"} />
+      <ViewSwitcher />
+      <div className="flex items-center gap-3">
+        <TokenBalance remaining={quota.remaining} />
+        <UserAvatar conversationId={conversationId} />
+      </div>
+    </HeaderShell>
   );
 }
 
@@ -161,7 +157,7 @@ function formatTokens(n: number) {
   return `${symbol}${String(n)}`;
 }
 
-function UserAvatar() {
+function UserAvatar({ conversationId }: { conversationId: string }) {
   const { data } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
@@ -209,7 +205,7 @@ function UserAvatar() {
           </div>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => openSettings()}>
+        <DropdownMenuItem onClick={() => openSettings({ conversationId })}>
           <SettingsIcon className="mr-2 h-4 w-4" /> Settings
         </DropdownMenuItem>
         <DropdownMenuSeparator />

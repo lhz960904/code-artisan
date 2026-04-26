@@ -10,7 +10,7 @@ interface NavItem {
 }
 
 interface NavGroup {
-  id: string;
+  id: "project" | "personal";
   label: string;
   items: NavItem[];
 }
@@ -27,19 +27,25 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "personal",
     label: "Personal Settings",
-    items: [{ id: "mcp-servers", label: "MCP Servers", icon: Plug }],
+    items: [
+      { id: "personal-general", label: "General", icon: Settings },
+      { id: "mcp-servers", label: "MCP Servers", icon: Plug },
+    ],
   },
 ];
 
 interface SettingsNavProps {
   active: SettingsSection;
   onSelect: (section: SettingsSection) => void;
+  showProject: boolean;
 }
 
-export function SettingsNav({ active, onSelect }: SettingsNavProps) {
+export function SettingsNav({ active, onSelect, showProject }: SettingsNavProps) {
+  const groups = showProject ? NAV_GROUPS : NAV_GROUPS.filter((g) => g.id !== "project");
+
   return (
     <nav className="flex h-full flex-col gap-6 overflow-y-auto border-r border-border bg-muted/30 px-3 py-6">
-      {NAV_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.id} className="flex flex-col gap-1">
           <div className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {group.label}

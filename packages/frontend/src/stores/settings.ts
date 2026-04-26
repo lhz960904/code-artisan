@@ -1,21 +1,35 @@
 import { create } from "zustand";
 
-export type SettingsSection = "general" | "system-prompt" | "mcp-servers";
+export type SettingsSection = "general" | "system-prompt" | "personal-general" | "mcp-servers";
 
-export const DEFAULT_SETTINGS_SECTION: SettingsSection = "general";
+interface OpenSettingsOpts {
+  conversationId?: string;
+  section?: SettingsSection;
+}
 
 interface SettingsStore {
   open: boolean;
+  conversationId: string | undefined;
   section: SettingsSection;
-  openSettings: (section?: SettingsSection) => void;
+  openSettings: (opts?: OpenSettingsOpts) => void;
   setSection: (section: SettingsSection) => void;
   close: () => void;
 }
 
+function defaultSection(conversationId: string | undefined): SettingsSection {
+  return conversationId ? "general" : "personal-general";
+}
+
 export const useSettingsStore = create<SettingsStore>((set) => ({
   open: false,
-  section: DEFAULT_SETTINGS_SECTION,
-  openSettings: (section) => set({ open: true, section: section ?? DEFAULT_SETTINGS_SECTION }),
+  conversationId: undefined,
+  section: "personal-general",
+  openSettings: (opts) =>
+    set({
+      open: true,
+      conversationId: opts?.conversationId,
+      section: opts?.section ?? defaultSection(opts?.conversationId),
+    }),
   setSection: (section) => set({ section }),
   close: () => set({ open: false }),
 }));

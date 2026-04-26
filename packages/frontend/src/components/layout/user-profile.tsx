@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings as SettingsIcon } from "lucide-react";
 import { useSession, signOut } from "@/lib/auth-client";
+import { useSettingsStore } from "@/stores/settings";
 
 function getInitials(name?: string | null, email?: string | null) {
   const src = (name ?? email ?? "?").trim();
@@ -12,6 +13,7 @@ function getInitials(name?: string | null, email?: string | null) {
 export function UserProfile() {
   const { data } = useSession();
   const navigate = useNavigate();
+  const openSettings = useSettingsStore((s) => s.openSettings);
 
   if (!data?.user) return null;
   const { name, email, image } = data.user;
@@ -38,13 +40,22 @@ export function UserProfile() {
         <div className="truncate text-sm font-medium">{name || email}</div>
         <div className="truncate text-xs text-muted-foreground">免费版</div>
       </div>
-      <button
-        onClick={handleSignOut}
-        title="Sign out"
-        className="hidden shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground group-hover:block"
-      >
-        <LogOut className="h-4 w-4" />
-      </button>
+      <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+        <button
+          onClick={() => openSettings()}
+          title="Settings"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <SettingsIcon className="h-4 w-4" />
+        </button>
+        <button
+          onClick={handleSignOut}
+          title="Sign out"
+          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
