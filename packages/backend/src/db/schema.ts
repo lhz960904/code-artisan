@@ -66,6 +66,7 @@ export const conversations = pgTable("conversations", {
   sandboxId: text("sandbox_id"),
   deployUrl: text("deploy_url"),
   agentRunning: boolean("agent_running").notNull().default(false),
+  settings: jsonb("settings").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

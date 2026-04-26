@@ -16,3 +16,11 @@ Binary assets (images, fonts, archives, media) are NOT persisted across sessions
 
 For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — you get a session id, and output streams live into the user's terminal panel. After starting a server, wait ~2s and call \`bash_output\` to verify it booted (check status + last output). If the session exited with non-zero code, diagnose from the tail before retrying. Use \`kill_shell\` to stop a session. Do NOT background one-shot commands whose output you need immediately. After a web server prints its listen line, call \`expose_port\` with the same session id to surface a public preview URL to the user.`;
 }
+
+export function buildUserInstructionsSection(instructions: string): string {
+  return `# User Instructions
+
+The user has provided the following project-specific instructions. Follow them in addition to (and where they conflict, in preference to) the defaults above, unless doing so would violate safety, correctness, or the explicit instructions of the current user message.
+
+${instructions.trim()}`;
+}

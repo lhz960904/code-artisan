@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import type { StoredMessage } from "@code-artisan/shared";
+import type { ConversationSettings, StoredMessage } from "@code-artisan/shared";
 import { apiFetch } from "@/api/client";
 
 export interface ConversationResponse {
@@ -10,6 +10,7 @@ export interface ConversationResponse {
   sandboxId: string | null;
   deployUrl: string | null;
   agentRunning: boolean;
+  settings: ConversationSettings;
   createdAt: string;
   updatedAt: string;
   /** Only populated by GET /conversation/:id. List endpoint omits it. */

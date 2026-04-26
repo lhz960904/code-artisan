@@ -53,6 +53,11 @@ export interface Attachment {
   size: number;
 }
 
+// Stored as JSONB on `conversations.settings`; add fields here to surface end-to-end.
+export interface ConversationSettings {
+  systemPrompt?: string;
+}
+
 /**
  * Web transport wraps agent stream events with the server-side message id
  * so the frontend can key state by the db UUID from birth instead of

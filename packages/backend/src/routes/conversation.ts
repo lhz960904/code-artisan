@@ -1,10 +1,15 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, eq, desc } from "drizzle-orm";
+import type { ConversationSettings } from "@code-artisan/shared";
 import { db } from "../db/index.js";
 import { conversations, messages, fileSnapshots } from "../db/schema.js";
 import { ok, created, notFound, validate } from "../http/index.js";
 import { getShellSessionManager } from "../services/shell-session";
+
+const conversationSettingsSchema: z.ZodType<Partial<ConversationSettings>> = z.object({
+  systemPrompt: z.string().optional(),
+});
 
 const conversationRouter = new Hono();
 
@@ -47,17 +52,37 @@ conversationRouter.get("/:id", validate("param", z.object({ id: z.uuid() })), as
 conversationRouter.patch(
   "/:id",
   validate("param", z.object({ id: z.uuid() })),
-  validate("json", z.object({ title: z.string().optional() })),
+  validate(
+    "json",
+    z.object({
+      title: z.string().optional(),
+      settings: conversationSettingsSchema.optional(),
+    }),
+  ),
   async (c) => {
     const { id } = c.req.valid("param");
-    const updates = c.req.valid("json");
+    const { title, settings: settingsPatch } = c.req.valid("json");
     const user = c.get("user");
+
+    const [existing] = await db
+      .select()
+      .from(conversations)
+      .where(and(eq(conversations.id, id), eq(conversations.userId, user.id)));
+    if (!existing) return notFound(c, "Conversation not found");
+
+    const nextSettings = settingsPatch
+      ? { ...((existing.settings as ConversationSettings) ?? {}), ...settingsPatch }
+      : undefined;
+
     const [conversation] = await db
       .update(conversations)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({
+        ...(title !== undefined ? { title } : {}),
+        ...(nextSettings !== undefined ? { settings: nextSettings } : {}),
+        updatedAt: new Date(),
+      })
       .where(and(eq(conversations.id, id), eq(conversations.userId, user.id)))
       .returning();
-    if (!conversation) return notFound(c, "Conversation not found");
     return ok(c, conversation);
   },
 );

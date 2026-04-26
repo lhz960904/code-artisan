@@ -1,6 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { ConversationSettings } from "@code-artisan/shared";
 import { conversationKeys, type ConversationResponse } from "@/api/queries";
 import { apiFetch } from "@/api/client";
+
+export interface ConversationUpdatePayload {
+  title?: string;
+  settings?: Partial<ConversationSettings>;
+}
 
 const conversationsApi = {
   create: (title?: string) =>
@@ -8,7 +14,7 @@ const conversationsApi = {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  update: (id: string, updates: { title?: string }) =>
+  update: (id: string, updates: ConversationUpdatePayload) =>
     apiFetch<ConversationResponse>(`/conversation/${id}`, {
       method: "PATCH",
       body: JSON.stringify(updates),
@@ -31,24 +37,26 @@ export function useConversationUpdate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string; title?: string }) =>
+    mutationFn: ({ id, ...updates }: { id: string } & ConversationUpdatePayload) =>
       conversationsApi.update(id, updates),
     onMutate: async ({ id, ...updates }) => {
       await queryClient.cancelQueries({ queryKey: conversationKeys.all() });
       await queryClient.cancelQueries({ queryKey: conversationKeys.detail(id) });
       const previousList = queryClient.getQueryData<ConversationResponse[]>(conversationKeys.all());
       const previousDetail = queryClient.getQueryData<ConversationResponse>(conversationKeys.detail(id));
+      const merge = (prev: ConversationResponse): ConversationResponse => ({
+        ...prev,
+        ...(updates.title !== undefined ? { title: updates.title } : {}),
+        ...(updates.settings ? { settings: { ...prev.settings, ...updates.settings } } : {}),
+      });
       if (previousList) {
         queryClient.setQueryData<ConversationResponse[]>(
           conversationKeys.all(),
-          previousList.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+          previousList.map((c) => (c.id === id ? merge(c) : c)),
         );
       }
       if (previousDetail) {
-        queryClient.setQueryData<ConversationResponse>(conversationKeys.detail(id), {
-          ...previousDetail,
-          ...updates,
-        });
+        queryClient.setQueryData<ConversationResponse>(conversationKeys.detail(id), merge(previousDetail));
       }
       return { previousList, previousDetail };
     },

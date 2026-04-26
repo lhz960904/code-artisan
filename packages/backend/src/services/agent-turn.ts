@@ -10,7 +10,7 @@ import {
   webSearchTool,
 } from "@code-artisan/agent";
 import { createModelProvider } from "./model-provider";
-import type { NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
+import type { ConversationSettings, NonSystemMessage, StoredMessage, WebAgentEvent } from "@code-artisan/shared";
 import { buildWebSystemPrompt } from "../prompts";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { db } from "../db";
@@ -126,10 +126,12 @@ export class AgentTurnService {
       }),
     ];
 
+    const settings = (this.conversation.settings as ConversationSettings | null) ?? {};
+
     return createAgent({
       model: provider,
       sandbox: sandbox,
-      prompt: buildWebSystemPrompt(),
+      prompt: buildWebSystemPrompt(settings.systemPrompt),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
       tools: [

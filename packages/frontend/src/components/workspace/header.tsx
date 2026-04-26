@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { Eye, Code2, Database, Coins, LogOut, Moon, Sun, Monitor } from "lucide-react";
+import { Eye, Code2, Database, Coins, LogOut, Moon, Sun, Monitor, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/common/logo";
@@ -15,7 +15,9 @@ import { conversationDetailOptions, quotaOptions } from "@/api";
 import { useSession, signOut } from "@/lib/auth-client";
 import { useTheme } from "@/contexts/theme-context";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { useSettingsStore } from "@/stores/settings";
 import { Button } from "@/components/ui/button";
+import { SettingsDialog } from "@/components/settings";
 
 interface HeaderProps {
   conversationId: string;
@@ -26,14 +28,17 @@ export function Header({ conversationId }: HeaderProps) {
   const { data: quota } = useSuspenseQuery(quotaOptions());
 
   return (
-    <HeaderShell>
-      <HeaderBrand title={conversation.title || "Untitled"} />
-      <ViewSwitcher />
-      <div className="flex items-center gap-3">
-        <TokenBalance remaining={quota.remaining} />
-        <UserAvatar />
-      </div>
-    </HeaderShell>
+    <>
+      <HeaderShell>
+        <HeaderBrand title={conversation.title || "Untitled"} />
+        <ViewSwitcher />
+        <div className="flex items-center gap-3">
+          <TokenBalance remaining={quota.remaining} />
+          <UserAvatar />
+        </div>
+      </HeaderShell>
+      <SettingsDialog conversationId={conversationId} />
+    </>
   );
 }
 
@@ -160,6 +165,7 @@ function UserAvatar() {
   const { data } = useSession();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const openSettings = useSettingsStore((s) => s.openSettings);
   const user = data?.user;
 
   if (!user) return <Skeleton className="h-7 w-7 rounded-full" />;
@@ -202,6 +208,10 @@ function UserAvatar() {
             </ThemeBtn>
           </div>
         </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => openSettings()}>
+          <SettingsIcon className="mr-2 h-4 w-4" /> Settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} variant="destructive">
           <LogOut className="mr-2 h-4 w-4" /> Sign out
