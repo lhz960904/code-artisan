@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 ## 🏛️ 架构
 
 <p align="center">
-  <img src="./docs/screenshots/architecture.svg" alt="系统架构图" width="1100" />
+  <img src="./docs/screenshots/architecture.zh-CN.svg" alt="系统架构图" width="1100" />
 </p>
 
 ### Monorepo 包结构

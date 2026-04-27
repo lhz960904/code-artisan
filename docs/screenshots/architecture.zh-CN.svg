@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1020" width="1300" height="1020" font-family="'JetBrains Mono', 'SF Mono', Consolas, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Courier New', monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-brand" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8487FF"/>
+    </marker>
+    <linearGradient id="sdk-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8487FF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#5457E8" stop-opacity="0.14"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1300" height="1020" fill="#020617"/>
+  <rect width="1300" height="1020" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="650" y="34" fill="#f1f5f9" font-size="16" font-weight="700" text-anchor="middle">code-artisan · 系统架构</text>
+  <text x="650" y="56" fill="#64748b" font-size="10" text-anchor="middle">前端 → 传输层 → 后端 → Agent SDK → 基础设施</text>
+
+  <!-- ============================================================ -->
+  <!-- INTER-LAYER ARROWS                                           -->
+  <!-- ============================================================ -->
+  <line x1="650" y1="220" x2="650" y2="240" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="650" y1="300" x2="650" y2="320" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="650" y1="540" x2="650" y2="580" stroke="#8487FF" stroke-width="2" marker-end="url(#arrow-brand)"/>
+  <line x1="243" y1="814" x2="340" y2="890" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="1057" y1="814" x2="960" y2="890" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ============================================================ -->
+  <!-- LAYER 1: 前端                                                -->
+  <!-- ============================================================ -->
+  <rect x="30" y="80" width="1240" height="140" rx="12" fill="rgba(8,51,68,0.10)" stroke="#22d3ee" stroke-opacity="0.5" stroke-dasharray="8,4" stroke-width="1.5"/>
+  <text x="46" y="102" fill="#22d3ee" font-size="11" font-weight="700">前端  ·  Vite + React 19 SPA</text>
+
+  <g>
+    <!-- 首页 / 输入框 -->
+    <rect x="45" y="118" width="295" height="92" rx="6" fill="#0f172a"/>
+    <rect x="45" y="118" width="295" height="92" rx="6" fill="rgba(8,51,68,0.40)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="192" y="142" fill="white" font-size="11" font-weight="600" text-anchor="middle">首页 / 输入框</text>
+    <text x="192" y="166" fill="#94a3b8" font-size="9" text-anchor="middle">提示词输入 · 模型选择</text>
+    <text x="192" y="182" fill="#94a3b8" font-size="9" text-anchor="middle">附件 · MCP</text>
+    <text x="192" y="200" fill="#475569" font-size="8" text-anchor="middle">路由: /, /login, /dashboard</text>
+
+    <!-- 对话面板 -->
+    <rect x="350" y="118" width="295" height="92" rx="6" fill="#0f172a"/>
+    <rect x="350" y="118" width="295" height="92" rx="6" fill="rgba(8,51,68,0.40)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="497" y="142" fill="white" font-size="11" font-weight="600" text-anchor="middle">对话面板</text>
+    <text x="497" y="166" fill="#94a3b8" font-size="9" text-anchor="middle">useChat (SSE) · 消息分块</text>
+    <text x="497" y="182" fill="#94a3b8" font-size="9" text-anchor="middle">TodoListCard · ToolCallItem</text>
+    <text x="497" y="200" fill="#475569" font-size="8" text-anchor="middle">流式 UI · Thinking 引用</text>
+
+    <!-- 工作区 -->
+    <rect x="655" y="118" width="295" height="92" rx="6" fill="#0f172a"/>
+    <rect x="655" y="118" width="295" height="92" rx="6" fill="rgba(8,51,68,0.40)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="802" y="142" fill="white" font-size="11" font-weight="600" text-anchor="middle">工作区</text>
+    <text x="802" y="166" fill="#94a3b8" font-size="9" text-anchor="middle">Monaco · xterm · 文件树</text>
+    <text x="802" y="182" fill="#94a3b8" font-size="9" text-anchor="middle">实时预览 · 全文搜索</text>
+    <text x="802" y="200" fill="#475569" font-size="8" text-anchor="middle">可拖拽面板 · 视图切换</text>
+
+    <!-- 状态 -->
+    <rect x="960" y="118" width="295" height="92" rx="6" fill="#0f172a"/>
+    <rect x="960" y="118" width="295" height="92" rx="6" fill="rgba(8,51,68,0.40)" stroke="#22d3ee" stroke-width="1.3"/>
+    <text x="1107" y="142" fill="white" font-size="11" font-weight="600" text-anchor="middle">状态  ·  TanStack Query</text>
+    <text x="1107" y="166" fill="#94a3b8" font-size="9" text-anchor="middle">Zustand: workspace · models</text>
+    <text x="1107" y="182" fill="#94a3b8" font-size="9" text-anchor="middle">pending-prompt · theme</text>
+    <text x="1107" y="200" fill="#475569" font-size="8" text-anchor="middle">queries · mutations 缓存</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- 传输层                                                       -->
+  <!-- ============================================================ -->
+  <rect x="30" y="240" width="1240" height="60" rx="10" fill="rgba(251,146,60,0.06)" stroke="#fb923c" stroke-opacity="0.5" stroke-dasharray="6,3" stroke-width="1.3"/>
+  <text x="46" y="258" fill="#fb923c" font-size="10" font-weight="700">传输层</text>
+
+  <g>
+    <rect x="42" y="266" width="395" height="28" rx="4" fill="#0f172a"/>
+    <rect x="42" y="266" width="395" height="28" rx="4" fill="rgba(251,146,60,0.18)" stroke="#fb923c" stroke-width="1"/>
+    <text x="240" y="284" fill="#fb923c" font-size="10" font-weight="600" text-anchor="middle">REST  ·  /api/* （Cookie 鉴权）</text>
+
+    <rect x="452" y="266" width="395" height="28" rx="4" fill="#0f172a"/>
+    <rect x="452" y="266" width="395" height="28" rx="4" fill="rgba(251,146,60,0.18)" stroke="#fb923c" stroke-width="1"/>
+    <text x="650" y="284" fill="#fb923c" font-size="10" font-weight="600" text-anchor="middle">SSE  ·  /api/message/:id （单轮流式）</text>
+
+    <rect x="862" y="266" width="395" height="28" rx="4" fill="#0f172a"/>
+    <rect x="862" y="266" width="395" height="28" rx="4" fill="rgba(251,146,60,0.18)" stroke="#fb923c" stroke-width="1"/>
+    <text x="1060" y="284" fill="#fb923c" font-size="10" font-weight="600" text-anchor="middle">WebSocket  ·  /api/conversation-ws （PTY）</text>
+  </g>
+
+  <!-- ============================================================ -->
+  <!-- LAYER 2: 后端                                                -->
+  <!-- ============================================================ -->
+  <rect x="30" y="320" width="1240" height="220" rx="12" fill="rgba(6,78,59,0.08)" stroke="#34d399" stroke-opacity="0.5" stroke-dasharray="8,4" stroke-width="1.5"/>
+  <text x="46" y="342" fill="#34d399" font-size="11" font-weight="700">后端  ·  Hono + Bun</text>
+
+  <g>
+    <!-- Row 1 -->
+    <rect x="47" y="355" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="47" y="355" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="243" y="378" fill="white" font-size="11" font-weight="600" text-anchor="middle">Hono 路由</text>
+    <text x="243" y="400" fill="#94a3b8" font-size="9" text-anchor="middle">conversation · message · snapshot</text>
+    <text x="243" y="416" fill="#94a3b8" font-size="9" text-anchor="middle">attachment · setting · user · models</text>
+    <text x="243" y="432" fill="#475569" font-size="8" text-anchor="middle">requireAuth · zod 校验 · 响应封装</text>
+
+    <rect x="454" y="355" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="454" y="355" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="650" y="378" fill="white" font-size="11" font-weight="600" text-anchor="middle">AgentTurnService</text>
+    <text x="650" y="400" fill="#94a3b8" font-size="9" text-anchor="middle">编排单轮 Agent 执行</text>
+    <text x="650" y="416" fill="#94a3b8" font-size="9" text-anchor="middle">持久化消息与快照</text>
+    <text x="650" y="432" fill="#475569" font-size="8" text-anchor="middle">streamSSE · 服务端生成消息 ID</text>
+
+    <rect x="861" y="355" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="861" y="355" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="1057" y="378" fill="white" font-size="11" font-weight="600" text-anchor="middle">ShellSessionManager</text>
+    <text x="1057" y="400" fill="#94a3b8" font-size="9" text-anchor="middle">PTY 驱动的长进程 shell</text>
+    <text x="1057" y="416" fill="#94a3b8" font-size="9" text-anchor="middle">Agent 与用户共享同一管理器</text>
+    <text x="1057" y="432" fill="#475569" font-size="8" text-anchor="middle">环形缓冲快照 · WS 网关</text>
+
+    <!-- Row 2 -->
+    <rect x="47" y="454" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="47" y="454" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="243" y="477" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web 工具（覆盖 SDK 内置）</text>
+    <text x="243" y="499" fill="#94a3b8" font-size="9" text-anchor="middle">bash · bash_output · kill_shell</text>
+    <text x="243" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">expose_port（预览 URL）</text>
+    <text x="243" y="531" fill="#475569" font-size="8" text-anchor="middle">支持 PTY · 绑定沙箱</text>
+
+    <rect x="454" y="454" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="454" y="454" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="650" y="477" fill="white" font-size="11" font-weight="600" text-anchor="middle">沙箱池</text>
+    <text x="650" y="499" fill="#94a3b8" font-size="9" text-anchor="middle">acquireConversationSandbox</text>
+    <text x="650" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">冷启动恢复文件快照</text>
+    <text x="650" y="531" fill="#475569" font-size="8" text-anchor="middle">E2B 重连或新建容器</text>
+
+    <rect x="861" y="454" width="393" height="85" rx="6" fill="#0f172a"/>
+    <rect x="861" y="454" width="393" height="85" rx="6" fill="rgba(6,78,59,0.40)" stroke="#34d399" stroke-width="1.3"/>
+    <text x="1057" y="477" fill="white" font-size="11" font-weight="600" text-anchor="middle">持久化 + 鉴权</text>
+    <text x="1057" y="499" fill="#94a3b8" font-size="9" text-anchor="middle">Drizzle ORM · postgres 连接池</text>
+    <text x="1057" y="515" fill="#94a3b8" font-size="9" text-anchor="middle">better-auth（GitHub OAuth）</text>
+    <text x="1057" y="531" fill="#475569" font-size="8" text-anchor="middle">Supabase Storage · 附件</text>
+  </g>
+
+  <!-- 调用 agent.stream() label -->
+  <rect x="565" y="546" width="170" height="26" rx="4" fill="#020617" stroke="#8487FF" stroke-opacity="0.7" stroke-width="1"/>
+  <text x="650" y="563" fill="#8487FF" font-size="10" font-weight="600" text-anchor="middle">调用 agent.stream()</text>
+
+  <!-- ============================================================ -->
+  <!-- LAYER 3: AGENT SDK                                           -->
+  <!-- ============================================================ -->
+  <rect x="30" y="580" width="1240" height="240" rx="12" fill="url(#sdk-grad)" stroke="#8487FF" stroke-opacity="0.7" stroke-dasharray="10,4" stroke-width="2"/>
+  <text x="46" y="602" fill="#8487FF" font-size="11" font-weight="700">@code-artisan/agent  ·  AGENT SDK</text>
+  <text x="1254" y="602" fill="#64748b" font-size="9" text-anchor="end">环境无关 · 可插拔 · 块结构消息</text>
+
+  <g>
+    <!-- Row 1 -->
+    <rect x="47" y="614" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="47" y="614" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="243" y="637" fill="white" font-size="11" font-weight="700" text-anchor="middle">① Core（ReAct 循环）</text>
+    <text x="243" y="660" fill="#c7d2fe" font-size="9" text-anchor="middle">Agent 类 · createAgent()</text>
+    <text x="243" y="676" fill="#c7d2fe" font-size="9" text-anchor="middle">invoke() · stream() 异步生成器</text>
+    <text x="243" y="694" fill="#94a3b8" font-size="8" text-anchor="middle">协作式 shouldStop · maxSteps</text>
+
+    <rect x="454" y="614" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="454" y="614" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="650" y="637" fill="white" font-size="11" font-weight="700" text-anchor="middle">② LLM Providers</text>
+    <text x="650" y="660" fill="#c7d2fe" font-size="9" text-anchor="middle">LLMProvider 抽象类</text>
+    <text x="650" y="676" fill="#c7d2fe" font-size="9" text-anchor="middle">Anthropic  ·  OpenAI 兼容</text>
+    <text x="650" y="694" fill="#94a3b8" font-size="8" text-anchor="middle">baseURL 覆盖 · 流式</text>
+
+    <rect x="861" y="614" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="861" y="614" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="1057" y="637" fill="white" font-size="11" font-weight="700" text-anchor="middle">③ Middlewares（中间件）</text>
+    <text x="1057" y="660" fill="#c7d2fe" font-size="9" text-anchor="middle">8 钩子: before/after Model · Run · Step · Tool</text>
+    <text x="1057" y="676" fill="#c7d2fe" font-size="9" text-anchor="middle">loop-detection · micro-compact</text>
+    <text x="1057" y="694" fill="#94a3b8" font-size="8" text-anchor="middle">auto-compact · skills · todo</text>
+
+    <!-- Row 2 -->
+    <rect x="47" y="723" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="47" y="723" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="243" y="746" fill="white" font-size="11" font-weight="700" text-anchor="middle">④ 沙箱接口</text>
+    <text x="243" y="769" fill="#c7d2fe" font-size="9" text-anchor="middle">exec · readFile · writeFile</text>
+    <text x="243" y="785" fill="#c7d2fe" font-size="9" text-anchor="middle">listDir · glob · grep</text>
+    <text x="243" y="803" fill="#94a3b8" font-size="8" text-anchor="middle">Agent 创建时注入 · LocalSandbox / E2BSandbox</text>
+
+    <rect x="454" y="723" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="454" y="723" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="650" y="746" fill="white" font-size="11" font-weight="700" text-anchor="middle">⑤ Tools（工具）</text>
+    <text x="650" y="769" fill="#c7d2fe" font-size="9" text-anchor="middle">bash · read · write · strReplace</text>
+    <text x="650" y="785" fill="#c7d2fe" font-size="9" text-anchor="middle">glob · grep · ls · webSearch · webFetch</text>
+    <text x="650" y="803" fill="#94a3b8" font-size="8" text-anchor="middle">defineTool() · zod 输入 · 后端可按名覆盖</text>
+
+    <rect x="861" y="723" width="393" height="95" rx="6" fill="#0b1124"/>
+    <rect x="861" y="723" width="393" height="95" rx="6" fill="rgba(132,135,255,0.14)" stroke="#8487FF" stroke-width="1.5"/>
+    <text x="1057" y="746" fill="white" font-size="11" font-weight="700" text-anchor="middle">⑥ 消息 &amp; 提示词</text>
+    <text x="1057" y="769" fill="#c7d2fe" font-size="9" text-anchor="middle">块结构内容（text · image · file</text>
+    <text x="1057" y="785" fill="#c7d2fe" font-size="9" text-anchor="middle">thinking · tool_use · tool_result）</text>
+    <text x="1057" y="803" fill="#94a3b8" font-size="8" text-anchor="middle">composeSystemPrompt · 7 段式</text>
+  </g>
+
+  <!-- Arrow labels SDK → Infra -->
+  <rect x="160" y="838" width="170" height="22" rx="4" fill="#020617" stroke="#fb923c" stroke-opacity="0.7" stroke-width="1"/>
+  <text x="245" y="853" fill="#fb923c" font-size="9" text-anchor="middle">sandbox.exec / readFile</text>
+
+  <rect x="970" y="838" width="170" height="22" rx="4" fill="#020617" stroke="#fb923c" stroke-opacity="0.7" stroke-width="1"/>
+  <text x="1055" y="853" fill="#fb923c" font-size="9" text-anchor="middle">JSONB 消息 · 快照</text>
+
+  <!-- ============================================================ -->
+  <!-- LAYER 4: 基础设施                                            -->
+  <!-- ============================================================ -->
+  <rect x="30" y="860" width="1240" height="130" rx="12" fill="rgba(120,53,15,0.06)" stroke="#94a3b8" stroke-opacity="0.5" stroke-dasharray="8,4" stroke-width="1.3"/>
+  <text x="46" y="882" fill="#94a3b8" font-size="11" font-weight="700">基础设施</text>
+
+  <g>
+    <!-- E2B -->
+    <rect x="40" y="892" width="600" height="88" rx="6" fill="#0f172a"/>
+    <rect x="40" y="892" width="600" height="88" rx="6" fill="rgba(120,53,15,0.30)" stroke="#fbbf24" stroke-width="1.5"/>
+    <text x="340" y="918" fill="white" font-size="12" font-weight="600" text-anchor="middle">E2B 沙箱</text>
+    <text x="340" y="940" fill="#94a3b8" font-size="9" text-anchor="middle">每会话独立容器 · PTY API · 文件快照</text>
+    <text x="340" y="956" fill="#94a3b8" font-size="9" text-anchor="middle">冷启动批量恢复 · expose_port → 预览 URL</text>
+    <text x="340" y="974" fill="#475569" font-size="8" text-anchor="middle">@e2b/code-interpreter</text>
+
+    <!-- Supabase -->
+    <rect x="660" y="892" width="600" height="88" rx="6" fill="#0f172a"/>
+    <rect x="660" y="892" width="600" height="88" rx="6" fill="rgba(76,29,149,0.40)" stroke="#a78bfa" stroke-width="1.5"/>
+    <text x="960" y="918" fill="white" font-size="12" font-weight="600" text-anchor="middle">Supabase</text>
+    <text x="960" y="940" fill="#94a3b8" font-size="9" text-anchor="middle">Postgres: conversations · messages（JSONB）· file_snapshots</text>
+    <text x="960" y="956" fill="#94a3b8" font-size="9" text-anchor="middle">user · session · settings · userQuotas</text>
+    <text x="960" y="974" fill="#475569" font-size="8" text-anchor="middle">对象存储: attachments 桶</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="650" y="1010" fill="#475569" font-size="8" text-anchor="middle">两条传输 — SSE（单向、单轮） · WebSocket（双向、长连接终端 I/O） · 块结构消息模型经 JSONB 端到端贯通</text>
+</svg>
