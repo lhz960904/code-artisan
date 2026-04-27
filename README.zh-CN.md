@@ -3,7 +3,7 @@
 
 # CodeArtisan
 
-一个 Web AI 编码 Agent —— 个人实战项目，用来端到端探索：怎么从零写一个 Agent SDK、怎么把代码执行扔进沙箱、怎么搭一个真正能用的工作区 UI。
+一个 Web Coding Agent 项目，类似于 bolt.new、v0.dev 等项目，通过实战学习 Agent 相关开发知识
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
@@ -19,14 +19,15 @@ https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 
 ## ✨ 项目特点
 
-- **自研 Agent SDK。** 不是套壳 AI SDK，也不是包一层 LangChain。从第一性原理写的 ReAct 循环，Provider、Middleware、Tool、Sandbox 全部可插拔。Block-based 多态消息模型端到端贯通，不丢信息。
-- **默认沙箱化。** 每段对话独立运行在 [E2B](https://e2b.dev) 沙箱中，文件快照机制让冷启动也能恢复完整工作区。
-- **原生 MCP 支持。** 内置 MCP marketplace，安装即用，下一轮对话 Agent 自动接入新工具，无需改配置。
-- **实时预览。** `expose_port` 把沙箱里启动的 dev server 直接接到前端 iframe，不需要 ngrok、不需要手工配置。
-- **真正的工作区。** Monaco 编辑器、PTY 驱动的 xterm 终端（Agent 与用户共享同一个 session 管理器）、文件树 + 全文搜索，全部走一条会话级 WebSocket。
-- **双传输架构。** SSE 跑单轮 Agent 输出，长连接 WebSocket 跑双向终端 I/O，各司其职。
-- **中间件系统。** quota 计费、文件变更追踪、循环检测、micro-compact、auto-compact、计划级 todo —— 每一项都是一个可独立替换的中间件。
-- **主题切换。** Tailwind v4 `@theme` token 驱动，浅色/深色开箱即用。
+- **自研 Agent SDK。** 没有使用 vercel ai sdk 或 langchain 等现成框架，从第一性原理写的 ReAct 循环，多 Provider 支持、Middleware、Tool、Sandbox 抽象，全部可插拔。
+
+- **支持 MCP**。内置 MCP marketplace 安装即用，Agent 自动接入 MCP 相关工具。
+
+- **内置 Skills 系统。** 包含全栈项目开发等技能，Agent 可以读取技能快速完成相关任务。
+
+- **沙箱安全隔离**。每段对话独立运行在 [E2B](https://e2b.dev) 沙箱中，文件快照机制让冷启动也能恢复完整工作区。单独使用 Agent SDK 也可以切换到本地运行(localSandbox)。
+
+- **完善的工作区。** 实时预览、Monaco 编辑器、PTY 驱动的 xterm 终端（Agent 与用户共享同一个 session 管理器）、文件树 + 全文搜索，会话级别的 WebSocket 通信。
 
 ## 🏛️ 架构
 
@@ -41,20 +42,20 @@ https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 | [`@code-artisan/agent`](./packages/agent) | 环境无关的 Agent SDK —— ReAct 循环、Provider、Tool、Middleware、Sandbox 抽象 |
 | [`@code-artisan/backend`](./packages/backend) | Hono + Bun 服务端 —— 单轮编排、持久化、鉴权、沙箱生命周期、PTY 会话 |
 | [`@code-artisan/frontend`](./packages/frontend) | Vite + React 19 单页应用 —— 工作区 UI、Monaco、xterm、实时预览 |
-| [`@code-artisan/cli`](./packages/cli) | Agent SDK 的终端 UI（基于 Ink） |
+| [`@code-artisan/cli`](./packages/cli) | Agent SDK 的终端 UI（基于 Ink），项目准备阶段，后续考虑 CLI 层实现 |
 | [`@code-artisan/shared`](./packages/shared) | 共享类型：消息块、模型目录、会话结构 |
 
 ## 🛠️ 技术栈
 
-**前端** — Vite 6 · React 19 · TypeScript 5.9 · Tailwind v4 · shadcn/ui · TanStack Router · TanStack Query · Zustand · Monaco · xterm.js · `react-resizable-panels`
+**前端** — Vite 6 · React 19 · TypeScript 5.9 · Tailwind v4 · shadcn/ui · TanStack Router · TanStack Query · Zustand · Monaco · xterm.js · react-resizable-panels
 
-**后端** — Bun · Hono 4 · Drizzle ORM · Postgres · `better-auth`（GitHub OAuth）· `@anthropic-ai/sdk` · `@modelcontextprotocol/sdk`
+**后端** — Bun · Hono 4 · Drizzle ORM · Postgres · better-auth（GitHub OAuth）· anthropic-ai/sdk · modelcontextprotocol/sdk
 
 **沙箱** — E2B Code Interpreter（PTY API）
 
 **基础设施** — Supabase（Postgres + 对象存储）· Railway / Docker（部署）
 
-**模型** — Claude Opus 4.7 · Claude Sonnet 4.6 · 任何 OpenAI 兼容网关（通过 `LLM_BASE_URL` 切换）
+**模型** — 任何 Anthropic 或 OpenAI 兼容网关（通过 `LLM_BASE_URL` 切换）
 
 ## 🚀 快速开始
 
@@ -65,8 +66,8 @@ https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 - **Bun** ≥ 1.x
 - 一个 **[E2B](https://e2b.dev)** API key
 - 一个 **[Supabase](https://supabase.com)** 项目（Postgres + 名为 `attachments` 的存储桶）
-- **LLM API key** —— Anthropic 官方，或任意 OpenAI 兼容网关（如 `aihubmix`）
-- **GitHub OAuth App**（callback 填 `http://localhost:3001/api/auth/callback/github`）
+- **LLM API key** —— Anthropic 官方，或任意 OpenAI 兼容网关
+- **GitHub OAuth App** 
 
 ### 安装
 
@@ -102,20 +103,19 @@ pnpm --filter @code-artisan/backend run start
 
 ## 🗺️ Roadmap
 
-完整列表见 [TODO.md](./TODO.md)。`P1` 重点：
+完整列表见 [TODO.md](./TODO.md)
 
-- [ ] 一键部署（Vercel）
-- [ ] 内置数据库能力（Supabase）
-- [ ] 元素选择回填（点击预览中的元素，自动写入对话框）
-- [ ] 版本控制 + 分享链接
-- [ ] 自定义规则（`Agents.md`）
+- [ ] Plan 模式
+- [ ] 版本控制
+- [ ] 支持一键部署
+- [ ] 内置数据库能力
+- [ ] 分享链接  
+- [ ] 调试功能-页面选择元素进行回填
 - [ ] i18n 框架
-
-`P3` 想法：Plan 模式、子 Agent、记忆系统、刷新页面恢复流式。
 
 ## 🤝 Issue 和 PR
 
-欢迎随时提 issue 或 PR。有不清楚的、想聊聊实现思路、或者就是想交流，加我微信：
+欢迎随时提 issue 或 PR。有不清楚的、想聊聊实现思路、或者就是想交流，欢迎加作者微信：
 
 <p align="center">
   <img src="./packages/frontend/public/wechat-qr.jpg" alt="WeChat QR" width="220" />
