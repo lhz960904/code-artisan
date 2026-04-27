@@ -15,11 +15,7 @@
 
 ## 🎬 Demo
 
-<p align="center">
-  <video src="https://github.com/lhz960904/code-artisan/raw/refs/heads/main/docs/demo.mp4" controls width="900"></video>
-</p>
-
-> 上方播放器无法渲染时，[点这里下载或在新标签打开](./docs/demo.mp4)。
+https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 
 ## ✨ 项目特点
 

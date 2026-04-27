@@ -15,11 +15,7 @@ A web AI coding agent — a personal learning project exploring how to build a h
 
 ## 🎬 Demo
 
-<p align="center">
-  <video src="https://github.com/lhz960904/code-artisan/raw/refs/heads/main/docs/demo.mp4" controls width="900"></video>
-</p>
-
-> If the player above doesn't render, [download / open the demo here](./docs/demo.mp4).
+https://github.com/user-attachments/assets/449acf6a-e12d-4dd5-a826-5ae6d825d68a
 
 ## ✨ Features
 
