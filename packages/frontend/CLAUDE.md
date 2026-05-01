@@ -19,7 +19,7 @@ src/
     mutations/           useConversationCreate/Update/Delete, uploadFile, mcp-server mutations
     mutations/upload.ts  POST /api/attachment → Attachment metadata (cookie-authed like the rest of /api)
   components/
-    ui/                  shadcn primitives (button, textarea, dialog, dropdown-menu, tabs, tooltip, skeleton, resizable, …)
+    ui/                  shadcn primitives (button, textarea, dialog, dropdown-menu, popover, tabs, tooltip, skeleton, resizable, …)
     common/              Logo, MarkdownRenderer (react-markdown + remark-gfm + syntax highlighter), ThemeToggle
     layout/              HomeHeader, AppSidebar, UserProfile (site-wide shells)
     chat/
@@ -36,7 +36,8 @@ src/
       conversation-ws-context.tsx  Owns a single ConversationWsClient per mounted conversation. Holds the authoritative `sessions: DisplaySession[]` (server sessions + local "pending" drafts). Exposes `{ client, sessions, setSessions, subscribe }` so sub-panels (Terminal, future Agent-action panels) share one socket.
       header.tsx            In-workspace header (brand + title · absolute-positioned ViewSwitcher aligned to Files column via `--chat-panel-width` · Coins token pill + Avatar dropdown with Theme switch + Sign out); exports HeaderSkeleton
       right-panel.tsx       Fetches snapshots via useQuery → populates workspace store; routes view (preview/code/database) from workspace store. CodeView is the resizable (editor-area / terminal) + (file-tree / editor) composition — terminal is collapsible.
-      preview-panel.tsx     4-state smart preview: snapshot-loading skeleton → empty (no files) → no-server (shows "Start development server" CTA that pushes into `workspace.pendingChatMessage`) → live iframe with URL/refresh/open-in-new-tab chrome
+      preview-panel.tsx     4-state smart preview: snapshot-loading skeleton → empty (no files) → no-server (shows "Start development server" CTA that pushes into `workspace.pendingChatMessage`) → live iframe with URL/refresh/open-in-new-tab chrome + `<BrowserErrorBadge>`. Mounts `useIframeBridge(iframeRef)` for the lifetime of the panel.
+      browser-error-badge.tsx  Red AlertCircle + count badge that appears in the preview toolbar when `workspace.browserErrors` is non-empty. Popover lists errors (source label + filename:line + red message); "Ask AI to fix" formats them into a structured prompt and dispatches via `setPendingChatMessage` (clears the buffer on send). Hidden when count is 0.
       database-panel.tsx    Placeholder "Database coming soon" panel
       editor-panel.tsx      Monaco editor; theme follows useTheme().resolved (vs / vs-dark); consumes `pendingReveal` to scroll/focus a line
       terminal-panel.tsx    xterm.js tabbed panel driven by useConversationWs(). Snapshots replay on attach; max 3 user terminals; agent-owned sessions render as read-only tabs (no close button, lightning icon); local "pending" draft flow swaps its id on `created`. Theme repaint via term.refresh() on theme change.
@@ -50,8 +51,9 @@ src/
     use-chat.ts          SSE consumer backed by the TanStack Query cache; handles title_update / file_update / quota_exceeded / error. After the stream settles, invalidates the conversation detail so a freshly-exposed `previewUrl` is picked up.
     use-file-upload.ts   Selected-file lifecycle; each addFiles triggers an immediate background upload — state: uploading → done/error
     use-start-conversation.ts Shared "create conversation + navigate" flow (auth gate + store stash)
+    use-iframe-bridge.ts  Listens to cross-origin `message` events from the preview iframe. Filters by origin (must match `previewUrl`'s origin) + source (must equal `iframeRef.current.contentWindow`) + brand (`isIframeBridgeMessage`); dispatches `ready` → `setIframeRuntimeReady`, `error` → `appendBrowserError`. Protocol types live in `@code-artisan/shared/iframe-protocol`.
   stores/
-    workspace.ts         Live in-session state: files map (seeded from snapshots, mutated by SSE), open tabs, `previewUrl`, `view` ("preview" | "code" | "database") persisted to localStorage, `pendingReveal` (editor jump-to-line handoff), `pendingChatMessage` (Preview→Chat submit relay), `snapshotsLoaded` gate.
+    workspace.ts         Live in-session state: files map (seeded from snapshots, mutated by SSE), open tabs, `previewUrl`, `view` ("preview" | "code" | "database") persisted to localStorage, `pendingReveal` (editor jump-to-line handoff), `pendingChatMessage` (Preview→Chat submit relay), `snapshotsLoaded` gate, `browserErrors` (capped 50 ring buffer of `BrowserError` from iframe runtime), `iframeRuntimeReady` (handshake flag).
     pending-prompt.ts    Cross-page prompt handoff: draft slot (Home→Dashboard, JSON-persisted via sessionStorage to survive GitHub OAuth) + byConversationId (Dashboard→chat), shape { prompt, attachments: Attachment[] }
     model-prefs.ts       Selected model id, backed by `localStorage["code-artisan.modelPrefs"]`; falls back to DEFAULT_MODEL_ID on missing/corrupt value. Sender reads/writes it.
   contexts/theme-context.tsx  light/dark/system toggle stored in localStorage
@@ -109,6 +111,8 @@ Terminal draft flow: user clicks "+" → `crypto.randomUUID()` → push a `{stat
 **Chat turn.** `chat.tsx` loader prefetches detail/messages/snapshots/quota → `WorkspaceLayout` → `ChatPanel` mounts `useChat(conversationId)`. On first `status==="ready"`, consumes `byConversationId` and calls `sendMessage(prompt, { attachments, model: useModelPrefsStore.getState().model })` once. `sendMessage` POSTs `{content, attachments, model}` to `/api/message/:id`, optimistically appends a user message to the query cache, then parses SSE frames and mutates the cache directly via `queryClient.setQueryData`.
 
 **Preview "Start dev server" shortcut.** PreviewPanel's CTA calls `setPendingChatMessage("Please start this project's development server")` → ChatPanel's effect sees the change on next `ready` and dispatches it through `sendMessage` with the currently-selected model, then clears.
+
+**Browser error capture (preview iframe → AI).** The sandbox-side Vite plugin (`@code-artisan/iframe-runtime`) injects an IIFE into the user's app HTML at HTTP-response time. The runtime catches `window.error` / `unhandledrejection` / filtered `console.error`, posts each to the parent over a brand-tagged postMessage protocol. `useIframeBridge` (mounted by PreviewPanel) filters by origin + source + brand, dispatches into `workspace.browserErrors`. `BrowserErrorBadge` shows a red count badge in the preview toolbar; clicking "Ask AI to fix" formats all buffered errors into a structured prompt and pushes through `setPendingChatMessage` → ChatPanel auto-sends → buffer clears. No backend persistence — errors are session-ephemeral.
 
 **File attachment.** Sender's drag/paste/pick → `fileUpload.addFiles(files)` → state entry per file transitions `uploading → done` as each `POST /api/attachment` resolves. Consumers read `fileUpload.attachments: Attachment[]`. `isUploading` drives Sender's disabled state.
 

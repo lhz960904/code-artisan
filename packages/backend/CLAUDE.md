@@ -22,8 +22,11 @@ src/
   middlewares/
     require-auth.ts     Hono middleware: validates better-auth session, sets `c.get("user")`
   prompts/
-    sections.ts         WEB_IDENTITY + buildEnvironmentSection(workspaceRoot)  — sandbox-aware env section
-    index.ts            buildWebSystemPrompt() = composeSystemPrompt({ identity, environment })
+    sections.ts         WEB_IDENTITY + PROJECT_CONVENTIONS (Vite-only scaffolding policy + don't-touch list
+                          for the platform-managed `.code-artisan/` vendor + `codeArtisanRuntime()` plugin in
+                          vite.config.ts) + buildEnvironmentSection(workspaceRoot) — sandbox-aware env section
+    index.ts            buildWebSystemPrompt() = composeSystemPrompt({ identity, environment, appendSections:
+                          [PROJECT_CONVENTIONS, ...userInstructionsIfAny] })
   routes/               Thin wrappers: validate → delegate to service
     conversation.ts     CRUD conversations
     message.ts          GET /message/:id (list), POST /message/:id — validates `model` against SUPPORTED_MODELS,
