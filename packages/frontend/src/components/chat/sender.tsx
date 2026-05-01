@@ -54,6 +54,12 @@ export interface SenderProps {
   size?: "default" | "large";
   submitLabel?: string;
   className?: string;
+  /** Optional content rendered above the attachment preview row — e.g. a
+   *  selected-element chip from the workspace preview's element picker. */
+  headerSlot?: React.ReactNode;
+  /** Optional content rendered to the LEFT of the send button (bottom toolbar) —
+   *  e.g. an element-picker toggle, plan-mode toggle, etc. */
+  actionsSlot?: React.ReactNode;
 }
 
 // ----- file-local hooks -----
@@ -255,6 +261,8 @@ export function Sender({
   size = "default",
   submitLabel,
   className,
+  headerSlot,
+  actionsSlot,
 }: SenderProps) {
   const [inner, setInner] = useState("");
   const value = valueProp ?? inner;
@@ -350,6 +358,8 @@ export function Sender({
         className,
       )}
     >
+      {headerSlot && <div className="mb-2">{headerSlot}</div>}
+
       <AttachmentPreview
         files={files}
         onRemove={onRemoveFile ?? (() => { })}
@@ -396,14 +406,17 @@ export function Sender({
           <PlusMenu onAttach={() => fileInputRef.current?.click()} />
           <ModelPicker models={models} value={modelId} onChange={onModelChange} />
         </div>
-        <SendButton
-          size={size}
-          label={submitLabel}
-          disabled={!canSubmit}
-          busy={Boolean(busy || isUploading)}
-          onClick={handleSubmit}
-          onStop={onStop}
-        />
+        <div className="flex items-center gap-1.5">
+          {actionsSlot}
+          <SendButton
+            size={size}
+            label={submitLabel}
+            disabled={!canSubmit}
+            busy={Boolean(busy || isUploading)}
+            onClick={handleSubmit}
+            onStop={onStop}
+          />
+        </div>
       </div>
     </div>
   );

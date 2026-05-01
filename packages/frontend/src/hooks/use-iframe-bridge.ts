@@ -1,6 +1,10 @@
 import { useEffect, type RefObject } from "react";
-import { isIframeBridgeMessage, type IframeToParentMessage } from "@code-artisan/shared";
-import { useWorkspaceStore } from "@/stores/workspace";
+import {
+  IFRAME_BRIDGE_BRAND,
+  isIframeBridgeMessage,
+  type IframeToParentMessage,
+} from "@code-artisan/shared";
+import { useWorkspaceStore, type IframeBridgeSender } from "@/stores/workspace";
 
 function getOrigin(url: string | null): string | null {
   if (!url) return null;
@@ -16,10 +20,25 @@ export function useIframeBridge(iframeRef: RefObject<HTMLIFrameElement | null>):
 
   useEffect(() => {
     const expectedOrigin = getOrigin(previewUrl);
-    if (!expectedOrigin) return;
+    const {
+      appendBrowserError,
+      setIframeRuntimeReady,
+      setSelectedElement,
+      setPickModeActive,
+      setIframeBridgeSend,
+    } = useWorkspaceStore.getState();
 
-    const appendBrowserError = useWorkspaceStore.getState().appendBrowserError;
-    const setIframeRuntimeReady = useWorkspaceStore.getState().setIframeRuntimeReady;
+    if (!expectedOrigin) {
+      setIframeBridgeSend(null);
+      return;
+    }
+
+    const send: IframeBridgeSender = (message) => {
+      const target = iframeRef.current?.contentWindow;
+      if (!target) return;
+      target.postMessage({ brand: IFRAME_BRIDGE_BRAND, ...message }, expectedOrigin);
+    };
+    setIframeBridgeSend(send);
 
     function handleMessage(event: MessageEvent) {
       if (event.origin !== expectedOrigin) return;
@@ -35,7 +54,11 @@ export function useIframeBridge(iframeRef: RefObject<HTMLIFrameElement | null>):
           appendBrowserError(message.payload);
           break;
         case "element-selected":
+          setSelectedElement(message.payload);
+          setPickModeActive(false);
+          break;
         case "pick-mode-changed":
+          setPickModeActive(message.payload.active);
           break;
       }
     }
@@ -44,6 +67,8 @@ export function useIframeBridge(iframeRef: RefObject<HTMLIFrameElement | null>):
     return () => {
       window.removeEventListener("message", handleMessage);
       setIframeRuntimeReady(false);
+      setPickModeActive(false);
+      setIframeBridgeSend(null);
     };
   }, [previewUrl, iframeRef]);
 }

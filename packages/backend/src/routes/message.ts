@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import type { Attachment, WebAgentEvent } from "@code-artisan/shared";
+import type { Attachment, SelectedElement, WebAgentEvent } from "@code-artisan/shared";
 import { SUPPORTED_MODELS } from "@code-artisan/shared";
 
 import { db } from "../db/index.js";
@@ -26,6 +26,7 @@ const sendMessageSchema = z
   .object({
     content: z.string().default(""),
     attachments: z.array(z.custom<Attachment>()).max(MAX_ATTACHMENTS).optional(),
+    selectedElement: z.custom<SelectedElement>().optional(),
     model: z.enum(SUPPORTED_MODEL_IDS),
   })
   .refine((d) => d.content.trim().length > 0 || (d.attachments?.length ?? 0) > 0, {
@@ -58,7 +59,7 @@ messageRouter.post(
   validate("json", sendMessageSchema),
   async (c) => {
     const { conversationId } = c.req.valid("param");
-    const { content, attachments, model } = c.req.valid("json");
+    const { content, attachments, selectedElement, model } = c.req.valid("json");
     const user = c.get("user");
 
     const [conversation] = await db
@@ -69,7 +70,7 @@ messageRouter.post(
       return notFound(c, "Conversation not found");
     }
     const turnService = new AgentTurnService(conversation, { model });
-    const userMessage = buildUserMessage(content, attachments ?? []);
+    const userMessage = buildUserMessage(content, attachments ?? [], selectedElement);
     return streamSSE(c, async (stream) => {
       const interval = setInterval(async () => {
         await stream.writeSSE({ data: "" });

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>iframe-runtime · element picker fixture</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 24px;
+        color: #1f2937;
+      }
+      nav {
+        display: flex;
+        gap: 16px;
+        padding: 12px 16px;
+        background: #f5f5f5;
+        border-radius: 8px;
+        margin-bottom: 24px;
+      }
+      nav a {
+        color: #2563eb;
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .card {
+        border: 1px solid #e5e7eb;
+        padding: 20px;
+        margin: 16px 0;
+        border-radius: 12px;
+        background: white;
+      }
+      .card h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .card p {
+        margin: 0 0 12px;
+        color: #6b7280;
+      }
+      input,
+      button {
+        padding: 8px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+        margin-right: 8px;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      .console-help {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 12px 16px;
+        margin: 24px 0;
+        border-radius: 4px;
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="#home">Home</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <h1>Element Picker Standalone Test</h1>
+    <p>
+      Open the browser console, then run <code>testPicker.enter()</code> to start
+      pick mode. Hover elements (outline follows), click to select (logged in
+      console), or press Esc to cancel.
+    </p>
+
+    <div class="card">
+      <h2>Login Form</h2>
+      <input type="text" placeholder="Username" />
+      <input type="password" placeholder="Password" />
+      <button>Sign In</button>
+    </div>
+
+    <div class="card">
+      <h2>Profile Card for Jane Doe</h2>
+      <p>Software engineer at Example Corp · Joined March 2024</p>
+      <button>Follow</button>
+      <button>Message</button>
+    </div>
+
+    <div class="card">
+      <h2>Notification Settings</h2>
+      <p>Choose how you want to be notified.</p>
+      <label><input type="checkbox" /> Email</label>
+      <label><input type="checkbox" /> Push notification</label>
+    </div>
+
+    <div class="console-help">
+      In the console you can run:<br />
+      <code>testPicker.enter()</code> &nbsp;— enter pick mode<br />
+      <code>testPicker.exit()</code> &nbsp;— exit pick mode<br />
+      Bridge messages from runtime are auto-logged with the prefix
+      <code>[picker]</code>.
+    </div>
+
+    <!-- Load the built runtime IIFE -->
+    <script src="./dist/runtime.iife.js"></script>
+
+    <script>
+      // The runtime sends messages via window.parent.postMessage.
+      // In a standalone open (no embedding iframe), window.parent === window,
+      // so messages bounce back to ourselves and the listener below sees them.
+      window.addEventListener("message", (event) => {
+        if (event.data?.brand !== "ca:iframe-bridge:v1") return;
+        const { type } = event.data;
+        const payload = event.data.payload;
+        console.log(
+          `%c[picker] ${type}`,
+          "color:#2563eb;font-weight:600",
+          payload ?? "",
+        );
+      });
+
+      window.testPicker = {
+        enter() {
+          window.postMessage(
+            { brand: "ca:iframe-bridge:v1", type: "enter-pick-mode" },
+            "*",
+          );
+        },
+        exit() {
+          window.postMessage(
+            { brand: "ca:iframe-bridge:v1", type: "exit-pick-mode" },
+            "*",
+          );
+        },
+      };
+
+      console.log(
+        "%cElement picker fixture ready · run testPicker.enter() to start",
+        "color:#16a34a;font-weight:600",
+      );
+    </script>
+  </body>
+</html>

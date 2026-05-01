@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Attachment, StoredMessage, StoredUserMessage, TextContent, WebAgentEvent } from "@code-artisan/shared";
+import type {
+  Attachment,
+  SelectedElement,
+  StoredMessage,
+  StoredUserMessage,
+  TextContent,
+  WebAgentEvent,
+} from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
 import { conversationKeys, conversationMessagesOptions, quotaKeys, type ConversationResponse } from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -14,6 +21,7 @@ export interface UseChatOptions {
 
 export interface SendMessageOptions {
   attachments?: Attachment[];
+  selectedElement?: SelectedElement;
   model: string;
 }
 
@@ -179,7 +187,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
   const sendMessage = useCallback(
     async (content: string, options: SendMessageOptions) => {
       if (!conversationId || status === "submitted" || status === "running") return;
-      const { attachments, model } = options;
+      const { attachments, selectedElement, model } = options;
 
       // Cancel any in-flight GET /message/:id so the loader prefetch can't
       // settle after us and overwrite the optimistic user message + early
@@ -192,6 +200,8 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
       optimisticUserIdRef.current = optimisticId;
       const optimisticContent: TextContent[] = content ? [{ type: "text", text: content }] : [];
 
+      const hasMetadata =
+        (attachments && attachments.length > 0) || !!selectedElement;
       updateMessages((prev) => [
         ...prev,
         {
@@ -199,7 +209,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
           conversationId,
           role: "user",
           content: optimisticContent,
-          metadata: attachments && attachments.length > 0 ? { attachments } : undefined,
+          metadata: hasMetadata ? { attachments, selectedElement } : undefined,
           createdAt: new Date().toISOString(),
         } as StoredUserMessage,
       ]);
@@ -214,7 +224,7 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, attachments, model }),
+          body: JSON.stringify({ content, attachments, selectedElement, model }),
           signal: abort.signal,
         });
 

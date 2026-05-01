@@ -5,6 +5,8 @@ import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { MessageList } from "@/components/chat/message-list";
 import { Sender } from "@/components/chat/sender";
+import { SelectedElementChip } from "@/components/chat/selected-element-chip";
+import { ElementPickerToggle } from "@/components/chat/element-picker-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { modelsOptions } from "@/api/queries";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
@@ -25,6 +27,8 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   const initialSentForRef = useRef<string | null>(null);
   const pendingChatMessage = useWorkspaceStore((s) => s.pendingChatMessage);
   const setPendingChatMessage = useWorkspaceStore((s) => s.setPendingChatMessage);
+  const selectedElement = useWorkspaceStore((s) => s.selectedElement);
+  const setSelectedElement = useWorkspaceStore((s) => s.setSelectedElement);
 
   // invoke agent immediately if there is pending prompt
   useEffect(() => {
@@ -58,8 +62,11 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
   const handleSend = async (content: string) => {
     const attachments = fileUpload.hasFiles ? fileUpload.attachments : undefined;
     fileUpload.clear();
+    const elementSnapshot = selectedElement;
+    if (elementSnapshot) setSelectedElement(null);
     sendMessage(content, {
       attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      selectedElement: elementSnapshot ?? undefined,
       model,
     });
   };
@@ -94,6 +101,8 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
           models={models}
           modelId={model}
           onModelChange={setModel}
+          headerSlot={<SelectedElementChip />}
+          actionsSlot={<ElementPickerToggle />}
         />
       </div>
     </div>

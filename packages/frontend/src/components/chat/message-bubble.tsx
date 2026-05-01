@@ -1,25 +1,28 @@
 import { useState } from "react";
-import { Archive, Brain, ChevronRight, File as FileIcon } from "lucide-react";
+import { Archive, Brain, ChevronRight, File as FileIcon, MousePointerClick } from "lucide-react";
 import { cn, resolveAttachmentUrl } from "@/lib/utils";
 import { MarkdownRenderer } from "@/components/common/markdown-renderer";
 import type {
   Attachment,
+  SelectedElement,
   StoredMessage,
   StoredUserMessage,
 } from "@code-artisan/shared";
 
 export function UserBubble({ message }: { message: StoredUserMessage }) {
   const attachments = (message.metadata?.attachments ?? []) as Attachment[];
+  const selectedElement = message.metadata?.selectedElement as SelectedElement | undefined;
   const text = message.content
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
     .map((block) => block.text)
     .join("\n");
 
-  if (attachments.length === 0 && !text) return null;
+  if (attachments.length === 0 && !text && !selectedElement) return null;
 
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] space-y-2">
+      <div className="flex max-w-[85%] flex-col items-end gap-2">
+        {selectedElement && <SelectedElementMessageChip element={selectedElement} />}
         {attachments.length > 0 && (
           <div className="flex flex-wrap justify-end gap-2">
             {attachments.map((attachment) =>
@@ -37,6 +40,23 @@ export function UserBubble({ message }: { message: StoredUserMessage }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function SelectedElementMessageChip({ element }: { element: SelectedElement }) {
+  const preview = element.textContent || element.selector;
+  const tooltip = `<${element.tagName}> ${element.selector}`;
+  return (
+    <div
+      className="inline-flex min-w-0 max-w-[280px] items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-[11px]"
+      title={tooltip}
+    >
+      <MousePointerClick className="h-3 w-3 shrink-0 text-primary" />
+      <span className="shrink-0 font-mono font-medium text-primary">
+        &lt;{element.tagName}&gt;
+      </span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">{preview}</span>
     </div>
   );
 }

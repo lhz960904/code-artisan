@@ -1,5 +1,6 @@
 import { createMessageBus } from "./message-bus";
 import { setupErrorReporter } from "./error-reporter";
+import { setupElementPicker } from "./element-picker";
 
 declare global {
   interface Window {
@@ -14,6 +15,7 @@ declare global {
 
   const bus = createMessageBus();
   setupErrorReporter(bus);
+  setupElementPicker(bus);
 
   const sendReady = () => bus.send({ type: "ready" });
   if (document.readyState === "loading") {

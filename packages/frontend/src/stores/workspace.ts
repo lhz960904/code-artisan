@@ -1,8 +1,20 @@
 import { create } from "zustand";
-import type { BrowserError } from "@code-artisan/shared";
+import type {
+  BrowserError,
+  ParentToIframeMessage,
+  SelectedElement,
+} from "@code-artisan/shared";
 import type { FileSnapshot } from "@/api";
 
 const BROWSER_ERROR_BUFFER_LIMIT = 50;
+
+type SendableParentMessage =
+  ParentToIframeMessage extends infer M
+    ? M extends { brand: unknown }
+      ? Omit<M, "brand">
+      : never
+    : never;
+export type IframeBridgeSender = (message: SendableParentMessage) => void;
 
 const WORKSPACE_VIEWS = ["preview", "code", "database"] as const;
 export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number];
@@ -23,6 +35,9 @@ interface WorkspaceState {
   pendingReveal: PendingReveal | null;
   browserErrors: BrowserError[];
   iframeRuntimeReady: boolean;
+  selectedElement: SelectedElement | null;
+  pickModeActive: boolean;
+  iframeBridgeSend: IframeBridgeSender | null;
 
   openFile: (path: string) => void;
   openFileAt: (path: string, line: number) => void;
@@ -38,6 +53,9 @@ interface WorkspaceState {
   appendBrowserError: (error: BrowserError) => void;
   clearBrowserErrors: () => void;
   setIframeRuntimeReady: (ready: boolean) => void;
+  setSelectedElement: (element: SelectedElement | null) => void;
+  setPickModeActive: (active: boolean) => void;
+  setIframeBridgeSend: (send: IframeBridgeSender | null) => void;
   reset: () => void;
 }
 
@@ -65,6 +83,9 @@ const freshState = () => ({
   pendingReveal: null as PendingReveal | null,
   browserErrors: [] as BrowserError[],
   iframeRuntimeReady: false,
+  selectedElement: null as SelectedElement | null,
+  pickModeActive: false,
+  iframeBridgeSend: null as IframeBridgeSender | null,
 });
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -139,6 +160,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   clearBrowserErrors: () => set({ browserErrors: [] }),
 
   setIframeRuntimeReady: (ready) => set({ iframeRuntimeReady: ready }),
+
+  setSelectedElement: (element) => set({ selectedElement: element }),
+
+  setPickModeActive: (active) => set({ pickModeActive: active }),
+
+  setIframeBridgeSend: (send) => set({ iframeBridgeSend: send }),
 
   reset: () => set(freshState()),
 }));
