@@ -1,5 +1,21 @@
 export { SANDBOX_WORKSPACE_ROOT, SANDBOX_IGNORED_DIRS } from "./constants";
 export { SUPPORTED_MODELS, DEFAULT_MODEL_ID, findModel, type ModelInfo, type ModelProvider } from "./models";
+export {
+  IFRAME_BRIDGE_BRAND,
+  isIframeBridgeMessage,
+  type BrowserError,
+  type BrowserErrorSource,
+  type SelectedElement,
+  type IframeReadyMessage,
+  type IframeErrorMessage,
+  type IframeElementSelectedMessage,
+  type IframePickModeChangedMessage,
+  type IframeToParentMessage,
+  type ParentEnterPickModeMessage,
+  type ParentExitPickModeMessage,
+  type ParentToIframeMessage,
+  type IframeBridgeMessage,
+} from "./iframe-protocol";
 
 export type {
   Message,

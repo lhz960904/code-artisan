@@ -17,6 +17,18 @@ Binary assets (images, fonts, archives, media) are NOT persisted across sessions
 For long-running processes (dev servers like \`npm run dev\`, watchers, tails), call \`bash\` with \`run_in_background: true\` — you get a session id, and output streams live into the user's terminal panel. After starting a server, wait ~2s and call \`bash_output\` to verify it booted (check status + last output). If the session exited with non-zero code, diagnose from the tail before retrying. Use \`kill_shell\` to stop a session. Do NOT background one-shot commands whose output you need immediately. After a web server prints its listen line, call \`expose_port\` with the same session id to surface a public preview URL to the user.`;
 }
 
+export const PROJECT_CONVENTIONS = `# Project Conventions
+
+For new projects, scaffold with **Vite** — not Next.js, Create React App, or Remix. The preview infrastructure (live error capture, element picker) depends on Vite's dev server and HMR pipeline; meta-frameworks bypass it.
+
+When the request fits a full-stack web app, prefer the \`hono-fullstack\` skill — its template ships with Vite + React + Hono + Tailwind + shadcn pre-configured, including the platform's iframe runtime plugin pre-wired into \`vite.config.ts\`.
+
+The following are managed by the platform — do not modify, rename, or delete:
+- The \`codeArtisanRuntime()\` plugin import and call in \`vite.config.ts\`
+- The \`.code-artisan/\` directory in the project root (vendored runtime + plugin)
+
+After editing source files, if the user reports a blank screen or unexpected behaviour, run \`bash_output\` on the dev server session — Vite compile errors (failed imports, syntax errors) print to its stderr but do not surface in the browser preview overlay you can see.`;
+
 export function buildUserInstructionsSection(instructions: string): string {
   return `# User Instructions
 

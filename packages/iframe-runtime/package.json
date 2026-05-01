@@ -1,0 +1,28 @@
+{
+  "name": "@code-artisan/iframe-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./runtime-bundle": "./dist/runtime.iife.js",
+    "./vite-plugin": "./dist/vite-plugin.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "pnpm build:runtime && pnpm build:plugin && pnpm vendor",
+    "build:runtime": "bun build src/runtime/entry.ts --target=browser --format=iife --minify --outfile=dist/runtime.iife.js",
+    "build:plugin": "bun build src/vite-plugin/index.ts --target=node --format=esm --external vite --outfile=dist/vite-plugin.js",
+    "vendor": "bun scripts/vendor.ts",
+    "dev": "concurrently -n runtime,plugin 'bun build src/runtime/entry.ts --target=browser --format=iife --watch --outfile=dist/runtime.iife.js' 'bun build src/vite-plugin/index.ts --target=node --format=esm --external vite --watch --outfile=dist/vite-plugin.js'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@code-artisan/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

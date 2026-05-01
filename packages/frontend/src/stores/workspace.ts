@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import type { BrowserError } from "@code-artisan/shared";
 import type { FileSnapshot } from "@/api";
+
+const BROWSER_ERROR_BUFFER_LIMIT = 50;
 
 const WORKSPACE_VIEWS = ["preview", "code", "database"] as const;
 export type WorkspaceView = (typeof WORKSPACE_VIEWS)[number];
@@ -18,6 +21,8 @@ interface WorkspaceState {
   pendingChatMessage: string | null;
   view: WorkspaceView;
   pendingReveal: PendingReveal | null;
+  browserErrors: BrowserError[];
+  iframeRuntimeReady: boolean;
 
   openFile: (path: string) => void;
   openFileAt: (path: string, line: number) => void;
@@ -30,6 +35,9 @@ interface WorkspaceState {
   setSnapshots: (snapshots: FileSnapshot[]) => void;
   setPendingChatMessage: (msg: string | null) => void;
   clearPendingReveal: () => void;
+  appendBrowserError: (error: BrowserError) => void;
+  clearBrowserErrors: () => void;
+  setIframeRuntimeReady: (ready: boolean) => void;
   reset: () => void;
 }
 
@@ -55,6 +63,8 @@ const freshState = () => ({
   pendingChatMessage: null as string | null,
   view: readPersistedView(),
   pendingReveal: null as PendingReveal | null,
+  browserErrors: [] as BrowserError[],
+  iframeRuntimeReady: false,
 });
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
@@ -116,6 +126,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   },
 
   setPendingChatMessage: (msg) => set({ pendingChatMessage: msg }),
+
+  appendBrowserError: (error) =>
+    set((s) => {
+      const next =
+        s.browserErrors.length >= BROWSER_ERROR_BUFFER_LIMIT
+          ? [...s.browserErrors.slice(1), error]
+          : [...s.browserErrors, error];
+      return { browserErrors: next };
+    }),
+
+  clearBrowserErrors: () => set({ browserErrors: [] }),
+
+  setIframeRuntimeReady: (ready) => set({ iframeRuntimeReady: ready }),
 
   reset: () => set(freshState()),
 }));

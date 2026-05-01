@@ -4,10 +4,11 @@
   "scripts": {
     "dev:frontend": "pnpm --filter @code-artisan/frontend dev",
     "dev:backend": "pnpm --filter @code-artisan/backend dev",
-    "dev": "pnpm --parallel --filter @code-artisan/frontend --filter @code-artisan/backend dev",
-    "build": "pnpm --filter @code-artisan/shared build && pnpm --filter @code-artisan/frontend build && pnpm --filter @code-artisan/backend build",
+    "dev:iframe-runtime": "pnpm --filter @code-artisan/iframe-runtime dev",
+    "dev": "pnpm --parallel --filter @code-artisan/frontend --filter @code-artisan/backend --filter @code-artisan/iframe-runtime dev",
+    "build": "pnpm --filter @code-artisan/shared build && pnpm --filter @code-artisan/iframe-runtime build && pnpm --filter @code-artisan/frontend build && pnpm --filter @code-artisan/backend build",
     "test": "pnpm --filter @code-artisan/agent test && pnpm --filter @code-artisan/backend test",
-    "sandbox:build": "npx @e2b/cli@latest template create code-artisan -p sandbox-template -d e2b.Dockerfile"
+    "sandbox:build": "pnpm --filter @code-artisan/iframe-runtime build && npx @e2b/cli@latest template create code-artisan -p sandbox-template -d e2b.Dockerfile"
   },
   "engines": {
     "node": ">=20"

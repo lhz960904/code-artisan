@@ -3,9 +3,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import devServer from "@hono/vite-dev-server";
 import bunAdapter from "@hono/vite-dev-server/bun";
+import codeArtisanRuntime from "./.code-artisan/vite-plugin.js";
 
 export default defineConfig({
   plugins: [
+    codeArtisanRuntime(),
     react(),
     devServer({
       entry: "server/index.ts",

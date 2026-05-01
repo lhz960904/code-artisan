@@ -1,13 +1,18 @@
+import { useRef } from "react";
 import { Globe, ExternalLink, RefreshCw, Play, MonitorX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIframeBridge } from "@/hooks/use-iframe-bridge";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { BrowserErrorBadge } from "./browser-error-badge";
 
 export function PreviewPanel() {
   const files = useWorkspaceStore((s) => s.files);
   const snapshotsLoaded = useWorkspaceStore((s) => s.snapshotsLoaded);
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
   const setPendingChatMessage = useWorkspaceStore((s) => s.setPendingChatMessage);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  useIframeBridge(iframeRef);
 
   if (!snapshotsLoaded) {
     return (
@@ -59,10 +64,10 @@ export function PreviewPanel() {
           <span className="truncate max-w-xs">{previewUrl}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <BrowserErrorBadge />
           <button
             onClick={() => {
-              const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Preview"]');
-              if (iframe) iframe.src = previewUrl;
+              if (iframeRef.current) iframeRef.current.src = previewUrl;
             }}
             className="rounded p-0.5 text-muted-foreground hover:text-foreground"
             title="Refresh"
@@ -81,6 +86,7 @@ export function PreviewPanel() {
         </div>
       </div>
       <iframe
+        ref={iframeRef}
         src={previewUrl}
         className="flex-1 bg-white h-full"
         sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-modals allow-downloads"
