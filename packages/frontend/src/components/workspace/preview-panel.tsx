@@ -1,6 +1,5 @@
 import { useRef } from "react";
-import { Globe, ExternalLink, RefreshCw, Play, MonitorX } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Globe, ExternalLink, RefreshCw, MonitorX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIframeBridge } from "@/hooks/use-iframe-bridge";
 import { useWorkspaceStore } from "@/stores/workspace";
@@ -10,7 +9,6 @@ export function PreviewPanel() {
   const files = useWorkspaceStore((s) => s.files);
   const snapshotsLoaded = useWorkspaceStore((s) => s.snapshotsLoaded);
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
-  const setPendingChatMessage = useWorkspaceStore((s) => s.setPendingChatMessage);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useIframeBridge(iframeRef);
 
@@ -36,22 +34,9 @@ export function PreviewPanel() {
 
   if (!previewUrl) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-background text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
         <Globe className="h-10 w-10 opacity-30" />
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-sm font-medium text-foreground">Development server is not running</p>
-          <p className="max-w-[240px] text-center text-xs opacity-60">
-            Start it to preview your project here in real time
-          </p>
-        </div>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setPendingChatMessage("Please start this project's development server")}
-        >
-          <Play className="h-3.5 w-3.5" />
-          Start development server
-        </Button>
+        <p className="animate-shimmer-text text-sm font-medium">Your preview will appear here</p>
       </div>
     );
   }

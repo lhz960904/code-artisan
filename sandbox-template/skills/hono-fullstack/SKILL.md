@@ -17,17 +17,10 @@ Do **not** use this skill if the user explicitly asks for Next.js, Remix, Svelte
    ```bash
    cp -r /opt/skills/hono-fullstack/template/. .
    ```
-2. Install dependencies:
-   ```bash
-   bun install
-   ```
-3. Start the dev server in the background (unified frontend + backend on port **5173**):
-   ```bash
-   bun dev
-   ```
-   The dev server runs on port **5173 only** — `strictPort` is on, so if 5173 is taken it will fail immediately. If that happens, use `bash_output` to inspect the error and kill whatever is holding the port, then retry. Do not change the port.
-4. Expose port 5173 so the user can preview the app.
-5. Then iterate on the user's actual request (add routes, components, API endpoints, etc.).
+   The template already ships with `.code-artisan/manifest.json` declaring `bun install` + `bun dev` on port **5173**. The platform will pick up this manifest, run install, start the dev server, and expose the preview URL automatically — **do not run `bun install`, `bun dev`, or `expose_port` yourself on the first turn.**
+2. Iterate on the user's actual request (add routes, components, API endpoints, etc.). Vite HMR will reload changes live in the user's preview.
+
+The dev server runs on port **5173 only** — `strictPort` is on. If you ever need to restart it (e.g. after a config change that requires a full restart), `kill_shell` the dev session and start it again yourself with `bash` (`run_in_background: true`, command `bun dev`). Do not change the port.
 
 ## How the dev server works — read this before touching server/index.ts
 

@@ -133,7 +133,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       return { files: nextFiles, openTabs: nextTabs, activeTab: nextActive };
     }),
 
-  setPreviewUrl: (url) => set({ previewUrl: url }),
+  // Auto-switch view to preview when the dev server first comes up.
+  setPreviewUrl: (url) =>
+    set((state) => {
+      const justAppeared = state.previewUrl === null && url !== null;
+      if (justAppeared) persistView("preview");
+      return justAppeared ? { previewUrl: url, view: "preview" } : { previewUrl: url };
+    }),
 
   setView: (view) => {
     persistView(view);

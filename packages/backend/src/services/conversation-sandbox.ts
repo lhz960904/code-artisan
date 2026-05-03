@@ -3,6 +3,8 @@ import { db } from "../db";
 import { conversations, fileSnapshots } from "../db/schema";
 import { getSandboxPool } from "../sandbox";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
+import { maybeBootstrapDevServer } from "./dev-server/bootstrap";
+import { getShellSessionManager } from "./shell-session";
 
 export interface ConversationSandboxResult {
   sandbox: E2BSandbox;
@@ -49,7 +51,21 @@ export async function acquireConversationSandbox(
       .update(conversations)
       .set({ sandboxId: sandbox.sandboxId })
       .where(eq(conversations.id, conversationId));
+
   }
+
+  // Always try — `maybeBootstrapDevServer` is idempotent per sandbox id, so
+  // reconnects with state already booted are fast no-ops. This covers reload
+  // after a backend restart (Set cleared, sandbox still alive) where neither
+  // the cold-start branch nor the agent-turn finally hook would trigger.
+  // Fire-and-forget — install+dev can take seconds, never block acquire.
+  void maybeBootstrapDevServer({
+    sandbox,
+    conversationId,
+    manager: getShellSessionManager(),
+  }).catch((err) => {
+    console.error(`[conversation-sandbox] bootstrap dev server failed:`, err);
+  });
 
   return { sandbox, snapshots };
 }

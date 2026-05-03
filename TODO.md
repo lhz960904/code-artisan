@@ -18,3 +18,7 @@
 - [ ] Sub Agent 功能、后台任务
 - [ ] 增加用户 Confirm 操作
 - [ ] 记忆系统
+
+## Done
+
+- [x] Dev server 自动启动：基于 `.code-artisan/manifest.json` 在沙箱 cold-start / 新会话首轮 / WS 自愈三条路径触发，端口探活后自动 expose preview，preview 出现时自动切到 preview 面板

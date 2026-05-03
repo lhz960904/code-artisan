@@ -5,4 +5,5 @@ dist
 .env
 .env.local
 .vite
-.code-artisan
+.code-artisan/*
+!.code-artisan/manifest.json

@@ -10,8 +10,7 @@ export interface CreateSessionOptions {
   conversationId: string;
   sandbox: E2BSandbox;
   owner: SessionOwner;
-  /** Omit for an interactive shell (starts `bash -l`). Pass a full command
-   *  (`npm run dev`) for a one-shot long-running process. */
+  // Omit for an interactive shell (`bash -l`); pass a command for a one-shot.
   command?: string;
   cols: number;
   rows: number;

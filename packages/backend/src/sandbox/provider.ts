@@ -10,6 +10,8 @@ import { DEFAULT_SANDBOX_LIFETIME_MS, E2BSandbox } from "./e2b-sandbox.js";
  */
 export class E2BSandboxPool {
   private sandboxes = new Map<string, E2BSandbox>();
+  // Dedupes concurrent reconnect-or-create attempts against the same id.
+  private inflight = new Map<string, Promise<E2BSandbox>>();
 
   async acquire(existingId?: string): Promise<E2BSandbox> {
     if (existingId) {
@@ -23,14 +25,28 @@ export class E2BSandboxPool {
         }
       }
 
-      try {
-        const reconnected = await E2BSandbox.connect(existingId);
-        await reconnected.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS);
-        this.sandboxes.set(reconnected.sandboxId, reconnected);
-        return reconnected;
-      } catch {
-        // Sandbox expired / unreachable — fall through to create.
-      }
+      const inflight = this.inflight.get(existingId);
+      if (inflight) return inflight;
+
+      const promise = this._reconnectOrCreate(existingId).finally(() => {
+        this.inflight.delete(existingId);
+      });
+      this.inflight.set(existingId, promise);
+      return promise;
+    }
+    const fresh = await E2BSandbox.create();
+    this.sandboxes.set(fresh.sandboxId, fresh);
+    return fresh;
+  }
+
+  private async _reconnectOrCreate(existingId: string): Promise<E2BSandbox> {
+    try {
+      const reconnected = await E2BSandbox.connect(existingId);
+      await reconnected.setTimeout(DEFAULT_SANDBOX_LIFETIME_MS);
+      this.sandboxes.set(reconnected.sandboxId, reconnected);
+      return reconnected;
+    } catch {
+      // Sandbox expired / unreachable — fall through to create.
     }
     const fresh = await E2BSandbox.create();
     this.sandboxes.set(fresh.sandboxId, fresh);

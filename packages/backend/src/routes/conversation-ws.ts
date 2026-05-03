@@ -118,6 +118,18 @@ conversationWsRouter.get(
         // an existing dev server without waiting for the next change event.
         const preview = conversion.sandboxId ? manager.getPreview(conversion.sandboxId) : null;
         send(ws, { op: "preview_updated", url: preview?.url ?? null });
+
+        // Self-heal: if the conversation has a sandbox but no live preview
+        // (backend restart cleared the in-memory PreviewState + bootstrapped
+        // Set), kick acquire — its tail will run `maybeBootstrapDevServer`.
+        // Fire-and-forget; preview_updated will arrive over this same WS once
+        // the dev port comes up.
+        if (conversion.sandboxId && !preview) {
+          console.log(`[ws] no preview for sandbox=${conversion.sandboxId}; triggering recovery acquire`);
+          void acquireConversationSandbox(conversationId, conversion.sandboxId).catch((err) => {
+            console.error(`[ws] recovery acquire failed:`, err);
+          });
+        }
       },
       onMessage: async (evt, ws) => {
         let msg: ClientMessage;

@@ -18,6 +18,7 @@ import { db } from "../db";
 import { conversations, fileSnapshots, messages } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
 import { acquireConversationSandbox } from "./conversation-sandbox";
+import { maybeBootstrapDevServer } from "./dev-server/bootstrap";
 import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
@@ -104,6 +105,14 @@ export class AgentTurnService {
         await this.mcpToolSet.close().catch((err) => console.error("[mcp] close error:", err));
         this.mcpToolSet = null;
       }
+
+      // Post-turn bootstrap: covers the new-conversation path (manifest just
+      // written this turn). Idempotent — already-bootstrapped sandboxes no-op.
+      void maybeBootstrapDevServer({
+        sandbox: sandboxResult.sandbox,
+        conversationId: this.conversation.id,
+        manager: getShellSessionManager(),
+      }).catch((err) => console.error("[agent-turn] bootstrap dev server failed:", err));
     }
   }
 
