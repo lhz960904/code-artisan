@@ -12,6 +12,7 @@ import {
 } from "@/components/chat/message-bubble";
 import { TodoListCard } from "@/components/chat/todo-list-card";
 import { ToolCallItem } from "@/components/chat/tool-call-item";
+import { ToolGroupCard } from "@/components/chat/tool-group-card";
 import { buildChunks, type RenderChunk, type VersionChipInfo } from "@/components/chat/message-chunks";
 import { conversationDetailOptions, versionsListOptions } from "@/api/queries";
 import { usePreviewVersion, useRestoreVersion } from "@/api/mutations";
@@ -113,6 +114,8 @@ function ChunkRenderer({
       return <TodoListCard list={chunk} isLive={isLive} />;
     case "tool":
       return <ToolCallItem toolUse={chunk.toolUse} toolResult={chunk.toolResult} />;
+    case "tool-group":
+      return <ToolGroupCard group={chunk} isLive={isLive} />;
     case "compacted":
       return <CompactedBlock message={chunk.message} />;
     case "version":

@@ -591,6 +591,65 @@ const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: "tool-group-done",
+    label: "Tool group · consecutive actions (collapsed)",
+    note: "非 todo 模式下连续多个 tool_use 应聚合为 'N actions taken'，默认折叠，点击展开",
+    messages: [
+      userMessage("u-grp", [{ type: "text", text: '把 app 改成 "TODO Manager" 品牌。' }]),
+      assistantMessage("a-grp-1", [{ type: "text", text: 'I\'ll update the app to "TODO Manager" branding.' }]),
+      assistantMessage("a-grp-2", [
+        {
+          type: "tool_use",
+          id: "tu-grp-1",
+          name: "str_replace",
+          input: { description: "rename header", path: "/home/user/project/src/components/Auth.tsx", old_str: "App", new_str: "TODO Manager" },
+        },
+      ]),
+      toolMessage("t-grp-1", [toolResult("tu-grp-1", "OK")]),
+      assistantMessage("a-grp-3", [
+        {
+          type: "tool_use",
+          id: "tu-grp-2",
+          name: "str_replace",
+          input: { description: "rename in todo list", path: "/home/user/project/src/components/TodoList.tsx", old_str: "App", new_str: "TODO Manager" },
+        },
+      ]),
+      toolMessage("t-grp-2", [toolResult("tu-grp-2", "OK")]),
+      assistantMessage("a-grp-4", [
+        {
+          type: "tool_use",
+          id: "tu-grp-3",
+          name: "bash",
+          input: { description: "build", command: "pnpm build" },
+        },
+      ]),
+      toolMessage("t-grp-3", [toolResult("tu-grp-3", "Built in 1.4s")]),
+      assistantMessage("a-grp-final", [{ type: "text", text: 'Done. The app is now branded as "TODO Manager".' }]),
+    ],
+  },
+  {
+    id: "tool-group-running",
+    label: "Tool group · running (live, default expanded)",
+    note: "status=streaming 时分组默认展开；最后一个 action 没结果，header 显示转圈",
+    status: "streaming",
+    messages: [
+      userMessage("u-grp-r", [{ type: "text", text: "重构一下导航组件。" }]),
+      assistantMessage("a-grp-r-1", [{ type: "text", text: "好的，分几步处理。" }]),
+      assistantMessage("a-grp-r-2", [
+        { type: "tool_use", id: "tu-r-1", name: "read_file", input: { description: "inspect", path: "/home/user/project/src/components/Nav.tsx" } },
+      ]),
+      toolMessage("t-r-1", [toolResult("tu-r-1", "// nav contents")]),
+      assistantMessage("a-grp-r-3", [
+        { type: "tool_use", id: "tu-r-2", name: "str_replace", input: { description: "extract item", path: "/home/user/project/src/components/Nav.tsx", old_str: "...", new_str: "..." } },
+      ]),
+      toolMessage("t-r-2", [toolResult("tu-r-2", "OK")]),
+      assistantMessage("a-grp-r-4", [
+        { type: "tool_use", id: "tu-r-3", name: "bash", input: { description: "typecheck", command: "pnpm -F frontend typecheck" } },
+      ]),
+      // tu-r-3 left running → header shows live spinner
+    ],
+  },
+  {
     id: "tool-multi",
     label: "Assistant · text + multiple tool_use in one message",
     messages: [

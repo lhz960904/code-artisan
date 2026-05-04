@@ -53,6 +53,11 @@ export interface LooseToolChunk extends Keyed {
   toolResult?: ToolResultContent;
 }
 
+export interface ToolGroupChunk extends Keyed {
+  kind: "tool-group";
+  tools: Array<{ toolUse: ToolUseContent; toolResult?: ToolResultContent }>;
+}
+
 export interface CompactedChunk extends Keyed {
   kind: "compacted";
   message: StoredMessage;
@@ -83,6 +88,7 @@ export type RenderChunk =
   | ThinkingChunk
   | TodoListChunk
   | LooseToolChunk
+  | ToolGroupChunk
   | CompactedChunk
   | VersionChunk
   | RestoreChunk;
@@ -227,7 +233,34 @@ export function buildChunks(messages: StoredMessage[], options: BuildChunksOptio
   }
 
   flushVersionChip();
-  return chunks;
+  return mergeConsecutiveTools(chunks);
+}
+
+function mergeConsecutiveTools(chunks: RenderChunk[]): RenderChunk[] {
+  const out: RenderChunk[] = [];
+  let i = 0;
+  while (i < chunks.length) {
+    const head = chunks[i];
+    if (head.kind !== "tool") {
+      out.push(head);
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    while (j < chunks.length && chunks[j].kind === "tool") j++;
+    const run = chunks.slice(i, j) as LooseToolChunk[];
+    if (run.length === 1) {
+      out.push(run[0]);
+    } else {
+      out.push({
+        kind: "tool-group",
+        key: `tool-group:${run[0].toolUse.id}`,
+        tools: run.map((c) => ({ toolUse: c.toolUse, toolResult: c.toolResult })),
+      });
+    }
+    i = j;
+  }
+  return out;
 }
 
 interface TodoWriteInput {
