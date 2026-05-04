@@ -9,7 +9,13 @@ import type {
   WebAgentEvent,
 } from "@code-artisan/shared";
 import { API_BASE } from "@/api/client";
-import { conversationKeys, conversationMessagesOptions, quotaKeys, type ConversationResponse } from "@/api/queries";
+import {
+  conversationKeys,
+  conversationMessagesOptions,
+  quotaKeys,
+  versionKeys,
+  type ConversationResponse,
+} from "@/api/queries";
 import { useWorkspaceStore } from "@/stores/workspace";
 
 export type ChatStatus = "ready" | "submitted" | "running" | "streaming" | "error";
@@ -241,6 +247,8 @@ export function useChat(conversationId: string | null, options: UseChatOptions =
         void queryClient.invalidateQueries({ queryKey: conversationKeys.detail(conversationId) });
         // Refresh the header token balance — tokens were consumed during the turn.
         void queryClient.invalidateQueries({ queryKey: quotaKeys.detail() });
+        // Pick up the new version produced by fileTracker.afterAgentRun.
+        void queryClient.invalidateQueries({ queryKey: versionKeys.list(conversationId) });
         optionsRef.current.onFinish?.();
       } catch (err) {
         if (abort.signal.aborted) return;

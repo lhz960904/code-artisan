@@ -15,7 +15,7 @@ import type { ConversationSettings, NonSystemMessage, StoredMessage, WebAgentEve
 import { buildWebSystemPrompt } from "../prompts";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { db } from "../db";
-import { conversations, fileSnapshots, messages } from "../db/schema";
+import { conversations, fileSnapshots, messages, versions } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
 import { acquireConversationSandbox } from "./conversation-sandbox";
 import { maybeBootstrapDevServer } from "./dev-server/bootstrap";
@@ -28,6 +28,7 @@ import { createWebBashTool, createBashOutputTool, createKillShellTool, createExp
 import { agentRunnerRegistry } from "./agent-runner-registry";
 import { McpToolSet } from "../mcp/mcp-tools";
 import { getInstalledMcpServers } from "../mcp/registry";
+import { computeActiveChain, createVersionFromManifest } from "./version-service";
 
 type Conversation = typeof conversations.$inferSelect;
 
@@ -41,6 +42,8 @@ export class AgentTurnService {
   private pendingEvents: WebAgentEvent[] = [];
 
   private mcpToolSet: McpToolSet | null = null;
+
+  private currentTurnUserMessageId: string | null = null;
 
   constructor(
     private conversation: Conversation,
@@ -59,6 +62,8 @@ export class AgentTurnService {
       this._setupSandbox(),
       this._setupMcpTools(),
     ]);
+
+    this.currentTurnUserMessageId = userMessageId;
 
     const [expandedUserMessage] = buildAgentMessages([userMessage]);
 
@@ -146,7 +151,7 @@ export class AgentTurnService {
         onFileDeleted: (paths) => {
           this.pendingEvents.push({ type: "file_delete", paths });
         },
-        onPersist: (manifest) => this._persistFileSnapshots(manifest),
+        onPersist: (manifest) => this._persistFileState(manifest),
       }),
     ];
 
@@ -200,10 +205,28 @@ export class AgentTurnService {
     return row.id;
   }
 
-  /**
-   * Replace this conversation's snapshots with the given manifest:
-   * upsert every entry, then delete any DB rows whose path is no longer present.
-   */
+  // Phase 1 shadow write: version path failure must never block fileSnapshots — the
+  // latter is the live cold-start cache that the rest of the system still depends on.
+  private async _persistFileState(manifest: Map<string, string>): Promise<void> {
+    await Promise.all([
+      this._persistFileSnapshots(manifest),
+      this._persistVersion(manifest).catch((err) => {
+        console.error("[agent-turn] shadow version write failed:", err);
+      }),
+    ]);
+  }
+
+  private async _persistVersion(manifest: Map<string, string>): Promise<void> {
+    await createVersionFromManifest({
+      conversationId: this.conversation.id,
+      parentVersionId: this.conversation.currentVersionId ?? null,
+      createdByMessageId: this.currentTurnUserMessageId,
+      manifest,
+    });
+  }
+
+  // Replace this conversation's snapshots with the given manifest:
+  // upsert every entry, then delete any DB rows whose path is no longer present.
   private async _persistFileSnapshots(manifest: Map<string, string>): Promise<void> {
     for (const [path, content] of manifest) {
       await db
@@ -224,27 +247,58 @@ export class AgentTurnService {
     }
   }
 
-  /** Build agent messages from db */
+  // Build agent messages from db, filtering out turns abandoned by restore.
+  // Algorithm: walk parent_version_id from currentVersionId → "active chain"
+  // of versions; user messages whose version is OFF the active chain (along
+  // with their assistant/tool replies) are skipped. Restore checkpoint nodes
+  // are host-side meta events and never reach the agent.
   private async _buildAgentMessages(): Promise<Message[]> {
-    const rows = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.conversationId, this.conversation.id))
-      .orderBy(messages.createdAt);
+    const [rows, allVersions] = await Promise.all([
+      db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, this.conversation.id))
+        .orderBy(messages.createdAt),
+      db
+        .select({
+          id: versions.id,
+          parentVersionId: versions.parentVersionId,
+          createdByMessageId: versions.createdByMessageId,
+        })
+        .from(versions)
+        .where(eq(versions.conversationId, this.conversation.id)),
+    ]);
 
-    const stored = rows.map((r) => {
-      const base = {
+    const activeIds = new Set(computeActiveChain(allVersions, this.conversation.currentVersionId));
+    const discardedUserMessageIds = new Set<string>();
+    for (const v of allVersions) {
+      if (!activeIds.has(v.id) && v.createdByMessageId) {
+        discardedUserMessageIds.add(v.createdByMessageId);
+      }
+    }
+
+    const stored: StoredMessage[] = [];
+    let inDiscardMode = false;
+    for (const r of rows) {
+      const metadata = (r.metadata as Record<string, unknown> | null) ?? undefined;
+      if (metadata?.type === "restore_checkpoint") continue;
+
+      if (r.role === "user") {
+        inDiscardMode = discardedUserMessageIds.has(r.id);
+        if (inDiscardMode) continue;
+      } else if (inDiscardMode) {
+        continue;
+      }
+
+      stored.push({
         id: r.id,
         conversationId: r.conversationId,
         createdAt: r.createdAt.toISOString(),
-        metadata: (r.metadata as Record<string, unknown> | null) ?? undefined,
-      };
-      return {
-        ...base,
+        metadata,
         role: r.role,
         content: r.content,
-      } as StoredMessage;
-    });
+      } as StoredMessage);
+    }
 
     return buildAgentMessages(stored as Message[]);
   }

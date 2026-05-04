@@ -11,6 +11,8 @@ export interface ConversationResponse {
   deployUrl: string | null;
   agentRunning: boolean;
   settings: ConversationSettings;
+  currentVersionId: string | null;
+  previewingVersionId: string | null;
   createdAt: string;
   updatedAt: string;
   /** Only populated by GET /conversation/:id. List endpoint omits it. */

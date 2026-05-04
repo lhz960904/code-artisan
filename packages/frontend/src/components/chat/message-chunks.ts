@@ -58,17 +58,51 @@ export interface CompactedChunk extends Keyed {
   message: StoredMessage;
 }
 
+export interface VersionChunk extends Keyed {
+  kind: "version";
+  versionId: string;
+  versionLabel: string;
+  createdAt: string;
+  fileCount: number;
+  isCurrent: boolean;
+  isPreviewing: boolean;
+}
+
+export interface RestoreChunk extends Keyed {
+  kind: "restore";
+  restoredToVersionId: string;
+  restoredToLabel: string;
+  fromVersionLabel: string | null;
+  revertedFileCount: number;
+  createdAt: string;
+}
+
 export type RenderChunk =
   | UserChunk
   | AssistantTextChunk
   | ThinkingChunk
   | TodoListChunk
   | LooseToolChunk
-  | CompactedChunk;
+  | CompactedChunk
+  | VersionChunk
+  | RestoreChunk;
+
+export interface VersionChipInfo {
+  versionId: string;
+  versionLabel: string;
+  createdAt: string;
+  fileCount: number;
+  isCurrent: boolean;
+  isPreviewing: boolean;
+}
 
 interface BuildChunksOptions {
   /** id of the assistant message currently streaming (or null). */
   streamingMessageId: string | null;
+  /** Map of user-message-id → version produced by that turn. */
+  versionByUserMessageId?: Map<string, VersionChipInfo>;
+  /** versionId → display label, for resolving labels inside restore checkpoints. */
+  versionLabelById?: Map<string, string>;
 }
 
 /**
@@ -87,15 +121,63 @@ export function buildChunks(messages: StoredMessage[], options: BuildChunksOptio
   const todoListsByName = new Map<string, TodoListChunk>();
   let currentListName: string | null = null;
   let currentInProgressTodoId: string | null = null;
+  let pendingTurnUserMessageId: string | null = null;
+
+  // Emit a version chip for the in-flight turn, if its user message produced one.
+  const flushVersionChip = () => {
+    if (!pendingTurnUserMessageId) return;
+    const info = options.versionByUserMessageId?.get(pendingTurnUserMessageId);
+    pendingTurnUserMessageId = null;
+    if (!info) return;
+    chunks.push({
+      kind: "version",
+      key: `version:${info.versionId}`,
+      versionId: info.versionId,
+      versionLabel: info.versionLabel,
+      createdAt: info.createdAt,
+      fileCount: info.fileCount,
+      isCurrent: info.isCurrent,
+      isPreviewing: info.isPreviewing,
+    });
+  };
 
   for (const message of sliced) {
     if (message.metadata?.compacted) {
+      flushVersionChip();
       chunks.push({ kind: "compacted", key: `compacted:${message.id}`, message });
       continue;
     }
 
+    if (message.metadata?.type === "restore_checkpoint") {
+      flushVersionChip();
+      const meta = message.metadata as {
+        restoredToVersionId?: string;
+        fromVersionId?: string;
+        revertedFileCount?: number;
+      };
+      if (meta.restoredToVersionId) {
+        chunks.push({
+          kind: "restore",
+          key: `restore:${message.id}`,
+          restoredToVersionId: meta.restoredToVersionId,
+          restoredToLabel: options.versionLabelById?.get(meta.restoredToVersionId) ?? "earlier version",
+          fromVersionLabel: meta.fromVersionId
+            ? (options.versionLabelById?.get(meta.fromVersionId) ?? null)
+            : null,
+          revertedFileCount: meta.revertedFileCount ?? 0,
+          createdAt: message.createdAt ?? new Date().toISOString(),
+        });
+      }
+      // After restore, any pending turn version chip belongs to a discarded
+      // branch — drop the pending id so it doesn't get attached to the next chunk.
+      pendingTurnUserMessageId = null;
+      continue;
+    }
+
     if (message.role === "user") {
+      flushVersionChip();
       chunks.push({ kind: "user", key: `user:${message.id}`, message: message as StoredUserMessage });
+      pendingTurnUserMessageId = message.id;
       continue;
     }
 
@@ -144,6 +226,7 @@ export function buildChunks(messages: StoredMessage[], options: BuildChunksOptio
     }
   }
 
+  flushVersionChip();
   return chunks;
 }
 

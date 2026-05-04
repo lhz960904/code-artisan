@@ -1,13 +1,22 @@
 import { Link } from "@tanstack/react-router";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { Eye, Code2, Database, Coins } from "lucide-react";
+import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { Eye, Code2, Database, Coins, GitBranch, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Logo } from "@/components/common/logo";
-import { conversationDetailOptions, quotaOptions } from "@/api";
+import { conversationDetailOptions, quotaOptions, versionsListOptions } from "@/api";
+import { usePreviewVersion } from "@/api/mutations";
 import { useSession } from "@/lib/auth-client";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AccountMenu } from "@/components/account/account-menu";
 
 interface HeaderProps {
@@ -23,6 +32,7 @@ export function Header({ conversationId }: HeaderProps) {
       <HeaderBrand title={conversation.title || "Untitled"} />
       <ViewSwitcher />
       <div className="flex items-center gap-3">
+        <VersionPicker conversationId={conversationId} />
         <TokenBalance remaining={quota.remaining} />
         <UserAvatar conversationId={conversationId} />
       </div>
@@ -129,6 +139,56 @@ function HeaderBrand({ title, children }: { title?: string; children?: React.Rea
         children
       )}
     </div>
+  );
+}
+
+function VersionPicker({ conversationId }: { conversationId: string }) {
+  const { data: conversation } = useQuery(conversationDetailOptions(conversationId));
+  const { data: versions } = useQuery(versionsListOptions(conversationId));
+  const previewVersion = usePreviewVersion(conversationId);
+
+  if (!conversation || !versions || versions.length === 0) return null;
+
+  const previewing = conversation.previewingVersionId;
+  const activeId = previewing ?? conversation.currentVersionId;
+  const activeIndex = versions.findIndex((v) => v.id === activeId);
+  const activeLabel = activeIndex >= 0 ? `v${activeIndex + 1}` : "v?";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" disabled={previewVersion.isPending}>
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="tabular-nums">{activeLabel}</span>
+          {previewing && <span className="text-xs text-amber-600 dark:text-amber-400">preview</span>}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>Versions</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {versions.map((v, i) => {
+          const label = v.label ?? `v${i + 1}`;
+          const isActive = v.id === activeId;
+          const isCurrent = v.isCurrent;
+          return (
+            <DropdownMenuItem
+              key={v.id}
+              onSelect={() => previewVersion.activate(v.id)}
+              className="flex items-center justify-between gap-2"
+            >
+              <span className="flex items-center gap-2">
+                {isActive ? <Check className="h-3.5 w-3.5" /> : <span className="w-3.5" />}
+                <span className="tabular-nums">{label}</span>
+                {isCurrent && (
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">latest</span>
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">{v.fileCount} files</span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

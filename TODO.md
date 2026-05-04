@@ -4,10 +4,17 @@
 
 - [ ] 部署能力(集成 Vercel)
 - [ ] 分享/开放功能 + dashboard 内容丰富
-- [ ] 版本控制
+- [x] 版本控制（preview / restore / chip / banner 全链路；事件化 restore + active chain AI 上下文裁剪）
 - [ ] DB 能力(集成 Supabase?)
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
 - [ ] Custom Rules（用户自定义 system prompt 规则, Agents.md）
+
+## P2
+
+- [ ] 版本控制性能优化：fileSnapshots 重写移出事务异步做（砍 ~500ms tx 时间）；调研废弃 fileSnapshots 表改用 versions JOIN 拉 manifest（架构改动）
+- [ ] 版本控制 GC：blob ref_count 清理（数据小时 YAGNI；累到一定量再做）
+- [ ] 版本 label rename UI
+- [ ] 版本 timeline / 分支可视化（多次 restore 后看清主线和废弃分支）
 
 ## P3
 
@@ -18,7 +25,3 @@
 - [ ] Sub Agent 功能、后台任务
 - [ ] 增加用户 Confirm 操作
 - [ ] 记忆系统
-
-## Done
-
-- [x] Dev server 自动启动：基于 `.code-artisan/manifest.json` 在沙箱 cold-start / 新会话首轮 / WS 自愈三条路径触发，端口探活后自动 expose preview，preview 出现时自动切到 preview 面板

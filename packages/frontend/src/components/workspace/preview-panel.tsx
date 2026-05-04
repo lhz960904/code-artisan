@@ -1,16 +1,38 @@
-import { useRef } from "react";
-import { Globe, ExternalLink, RefreshCw, MonitorX } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Globe, ExternalLink, Loader2, RefreshCw, MonitorX } from "lucide-react";
+import { useIsMutating } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIframeBridge } from "@/hooks/use-iframe-bridge";
 import { useWorkspaceStore } from "@/stores/workspace";
+import { previewVersionMutationKey } from "@/api/mutations";
 import { BrowserErrorBadge } from "./browser-error-badge";
 
-export function PreviewPanel() {
+const HMR_GRACE_MS = 800;
+
+interface PreviewPanelProps {
+  conversationId: string;
+}
+
+export function PreviewPanel({ conversationId }: PreviewPanelProps) {
   const files = useWorkspaceStore((s) => s.files);
   const snapshotsLoaded = useWorkspaceStore((s) => s.snapshotsLoaded);
   const previewUrl = useWorkspaceStore((s) => s.previewUrl);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useIframeBridge(iframeRef);
+
+  // Active while a preview-version mutation is in flight; held for an extra
+  // HMR_GRACE_MS after it resolves so Vite has time to detect mtime changes
+  // and propagate before we reveal the (possibly still-stale) iframe.
+  const isSyncing = useIsMutating({ mutationKey: previewVersionMutationKey(conversationId) }) > 0;
+  const [showOverlay, setShowOverlay] = useState(false);
+  useEffect(() => {
+    if (isSyncing) {
+      setShowOverlay(true);
+      return;
+    }
+    const t = setTimeout(() => setShowOverlay(false), HMR_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [isSyncing]);
 
   if (!snapshotsLoaded) {
     return (
@@ -70,13 +92,21 @@ export function PreviewPanel() {
           </a>
         </div>
       </div>
-      <iframe
-        ref={iframeRef}
-        src={previewUrl}
-        className="flex-1 bg-white h-full"
-        sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-modals allow-downloads"
-        title="Preview"
-      />
+      <div className="relative flex-1">
+        <iframe
+          ref={iframeRef}
+          src={previewUrl}
+          className="absolute inset-0 h-full w-full bg-white"
+          sandbox="allow-scripts allow-forms allow-popups allow-same-origin allow-modals allow-downloads"
+          title="Preview"
+        />
+        {showOverlay && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Syncing version…</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

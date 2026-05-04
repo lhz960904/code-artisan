@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
     "db:push": "dotenv -e ../../.env -- drizzle-kit push",
-    "db:studio": "dotenv -e ../../.env -- drizzle-kit studio"
+    "db:studio": "dotenv -e ../../.env -- drizzle-kit studio",
+    "db:backfill-versions": "dotenv -e ../../.env -- bun src/scripts/backfill-versions.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

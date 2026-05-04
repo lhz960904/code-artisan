@@ -9,3 +9,11 @@ export {
   useUpdateMcpServer,
 } from "./mcp-servers";
 export { uploadFile } from "./upload";
+export {
+  usePreviewVersion,
+  useRestoreVersion,
+  previewVersionMutationKey,
+  restoreVersionMutationKey,
+  type PreviewVersionResult,
+  type RestoreVersionResult,
+} from "./versions";

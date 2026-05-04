@@ -48,6 +48,7 @@ interface WorkspaceState {
   setPreviewUrl: (url: string | null) => void;
   setView: (view: WorkspaceView) => void;
   setSnapshots: (snapshots: FileSnapshot[]) => void;
+  replaceAllFiles: (files: Array<{ path: string; content: string }>) => void;
   setPendingChatMessage: (msg: string | null) => void;
   clearPendingReveal: () => void;
   appendBrowserError: (error: BrowserError) => void;
@@ -151,6 +152,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     for (const s of snapshots) fileMap.set(s.path, s.content);
     set({ files: fileMap, snapshotsLoaded: true });
   },
+
+  replaceAllFiles: (files) =>
+    set((s) => {
+      const next = new Map<string, string>();
+      for (const f of files) next.set(f.path, f.content);
+      // Drop tabs that point at paths no longer in the new manifest.
+      const nextTabs = s.openTabs.filter((p) => next.has(p));
+      const nextActive =
+        s.activeTab && nextTabs.includes(s.activeTab)
+          ? s.activeTab
+          : (nextTabs[nextTabs.length - 1] ?? null);
+      return { files: next, openTabs: nextTabs, activeTab: nextActive };
+    }),
 
   setPendingChatMessage: (msg) => set({ pendingChatMessage: msg }),
 

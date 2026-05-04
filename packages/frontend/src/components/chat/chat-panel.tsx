@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Eye } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useChat } from "@/hooks/use-chat";
 import { useFileUpload } from "@/hooks/use-file-upload";
@@ -8,7 +8,9 @@ import { Sender } from "@/components/chat/sender";
 import { SelectedElementChip } from "@/components/chat/selected-element-chip";
 import { ElementPickerToggle } from "@/components/chat/element-picker-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
-import { modelsOptions } from "@/api/queries";
+import { Button } from "@/components/ui/button";
+import { conversationDetailOptions, modelsOptions, versionsListOptions } from "@/api/queries";
+import { usePreviewVersion, useRestoreVersion } from "@/api/mutations";
 import { usePendingPromptStore } from "@/stores/pending-prompt";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { useModelPrefsStore } from "@/stores/model-prefs";
@@ -78,7 +80,7 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
           <MessageListSkeleton />
         ) : (
           <>
-            <MessageList messages={messages} status={status} />
+            <MessageList messages={messages} status={status} conversationId={conversationId} />
             {status === "error" && error && (
               <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -90,20 +92,74 @@ export function ChatPanel({ conversationId }: ChatPanelProps) {
       </div>
 
       <div className="p-3">
-        <Sender
-          onSubmit={handleSend}
-          busy={isBusy}
-          onStop={stop}
-          files={fileUpload.files}
-          onAddFiles={fileUpload.addFiles}
-          onRemoveFile={fileUpload.removeFile}
-          isUploading={fileUpload.isUploading}
-          models={models}
-          modelId={model}
-          onModelChange={setModel}
-          headerSlot={<SelectedElementChip />}
-          actionsSlot={<ElementPickerToggle />}
-        />
+        <ChatInput conversationId={conversationId}>
+          <Sender
+            onSubmit={handleSend}
+            busy={isBusy}
+            onStop={stop}
+            files={fileUpload.files}
+            onAddFiles={fileUpload.addFiles}
+            onRemoveFile={fileUpload.removeFile}
+            isUploading={fileUpload.isUploading}
+            models={models}
+            modelId={model}
+            onModelChange={setModel}
+            headerSlot={<SelectedElementChip />}
+            actionsSlot={<ElementPickerToggle />}
+          />
+        </ChatInput>
+      </div>
+    </div>
+  );
+}
+
+// Preview-mode banner replaces the Sender. Server is the source of truth for
+// `previewingVersionId`; if non-null, show the banner regardless of local state.
+function ChatInput({
+  conversationId,
+  children,
+}: {
+  conversationId: string;
+  children: React.ReactNode;
+}) {
+  const { data: conversation } = useQuery(conversationDetailOptions(conversationId));
+  const { data: versions } = useQuery(versionsListOptions(conversationId));
+  const previewing = conversation?.previewingVersionId ?? null;
+  const currentVersionId = conversation?.currentVersionId ?? null;
+  const previewVersion = usePreviewVersion(conversationId);
+  const restoreVersion = useRestoreVersion(conversationId);
+
+  if (!previewing) return <>{children}</>;
+
+  const previewIndex = versions?.findIndex((v) => v.id === previewing) ?? -1;
+  const label = previewIndex >= 0 ? `v${previewIndex + 1}` : "this version";
+  const busy = previewVersion.isPending || restoreVersion.isPending;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2 text-amber-700 dark:text-amber-400">
+        <Eye className="h-4 w-4 shrink-0" />
+        <span className="truncate">
+          You are previewing <span className="font-semibold">{label}</span> (read-only)
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!currentVersionId || busy}
+          onClick={() => currentVersionId && previewVersion.activate(currentVersionId)}
+        >
+          Exit preview
+        </Button>
+        <Button
+          size="sm"
+          variant="default"
+          disabled={busy}
+          onClick={() => restoreVersion.mutate({ versionId: previewing })}
+        >
+          Restore this version
+        </Button>
       </div>
     </div>
   );

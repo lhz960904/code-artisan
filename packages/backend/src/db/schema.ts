@@ -1,4 +1,16 @@
-import { pgTable, primaryKey, uuid, text, bigint, boolean, jsonb, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  bigint,
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 // --- better-auth tables ---
 // See https://www.better-auth.com/docs/concepts/database#core-schema
@@ -67,6 +79,13 @@ export const conversations = pgTable("conversations", {
   deployUrl: text("deploy_url"),
   agentRunning: boolean("agent_running").notNull().default(false),
   settings: jsonb("settings").notNull().default({}),
+  // SET NULL: GC'ing a version must not lock the conversation.
+  currentVersionId: uuid("current_version_id").references((): AnyPgColumn => versions.id, { onDelete: "set null" }),
+  // Non-null = sandbox is currently checked out at this prior version (read-only preview).
+  // Sender stays disabled until user explicitly Exits or Restores.
+  previewingVersionId: uuid("previewing_version_id").references((): AnyPgColumn => versions.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -96,6 +115,43 @@ export const fileSnapshots = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [unique().on(table.conversationId, table.path)],
+);
+
+// Content-addressed blob pool: hash = sha256(content), immutable, shared across all versions/conversations.
+export const fileBlobs = pgTable("file_blobs", {
+  hash: text("hash").primaryKey(),
+  content: text("content").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One checkpoint per turn; parentVersionId is the prior active version, may diverge after restore.
+export const versions = pgTable("versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => conversations.id),
+  parentVersionId: uuid("parent_version_id").references((): AnyPgColumn => versions.id, { onDelete: "set null" }),
+  createdByMessageId: uuid("created_by_message_id").references(() => messages.id, { onDelete: "set null" }),
+  label: text("label"),
+  fileCount: integer("file_count").notNull(),
+  totalBytes: bigint("total_bytes", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// blobHash uses default RESTRICT — GC must verify ref_count=0 before deleting a blob.
+export const versionFiles = pgTable(
+  "version_files",
+  {
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => versions.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    blobHash: text("blob_hash")
+      .notNull()
+      .references(() => fileBlobs.hash),
+  },
+  (table) => [primaryKey({ columns: [table.versionId, table.path] })],
 );
 
 const DEFAULT_TOTAL_TOKENS = 1000000;

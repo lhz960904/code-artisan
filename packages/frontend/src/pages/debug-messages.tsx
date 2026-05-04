@@ -672,7 +672,11 @@ function DebugMessagesPage() {
                 {scenario.note && <p className="text-xs text-muted-foreground">{scenario.note}</p>}
               </div>
               <div className="rounded-lg border border-border bg-card/30 p-4">
-                <MessageList messages={scenario.messages} status={scenario.status ?? "ready"} />
+                <MessageList
+                  messages={scenario.messages}
+                  status={scenario.status ?? "ready"}
+                  conversationId="debug"
+                />
               </div>
             </section>
           ))}

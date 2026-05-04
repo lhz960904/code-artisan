@@ -32,7 +32,7 @@ export function RightPanel({ conversationId }: RightPanelProps) {
   return (
     <div className="relative h-full overflow-hidden">
       <div className={cn("absolute inset-0", view === "preview" ? "block" : "hidden")}>
-        <PreviewPanel />
+        <PreviewPanel conversationId={conversationId} />
       </div>
       <div className={cn("absolute inset-0", view === "code" ? "block" : "hidden")}>
         <CodeView conversationId={conversationId} />

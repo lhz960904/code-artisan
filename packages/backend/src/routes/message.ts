@@ -7,7 +7,7 @@ import { SUPPORTED_MODELS } from "@code-artisan/shared";
 
 import { db } from "../db/index.js";
 import { conversations, messages } from "../db/schema.js";
-import { ok, notFound, validate } from "../http/index.js";
+import { conflict, notFound, ok, validate } from "../http/index.js";
 import { AgentTurnService } from "../services/agent-turn.js";
 import { agentRunnerRegistry } from "../services/agent-runner-registry.js";
 import { maybeGenerateTitle } from "../services/generate-title.js";
@@ -68,6 +68,9 @@ messageRouter.post(
       .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id)));
     if (!conversation) {
       return notFound(c, "Conversation not found");
+    }
+    if (conversation.previewingVersionId) {
+      return conflict(c, "Conversation is in preview mode; exit preview or restore before sending messages");
     }
     const turnService = new AgentTurnService(conversation, { model });
     const userMessage = buildUserMessage(content, attachments ?? [], selectedElement);

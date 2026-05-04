@@ -14,6 +14,7 @@ import { userRouter } from "./routes/user.js";
 import { settingRouter } from "./routes/setting.js";
 import { conversationWsRouter } from "./routes/conversation-ws.js";
 import { modelsRouter } from "./routes/models.js";
+import { versionRouter } from "./routes/version.js";
 
 const app = new Hono();
 
@@ -34,6 +35,7 @@ app.route("/api/models", modelsRouter);
 app.use("/api/*", requireAuth);
 
 app.route("/api/conversation", conversationRouter);
+app.route("/api/conversation", versionRouter);
 app.route("/api/message", messageRouter);
 app.route("/api/snapshot", snapshotRouter);
 app.route("/api/attachment", attachmentRouter);
