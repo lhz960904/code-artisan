@@ -14,6 +14,7 @@ export {
   vercelIntegrationOptions,
   type VercelIntegrationStatus,
 } from "./integrations";
+export { deploymentKeys, deploymentsListOptions } from "./deployments";
 export { quotaKeys, quotaOptions, type QuotaResponse } from "./quota";
 export { modelKeys, modelsOptions, fetchModels } from "./models";
 export {

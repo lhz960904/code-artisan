@@ -1,16 +1,14 @@
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { conversations, deployments } from "../db/schema.js";
-import { badRequest, conflict, created, notFound, ok, serverError, validate } from "../http/index.js";
-import {
-  VercelNotConnectedError,
-  VercelTokenInvalidError,
-} from "../services/integration/vercel-client.js";
+import { notFound, ok, validate } from "../http/index.js";
 import { deployConversation } from "../services/deploy-service/index.js";
 
 const conversationParam = z.object({ conversationId: z.uuid() });
+const HEARTBEAT_MS = 15_000;
 
 const deploymentRouter = new Hono();
 
@@ -50,21 +48,24 @@ deploymentRouter.post(
       .where(and(eq(conversations.id, conversationId), eq(conversations.userId, user.id)));
     if (!conv) return notFound(c, "Conversation not found");
 
-    try {
-      const row = await deployConversation({ conversationId, userId: user.id });
-      if (row.status === "failed") {
-        return serverError(c, row.errorMessage ?? "Deploy failed");
+    return streamSSE(c, async (stream) => {
+      const heartbeat = setInterval(async () => {
+        await stream.writeSSE({ data: "" });
+      }, HEARTBEAT_MS);
+
+      try {
+        for await (const event of deployConversation({ conversationId, userId: user.id })) {
+          await stream.writeSSE({ data: JSON.stringify(event) });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await stream.writeSSE({
+          data: JSON.stringify({ type: "error", code: "generic", message }),
+        });
+      } finally {
+        clearInterval(heartbeat);
       }
-      return created(c, row);
-    } catch (err) {
-      if (err instanceof VercelNotConnectedError) {
-        return badRequest(c, "Connect your Vercel account in Settings → Integrations first.");
-      }
-      if (err instanceof VercelTokenInvalidError) {
-        return conflict(c, "Vercel token is invalid. Please reconnect.");
-      }
-      throw err;
-    }
+    });
   },
 );
 

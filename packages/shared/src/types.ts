@@ -122,3 +122,24 @@ export interface McpRegistryServer {
 export interface McpServerListItem extends McpRegistryServer {
   installed: boolean;
 }
+
+export type DeploymentStatus = "pending" | "building" | "uploading" | "live" | "failed";
+
+export interface Deployment {
+  id: string;
+  conversationId: string;
+  versionId: string | null;
+  status: DeploymentStatus;
+  publicUrl: string | null;
+  vercelDeployId: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export type DeployErrorCode = "not_connected" | "token_invalid" | "generic";
+
+export type DeployEvent =
+  | { type: "status"; status: DeploymentStatus; message: string }
+  | { type: "log"; message: string }
+  | { type: "done"; deployment: Deployment }
+  | { type: "error"; code: DeployErrorCode; message: string; deployment?: Deployment };

@@ -1,10 +1,11 @@
 import { eq } from "drizzle-orm";
-import { SANDBOX_WORKSPACE_ROOT } from "@code-artisan/shared";
+import { SANDBOX_WORKSPACE_ROOT, type Deployment, type DeployEvent } from "@code-artisan/shared";
 import { db } from "../../db/index.js";
 import { conversations, deployments, type DeploymentStatus } from "../../db/schema.js";
 import { acquireConversationSandbox } from "../conversation-sandbox.js";
 import {
   VercelNotConnectedError,
+  VercelTokenInvalidError,
   createVercelProject,
   getStoredVercelToken,
   getVercelProject,
@@ -12,23 +13,41 @@ import {
 
 export type DeploymentRow = typeof deployments.$inferSelect;
 
+function toWire(row: DeploymentRow): Deployment {
+  return {
+    ...row,
+    status: row.status as DeploymentStatus,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 const DEPLOY_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
- * Deploy the conversation's current sandbox state to Vercel.
- * Sync — caller awaits the full deploy. Day 3 will wrap this in SSE.
+ * Deploy the conversation's current sandbox state to Vercel as an SSE event stream.
+ * Caller iterates events; frontend uses them to drive a progress UI.
  */
-export async function deployConversation(params: {
+export async function* deployConversation(params: {
   conversationId: string;
   userId: string;
-}): Promise<DeploymentRow> {
+}): AsyncGenerator<DeployEvent, void, void> {
   const { conversationId, userId } = params;
 
   const token = await getStoredVercelToken(userId);
-  if (!token) throw new VercelNotConnectedError();
+  if (!token) {
+    yield {
+      type: "error",
+      code: "not_connected",
+      message: "Connect your Vercel account in Settings → Integrations first.",
+    };
+    return;
+  }
 
   const [conv] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
-  if (!conv) throw new Error(`Conversation not found: ${conversationId}`);
+  if (!conv) {
+    yield { type: "error", code: "generic", message: `Conversation not found: ${conversationId}` };
+    return;
+  }
 
   const [row] = await db
     .insert(deployments)
@@ -39,13 +58,10 @@ export async function deployConversation(params: {
     })
     .returning();
 
-  try {
-    const projectId = await ensureVercelProject({
-      conversation: conv,
-      token,
-      userId,
-    });
+  yield { type: "status", status: "pending", message: "Preparing sandbox…" };
 
+  try {
+    const projectId = await ensureVercelProject({ conversation: conv, token, userId });
     const orgId = token.team_id ?? token.user_id;
 
     const { sandbox } = await acquireConversationSandbox(conversationId, conv.sandboxId);
@@ -55,7 +71,7 @@ export async function deployConversation(params: {
       JSON.stringify({ projectId, orgId }),
     );
 
-    await markStatus(row.id, "building");
+    yield* setStatus(row.id, "building", "Installing dependencies & building…");
 
     const installResult = await sandbox.exec(
       `cd ${SANDBOX_WORKSPACE_ROOT} && (test -d node_modules || bun install)`,
@@ -65,7 +81,7 @@ export async function deployConversation(params: {
       throw new Error(`Install failed: ${installResult.stderr.slice(0, 500)}`);
     }
 
-    await markStatus(row.id, "uploading");
+    yield* setStatus(row.id, "uploading", "Deploying to Vercel…");
 
     const deployCmd = [
       `cd ${SANDBOX_WORKSPACE_ROOT}`,
@@ -73,7 +89,6 @@ export async function deployConversation(params: {
     ].join(" && ");
 
     const deployResult = await sandbox.exec(deployCmd, { timeoutMs: DEPLOY_TIMEOUT_MS });
-
     const url = parseVercelDeployUrl(deployResult.stdout + "\n" + deployResult.stderr);
 
     if (deployResult.exitCode !== 0 || !url) {
@@ -95,7 +110,8 @@ export async function deployConversation(params: {
       .set({ deployUrl: url, updatedAt: new Date() })
       .where(eq(conversations.id, conversationId));
 
-    return updated;
+    yield { type: "status", status: "live", message: "Live!" };
+    yield { type: "done", deployment: toWire(updated) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const [failed] = await db
@@ -103,12 +119,19 @@ export async function deployConversation(params: {
       .set({ status: "failed" satisfies DeploymentStatus, errorMessage: message.slice(0, 1000) })
       .where(eq(deployments.id, row.id))
       .returning();
-    return failed;
+
+    const code = err instanceof VercelTokenInvalidError ? "token_invalid" : "generic";
+    yield { type: "error", code, message, deployment: toWire(failed) };
   }
 }
 
-async function markStatus(id: string, status: DeploymentStatus): Promise<void> {
+async function* setStatus(
+  id: string,
+  status: DeploymentStatus,
+  message: string,
+): AsyncGenerator<DeployEvent, void, void> {
   await db.update(deployments).set({ status }).where(eq(deployments.id, id));
+  yield { type: "status", status, message };
 }
 
 async function ensureVercelProject(params: {
@@ -125,7 +148,6 @@ async function ensureVercelProject(params: {
       projectId: conversation.vercelProjectId,
     });
     if (existing) return existing.id;
-    // Project was deleted on Vercel side — fall through to recreate.
   }
 
   const name = vercelProjectNameFor(conversation.id);
@@ -156,3 +178,6 @@ function parseVercelDeployUrl(output: string): string | null {
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
+
+// Re-export for routes to import without circular dep
+export { VercelNotConnectedError, VercelTokenInvalidError };

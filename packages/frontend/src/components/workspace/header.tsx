@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AccountMenu } from "@/components/account/account-menu";
+import { PublishPopover } from "./publish-popover";
 
 interface HeaderProps {
   conversationId: string;
@@ -33,6 +34,7 @@ export function Header({ conversationId }: HeaderProps) {
       <ViewSwitcher />
       <div className="flex items-center gap-3">
         <VersionPicker conversationId={conversationId} />
+        <PublishPopover conversationId={conversationId} />
         <TokenBalance remaining={quota.remaining} />
         <UserAvatar conversationId={conversationId} />
       </div>
