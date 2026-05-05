@@ -12,9 +12,6 @@ interface ToolGroupCardProps {
 export function ToolGroupCard({ group, isLive }: ToolGroupCardProps) {
   const total = group.tools.length;
   const running = group.tools.some((t) => !t.toolResult);
-  const hasError = group.tools.some(
-    (t) => t.toolResult && t.toolResult.content.trim().startsWith("Error"),
-  );
   const [expanded, setExpanded] = useState(running);
 
   return (
@@ -27,9 +24,7 @@ export function ToolGroupCard({ group, isLive }: ToolGroupCardProps) {
         {running && isLive ? (
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
         ) : (
-          <CircleEllipsis
-            className={cn("h-3.5 w-3.5 shrink-0", hasError && "text-destructive")}
-          />
+          <CircleEllipsis className="h-3.5 w-3.5 shrink-0" />
         )}
         <span>
           {running && isLive ? `${total} actions running…` : `${total} actions taken`}
