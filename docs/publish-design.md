@@ -115,35 +115,37 @@ deployments
 
 ---
 
-### Day 2 · 2026-05-05（Tue）· 部署主链路 MVP
+### Day 2 · 2026-05-05（Tue · 与 Day 1 同日完成）· 部署主链路 MVP ✅
 
 **任务**：
-- [ ] DB migration：建 `deployments` 表 + 给 `conversations` 加两列
-- [ ] `services/deploy-service/index.ts`：核心流程
-  1. acquire sandbox（复用现有 `acquireConversationSandbox`）
-  2. 拿 Vercel token，注入 sandbox env
-  3. 检查 conversation 是否有 `vercel_project_id`，没有就调 Vercel API 创建 project + 落库
-  4. sandbox 内跑 `pnpm install` + `vercel deploy --prod --token=$TOKEN --yes`（cwd = workspace root）
-  5. 解析输出拿到 deploy URL，落 `deployments` 行 + 更新 `conversation.deployUrl`
-- [ ] `routes/deployment.ts`：`POST /api/deployment/:conversationId` 触发 + `GET /api/deployment/:conversationId` 查列表
+- [x] DB schema：`conversations` 加 `vercel_project_id` + `supabase_project_ref` 两列；新建 `deployments` 表（id / conversation_id / version_id / status enum / public_url / vercel_deploy_id / error_message / created_at）
+- [x] `services/deploy-service/index.ts`：完整流程 —— acquire sandbox → 检查/创建 Vercel project（自动 + 落库 `vercel_project_id`）→ 写 `.vercel/project.json`（projectId + orgId）→ `bun install` if no node_modules → `npx vercel@latest deploy --prod --yes --token` → 正则 parse `*.vercel.app` URL → 落 `deployments` 行 + 更新 `conversation.deployUrl`
+- [x] `services/integration/vercel-client.ts`：加 `createVercelProject` / `getVercelProject` / `VercelTokenInvalidError` + 401/403 自动清理 token + `VercelNotConnectedError`
+- [x] `routes/deployment.ts`：`POST /:conversationId`（触发部署）+ `GET /:conversationId`（查列表，按 createdAt desc）
 
-**交付**：拿一个手写的 Vite SPA 项目，curl 触发部署接口，能在终端看到完整流程跑通，最后返回一个能在浏览器打开的 `vercel.app` URL。
+**交付**：✅ curl POST 触发部署，**53 秒一次过**，返回真实 `https://code-artisan-c21b3e7f77d2.vercel.app`，对应 Vercel 账号下真创建了 project + 跑了 production deploy。
+
+**已知差异（Day 6 修）**：当前 fullstack（`hono-fullstack` skill 的）项目部署后页面渲染错的是 server bundle 而非 SPA HTML —— 因为 `package.json` build 脚本同时产 `dist/index.html` 和 `dist/index.js`。Vercel auto-detect 框架后路由错乱。Day 6 用 `@hono/vercel` adapter + `vercel.json` 修。
 
 ---
 
-### Day 3 · 2026-05-06（Wed）· Publish UI + 流式进度
+### Day 3 · 2026-05-05（Tue · 三日同日完成）· Publish UI + 流式进度 ✅
 
 **任务**：
-- [ ] backend：把 deploy-service 改成 async generator，`POST /api/deployment/...` 用 SSE 流式返回 `{ status, message }` 事件
-- [ ] frontend：顶栏加"发布"按钮（参考 V0 截图）
-- [ ] frontend：Publish popover 组件
-  - Loading 状态条（building / uploading / live 三态）
-  - 成功后展示 URL + 复制按钮 + "Open in Vercel" 跳链
-  - 失败时展示 error_message + Retry
-  - 已发布过的会话：默认展示最新 deployment URL + Re-deploy 按钮
-- [ ] 前端 store：`useDeploymentStore`，订阅 SSE，更新状态
+- [x] backend：`deployConversation` 改成 `AsyncGenerator<DeployEvent, void>`，事件类型 status / log / done / error；POST 用 `streamSSE` 推送（heartbeat 15s 防超时）
+- [x] shared：把 `Deployment` / `DeployEvent` / `DeploymentStatus` / `DeployErrorCode` 提到 `@code-artisan/shared/types.ts`，前后端 single source of truth；backend `toWire(row)` 把 drizzle Row → wire shape（Date → ISO，status narrow）
+- [x] frontend：`stores/deploy.ts` —— Zustand store per-conversation 隔离状态机（idle / running / success / failed），SSE 流式消费 + 自动 invalidate list 查询
+- [x] frontend：`components/workspace/publish-popover.tsx` —— 6 状态机覆盖
+  - loading / not-connected（"Connect Vercel"大按钮 → popup OAuth）
+  - first-deploy（"Deploy"按钮）
+  - running（4 步骤实时✓→⟳→○：Preparing / Building / Deploying / Live）
+  - deployed（URL chip + Copy / Open / Re-deploy 三连按钮）
+  - failed-generic（错误信息 + Dismiss / Retry）
+  - **failed-auth**（401/403 不弹通用错，直接换"Reconnect Vercel"大按钮）
+- [x] frontend：BroadcastChannel 监听 → 重授权后自动 reset error，用户一键回到 Deploy 状态
+- [x] frontend：Header 加 `<PublishPopover />` —— `Publish ●`（绿点 = 已部署）/ `Publishing ⟳`（流式中）
 
-**交付**：能在 UI 上完整走"点发布 → 看进度 → 拿到链接 → 打开看到 app"的流程。
+**交付**：✅ 完整 UI 闭环 —— 点 Publish → popover 实时进度 → ~50s 后变绿 chip + URL + Copy/Open/Re-deploy。authorization 失效路径也跑过：Disconnect 后再点 Publish 自动引导 Reconnect → 一键重授权 → 立刻可重试 deploy，无需进 Settings。
 
 ---
 

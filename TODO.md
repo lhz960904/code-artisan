@@ -2,10 +2,14 @@
 
 ## P1
 
-- [ ] 部署能力(集成 Vercel)
+- [ ] 部署能力(集成 Vercel) —— Day 1-3 主链路通；详见 `docs/publish-design.md`
+  - [x] OAuth + AES-GCM token 存储 + Settings UI（Day 1）
+  - [x] Vercel project 自动创建 + `vercel deploy` SSE 流式 + Publish popover（Day 2-3）
+  - [ ] Fullstack 项目部署内容正确（`@hono/vercel` adapter，Day 6）
+  - [ ] Prod Railway env vars + Vercel form redirect URL 切到 prod 域名（Day 7）
 - [ ] 分享/开放功能 + dashboard 内容丰富
 - [x] 版本控制（preview / restore / chip / banner 全链路；事件化 restore + active chain AI 上下文裁剪）
-- [ ] DB 能力(集成 Supabase?)
+- [ ] DB 能力(集成 Supabase?) —— Day 4-5 做，详见 `docs/publish-design.md`
 - [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
 - [ ] Custom Rules（用户自定义 system prompt 规则, Agents.md）
 
