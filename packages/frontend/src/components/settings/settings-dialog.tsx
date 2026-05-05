@@ -6,6 +6,7 @@ import { GeneralSection } from "./sections/general";
 import { SystemPromptSection } from "./sections/system-prompt";
 import { PersonalGeneralSection } from "./sections/personal-general";
 import { McpServersSection } from "./sections/mcp-servers";
+import { IntegrationsSection } from "./sections/integrations";
 
 export function SettingsDialog() {
   const open = useSettingsStore((s) => s.open);
@@ -48,5 +49,7 @@ function SectionRouter({
       return <PersonalGeneralSection />;
     case "mcp-servers":
       return <McpServersSection />;
+    case "integrations":
+      return <IntegrationsSection />;
   }
 }

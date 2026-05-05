@@ -14,6 +14,11 @@ const envSchema = z.object({
   BETTER_AUTH_URL: z.url(),
   GITHUB_CLIENT_ID: z.string().min(1),
   GITHUB_CLIENT_SECRET: z.string().min(1),
+  INTEGRATION_SECRET_KEY: z.string().optional(),
+  VERCEL_OAUTH_CLIENT_ID: z.string().optional(),
+  VERCEL_OAUTH_CLIENT_SECRET: z.string().optional(),
+  VERCEL_OAUTH_REDIRECT_URI: z.url().optional(),
+  VERCEL_INTEGRATION_SLUG: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

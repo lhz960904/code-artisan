@@ -9,6 +9,11 @@ export {
   type FileSnapshot,
 } from "./conversations";
 export { mcpServerKeys, mcpServersListOptions, type McpServerListItem } from "./mcp-servers";
+export {
+  integrationKeys,
+  vercelIntegrationOptions,
+  type VercelIntegrationStatus,
+} from "./integrations";
 export { quotaKeys, quotaOptions, type QuotaResponse } from "./quota";
 export { modelKeys, modelsOptions, fetchModels } from "./models";
 export {

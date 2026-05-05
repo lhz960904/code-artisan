@@ -1,4 +1,4 @@
-import { Settings, FileText, Plug } from "lucide-react";
+import { Settings, FileText, Plug, Cable } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SettingsSection } from "@/stores/settings";
@@ -29,6 +29,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Personal Settings",
     items: [
       { id: "personal-general", label: "General", icon: Settings },
+      { id: "integrations", label: "Integrations", icon: Cable },
       { id: "mcp-servers", label: "MCP Servers", icon: Plug },
     ],
   },

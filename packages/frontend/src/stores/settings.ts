@@ -1,6 +1,11 @@
 import { create } from "zustand";
 
-export type SettingsSection = "general" | "system-prompt" | "personal-general" | "mcp-servers";
+export type SettingsSection =
+  | "general"
+  | "system-prompt"
+  | "personal-general"
+  | "mcp-servers"
+  | "integrations";
 
 interface OpenSettingsOpts {
   conversationId?: string;

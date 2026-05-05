@@ -165,7 +165,9 @@ export const userQuotas = pgTable("user_quotas", {
 
 // Generic per-user key-value settings. Value shape depends on key.
 // Known keys:
-//   "mcp" → Record<serverId, { envVars: Record<string, string>; installedAt: string }>
+//   "mcp"            → Record<serverId, { envVars: Record<string, string>; installedAt: string }>
+//   "vercel_oauth"   → AES-GCM encrypted blob { iv, data } (decrypts to VercelOAuthToken)
+//   "supabase_oauth" → AES-GCM encrypted blob { iv, data } (decrypts to SupabaseOAuthToken)
 export const settings = pgTable(
   "settings",
   {
