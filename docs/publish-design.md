@@ -95,18 +95,23 @@ deployments
 > 每天交付一个**可独立验证的里程碑**，不会出现"做到一半啥都看不见"的状态。
 > 起始日期 2026-05-04（周一），完成日期 2026-05-10（周日）。
 
-### Day 1 · 2026-05-04（Mon）· Vercel OAuth 通
+### Day 1 · 2026-05-05（Tue · 实际起手日）· Vercel OAuth 通 ✅
 
 **为什么先做 Vercel**：跑通"点按钮 → 拿到 URL"是整套方案的脊梁，先把它 derisk；Supabase 集成是增强项，可以晚两天上。
 
 **任务**：
-- [ ] 在 Vercel Dashboard 注册 OAuth integration，拿到 `client_id` / `client_secret`，配置 redirect URI
-- [ ] backend：新增 `routes/integration.ts`，实现 `GET /api/integration/vercel/connect`（重定向到 Vercel）+ `GET /api/integration/vercel/callback`（换 token + 存 settings）
-- [ ] backend：`services/integration/oauth-storage.ts` —— 加密读写 OAuth token（AES-GCM，密钥从 `INTEGRATION_SECRET_KEY` env 读）
-- [ ] backend：`services/integration/vercel-client.ts` 骨架 —— 封装 `fetch` + 自动 refresh token
-- [ ] frontend：设置页加"Integrations"区块，"Connect Vercel"按钮 + 已连接状态展示
+- [x] 在 Vercel Dashboard 注册 OAuth integration，拿到 `client_id` / `client_secret` / **URL Slug**，配置 redirect URI（用 `:3000` 前端口，Vite 代理转 `:3001` 后端）
+- [x] backend：`routes/integration.ts` —— `GET/DELETE /vercel`（状态/解绑）+ `GET /vercel/connect`（302 + state cookie）+ `GET /vercel/callback`（state 校验 + code 交换 + identity + 存）
+- [x] backend：`services/integration/{crypto,oauth-storage}.ts` —— AES-GCM-256 加密层 + KV 读写（5 个 round-trip 单测全过）
+- [x] backend：`services/integration/vercel-client.ts` —— install URL builder（用 URL Slug 不是 client_id）+ token 交换 + identity fetch
+- [x] frontend：设置页加 Integrations section + Vercel 卡片 + popup 流（`window.open` + BroadcastChannel + `/oauth/return` 桥接页 + 关不掉时 Close 按钮兜底）
 
-**交付**：用户点 Connect Vercel，跳转授权，回来后设置页显示 "Connected to Vercel as <username>"。
+**交付**：✅ 用户点 Connect Vercel → popup 弹出 → Vercel 授权 → popup 显示成功页自动关 → 设置页卡片即时切到 "Connected to lihaozecq's projects (team)"。整链路 e2e 验证。
+
+**实际差异**：
+- 原计划 Day 1 = 5/4，**实际今日（5/5）才起手**——后续每日顺延 1 天
+- 后端 `vercel-client.ts` 没做 refresh token 逻辑（Vercel integration token 是长寿的，没 expires_in）
+- 401 失效检测延后到 Day 2（届时有真 API 调用才触发得到）
 
 ---
 
@@ -234,7 +239,11 @@ deployments
 
 外部账号侧需要 Haoze 提前完成（与 Day 1 并行）：
 
-- [ ] Vercel：登录 Dashboard → Integrations → Create Integration（Type: Generic / Internal）
-- [ ] Supabase：登录 Dashboard → 任一 Org → Org Settings → OAuth Apps → New Application
-- [ ] 为本地开发准备一个稳定的 callback 域名（ngrok / dev.code-artisan.app / 自建反代）
-- [ ] 生成 `INTEGRATION_SECRET_KEY`（32 字节随机），写入 backend `.env`
+- [x] Vercel：登录 Dashboard → Integrations → Create Integration（Connectable Account · Community badge）
+- [ ] Supabase：登录 Dashboard → 任一 Org → Org Settings → OAuth Apps → New Application（Day 4 再做）
+- [x] ~~为本地开发准备一个稳定的 callback 域名~~ —— 直接用 `localhost:3000`，Vercel 文档明确允许；prod 需要时再建第二个 integration
+- [x] 生成 `INTEGRATION_SECRET_KEY`（32 字节随机），写入 backend `.env`
+
+**Prod 部署待办**（Railway env vars）：当前 `.env` 里的 4 个 Vercel 相关 var 只在 local 配了。Railway prod 上没设，所以推上去 prod 的 IntegrationsSection 卡片点 Connect 会回 `status=not-configured`。Day 7 上线前需要：
+- 在 Vercel form 改 Redirect URL 到 prod 域名（或建第二个 integration）
+- 在 Railway env vars 里补齐 `INTEGRATION_SECRET_KEY` / `VERCEL_OAUTH_*` / `VERCEL_INTEGRATION_SLUG`
