@@ -16,6 +16,7 @@ import { conversationWsRouter } from "./routes/conversation-ws.js";
 import { modelsRouter } from "./routes/models.js";
 import { versionRouter } from "./routes/version.js";
 import { integrationRouter } from "./routes/integration.js";
+import { deploymentRouter } from "./routes/deployment.js";
 
 const app = new Hono();
 
@@ -43,6 +44,7 @@ app.route("/api/attachment", attachmentRouter);
 app.route("/api/user", userRouter);
 app.route("/api/setting", settingRouter);
 app.route("/api/integration", integrationRouter);
+app.route("/api/deployment", deploymentRouter);
 
 // Serve frontend static files (production)
 app.use("*", serveStatic({ root: "./dist/public" }));

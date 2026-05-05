@@ -29,6 +29,20 @@ export class VercelOAuthNotConfiguredError extends Error {
   }
 }
 
+export class VercelTokenInvalidError extends Error {
+  constructor() {
+    super("Vercel token is invalid (uninstalled / revoked). Reconnect required.");
+    this.name = "VercelTokenInvalidError";
+  }
+}
+
+export class VercelNotConnectedError extends Error {
+  constructor() {
+    super("User has not connected their Vercel account.");
+    this.name = "VercelNotConnectedError";
+  }
+}
+
 export function getVercelOAuthConfig(): {
   clientId: string;
   clientSecret: string;
@@ -123,15 +137,69 @@ export async function fetchVercelIdentity(
   return { user_name: user.username || user.name || user.email, user_email: user.email };
 }
 
-async function vercelFetch(path: string, accessToken: string): Promise<Response> {
-  const resp = await fetch(`${VERCEL_API_BASE}${path}`, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
+async function vercelFetch(
+  path: string,
+  accessToken: string,
+  init?: RequestInit & { userId?: string },
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${accessToken}`,
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
+  const resp = await fetch(`${VERCEL_API_BASE}${path}`, { ...init, headers });
+  if (resp.status === 401 || resp.status === 403) {
+    if (init?.userId) await deleteStoredVercelToken(init.userId);
+    throw new VercelTokenInvalidError();
+  }
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
     throw new Error(`Vercel API ${path} failed (${resp.status}): ${text}`);
   }
   return resp;
+}
+
+type VercelProject = {
+  id: string;
+  name: string;
+  framework?: string | null;
+};
+
+export async function createVercelProject(params: {
+  accessToken: string;
+  userId: string;
+  teamId?: string;
+  name: string;
+}): Promise<VercelProject> {
+  const query = params.teamId ? `?teamId=${encodeURIComponent(params.teamId)}` : "";
+  const resp = await vercelFetch(`/v9/projects${query}`, params.accessToken, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: params.name, framework: "vite" }),
+    userId: params.userId,
+  });
+  return (await resp.json()) as VercelProject;
+}
+
+export async function getVercelProject(params: {
+  accessToken: string;
+  userId: string;
+  teamId?: string;
+  projectId: string;
+}): Promise<VercelProject | null> {
+  const query = params.teamId ? `?teamId=${encodeURIComponent(params.teamId)}` : "";
+  const resp = await fetch(`${VERCEL_API_BASE}/v9/projects/${params.projectId}${query}`, {
+    headers: { authorization: `Bearer ${params.accessToken}` },
+  });
+  if (resp.status === 404) return null;
+  if (resp.status === 401 || resp.status === 403) {
+    await deleteStoredVercelToken(params.userId);
+    throw new VercelTokenInvalidError();
+  }
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new Error(`Vercel API getProject failed (${resp.status}): ${text}`);
+  }
+  return (await resp.json()) as VercelProject;
 }
 
 export async function getStoredVercelToken(userId: string): Promise<VercelOAuthToken | null> {

@@ -77,6 +77,8 @@ export const conversations = pgTable("conversations", {
   mode: text("mode").notNull().default("yolo"),
   sandboxId: text("sandbox_id"),
   deployUrl: text("deploy_url"),
+  vercelProjectId: text("vercel_project_id"),
+  supabaseProjectRef: text("supabase_project_ref"),
   agentRunning: boolean("agent_running").notNull().default(false),
   settings: jsonb("settings").notNull().default({}),
   // SET NULL: GC'ing a version must not lock the conversation.
@@ -180,3 +182,21 @@ export const settings = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.key] })],
 );
+
+export const DEPLOYMENT_STATUSES = ["pending", "building", "uploading", "live", "failed"] as const;
+export type DeploymentStatus = (typeof DEPLOYMENT_STATUSES)[number];
+
+export const deployments = pgTable("deployments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  versionId: uuid("version_id").references((): AnyPgColumn => versions.id, {
+    onDelete: "set null",
+  }),
+  status: text("status").notNull(),
+  publicUrl: text("public_url"),
+  vercelDeployId: text("vercel_deploy_id"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
