@@ -11,3 +11,14 @@ export function useDisconnectVercel() {
     },
   });
 }
+
+export function useDisconnectSupabase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ disconnected: true }>("/integration/supabase", { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: integrationKeys.supabase() });
+    },
+  });
+}

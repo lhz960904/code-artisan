@@ -12,7 +12,9 @@ export { mcpServerKeys, mcpServersListOptions, type McpServerListItem } from "./
 export {
   integrationKeys,
   vercelIntegrationOptions,
+  supabaseIntegrationOptions,
   type VercelIntegrationStatus,
+  type SupabaseIntegrationStatus,
 } from "./integrations";
 export { deploymentKeys, deploymentsListOptions } from "./deployments";
 export { quotaKeys, quotaOptions, type QuotaResponse } from "./quota";

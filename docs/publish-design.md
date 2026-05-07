@@ -149,16 +149,23 @@ deployments
 
 ---
 
-### Day 4 · 2026-05-07（Thu）· Supabase OAuth 通
+### Day 4 · 2026-05-07（Thu）· Supabase OAuth 通 ⏳ 代码就绪 / 等 OAuth app 注册
 
 **任务**（结构上是 Day 1 的复刻，可以大量复用代码）：
-- [ ] 在 Supabase Dashboard 注册 OAuth app（Org Settings → OAuth Apps）
-- [ ] backend：复用 `oauth-storage.ts`，加 supabase_oauth 这个 key 的读写
-- [ ] backend：`integration.ts` 加 supabase 的 connect/callback 路由
-- [ ] backend：`services/integration/supabase-client.ts` —— 封装 Management API 调用 + 自动 refresh
-- [ ] frontend：设置页加"Connect Supabase"按钮 + 状态
+- [ ] 在 Supabase Dashboard 注册 OAuth app（任一 Org → Org Settings → OAuth Apps → New Application）—— **Haoze 待操作**；Redirect URL 填 `http://localhost:3000/api/integration/supabase/callback`
+- [x] backend：复用 `oauth-storage.ts`（`SETTINGS_KEY_SUPABASE_OAUTH` 已就位）+ `crypto.ts` 加密层
+- [x] backend：`integration.ts` 加 `/supabase` `/supabase/connect` `/supabase/callback` `DELETE /supabase` 四个路由
+- [x] backend：`services/integration/supabase-client.ts` —— OAuth 2.0 code 交换 + **refresh token 续期**（access_token 1h 过期；`getValidSupabaseAccessToken` 提前 60s 自动 refresh，refresh 失败 → 清 token + 抛 `SupabaseTokenInvalidError`）+ `fetchSupabaseIdentity` 取 `/v1/organizations` 第一个 org 落 identity
+- [x] backend：env.ts 加 4 个 var（`SUPABASE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI/SCOPE`）+ `.env.example` 同步
+- [x] frontend：`api/queries/integrations.ts` + `api/mutations/integrations.ts` 加 `supabaseIntegrationOptions` / `useDisconnectSupabase`
+- [x] frontend：设置页 `SupabaseIntegrationCard` 从 dashed 占位升级成真卡片（Connect / Disconnect / 显示 org 名）；`useIntegrationCallbackBus` + `ReturnFlash` 改成 provider-aware（vercel/supabase 共用同一条 BroadcastChannel + `/oauth/return` 桥接页）
 
-**交付**：双授权状态都通；设置页能看到两边都连上了。
+**交付**：⏳ 代码 e2e 已就绪，**等 Haoze 在 Supabase 注册 OAuth app 拿 client_id/secret 填进 `.env`**。env 没填时点 Connect 会回 `status=not-configured` flash（跟 Vercel 一致）。
+
+**与 Day 1 的差异点**：
+- Supabase 走标准 OAuth 2.0 code flow（带 `expires_in` + `refresh_token`），不是 Vercel 那种 install-url + 长寿 token；refresh 链路在 `getValidSupabaseAccessToken` 里
+- Authorization URL 是 `https://api.supabase.com/v1/oauth/authorize`，不需要 integration slug
+- Identity = OAuth 授权时选定的那个 org（一个 OAuth 安装绑定一个 org，跟 Vercel 的 team 概念类似）
 
 ---
 
@@ -242,7 +249,7 @@ deployments
 外部账号侧需要 Haoze 提前完成（与 Day 1 并行）：
 
 - [x] Vercel：登录 Dashboard → Integrations → Create Integration（Connectable Account · Community badge）
-- [ ] Supabase：登录 Dashboard → 任一 Org → Org Settings → OAuth Apps → New Application（Day 4 再做）
+- [ ] Supabase：登录 Dashboard → 任一 Org → Org Settings → OAuth Apps → New Application；Redirect URL 填 `http://localhost:3000/api/integration/supabase/callback`，scope 选 `all`，client_id/secret 填进 backend `.env` 的 `SUPABASE_OAUTH_*`（Day 4 代码已就绪，等这步）
 - [x] ~~为本地开发准备一个稳定的 callback 域名~~ —— 直接用 `localhost:3000`，Vercel 文档明确允许；prod 需要时再建第二个 integration
 - [x] 生成 `INTEGRATION_SECRET_KEY`（32 字节随机），写入 backend `.env`
 

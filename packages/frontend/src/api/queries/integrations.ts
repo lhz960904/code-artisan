@@ -11,13 +11,31 @@ export type VercelIntegrationStatus =
       connected_at: string;
     };
 
+export type SupabaseIntegrationStatus =
+  | { connected: false }
+  | {
+      connected: true;
+      org_id?: string;
+      org_name?: string;
+      org_slug?: string;
+      connected_at: string;
+    };
+
 export const integrationKeys = {
   vercel: () => ["integration", "vercel"] as const,
+  supabase: () => ["integration", "supabase"] as const,
 };
 
 export const vercelIntegrationOptions = () =>
   queryOptions({
     queryKey: integrationKeys.vercel(),
     queryFn: () => apiFetch<VercelIntegrationStatus>("/integration/vercel"),
+    staleTime: 30_000,
+  });
+
+export const supabaseIntegrationOptions = () =>
+  queryOptions({
+    queryKey: integrationKeys.supabase(),
+    queryFn: () => apiFetch<SupabaseIntegrationStatus>("/integration/supabase"),
     staleTime: 30_000,
   });

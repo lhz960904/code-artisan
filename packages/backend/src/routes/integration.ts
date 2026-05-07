@@ -11,8 +11,19 @@ import {
   getStoredVercelToken,
   storeVercelToken,
 } from "../services/integration/vercel-client.js";
+import {
+  SupabaseOAuthNotConfiguredError,
+  buildSupabaseAuthorizeUrl,
+  deleteStoredSupabaseToken,
+  exchangeSupabaseCode,
+  fetchSupabaseIdentity,
+  getStoredSupabaseToken,
+  storeSupabaseToken,
+  tokenFromExchangeResponse,
+} from "../services/integration/supabase-client.js";
 
 const VERCEL_STATE_COOKIE = "vercel_oauth_state";
+const SUPABASE_STATE_COOKIE = "supabase_oauth_state";
 const STATE_TTL_SECONDS = 600;
 
 const integrationRouter = new Hono();
@@ -93,6 +104,77 @@ integrationRouter.get(
 integrationRouter.delete("/vercel", async (c) => {
   const user = c.get("user");
   await deleteStoredVercelToken(user.id);
+  return ok(c, { disconnected: true });
+});
+
+integrationRouter.get("/supabase", async (c) => {
+  const user = c.get("user");
+  const token = await getStoredSupabaseToken(user.id);
+  if (!token) return ok(c, { connected: false });
+  return ok(c, {
+    connected: true,
+    org_id: token.org_id,
+    org_name: token.org_name,
+    org_slug: token.org_slug,
+    connected_at: token.connected_at,
+  });
+});
+
+integrationRouter.get("/supabase/connect", async (c) => {
+  try {
+    const state = crypto.randomUUID();
+    setCookie(c, SUPABASE_STATE_COOKIE, state, {
+      httpOnly: true,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: STATE_TTL_SECONDS,
+    });
+    return c.redirect(buildSupabaseAuthorizeUrl(state));
+  } catch (err) {
+    if (err instanceof SupabaseOAuthNotConfiguredError) {
+      return c.redirect("/oauth/return?integration=supabase&status=not-configured");
+    }
+    throw err;
+  }
+});
+
+integrationRouter.get(
+  "/supabase/callback",
+  validate(
+    "query",
+    z.object({
+      code: z.string().optional(),
+      state: z.string().optional(),
+      error: z.string().optional(),
+    }),
+  ),
+  async (c) => {
+    const user = c.get("user");
+    const { code, state, error } = c.req.valid("query");
+    const cookieState = getCookie(c, SUPABASE_STATE_COOKIE);
+    deleteCookie(c, SUPABASE_STATE_COOKIE, { path: "/" });
+
+    if (error) return c.redirect(`/oauth/return?integration=supabase&status=denied`);
+    if (!code) return c.redirect(`/oauth/return?integration=supabase&status=missing-code`);
+    if (!state || !cookieState || state !== cookieState) {
+      return c.redirect(`/oauth/return?integration=supabase&status=invalid-state`);
+    }
+
+    try {
+      const tokenResp = await exchangeSupabaseCode({ code });
+      const identity = await fetchSupabaseIdentity(tokenResp.access_token);
+      await storeSupabaseToken(user.id, tokenFromExchangeResponse(tokenResp, identity));
+      return c.redirect(`/oauth/return?integration=supabase&status=connected`);
+    } catch (err) {
+      console.error("[integration/supabase/callback]", err);
+      return c.redirect(`/oauth/return?integration=supabase&status=error`);
+    }
+  },
+);
+
+integrationRouter.delete("/supabase", async (c) => {
+  const user = c.get("user");
+  await deleteStoredSupabaseToken(user.id);
   return ok(c, { disconnected: true });
 });
 

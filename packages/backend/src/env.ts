@@ -19,6 +19,10 @@ const envSchema = z.object({
   VERCEL_OAUTH_CLIENT_SECRET: z.string().optional(),
   VERCEL_OAUTH_REDIRECT_URI: z.url().optional(),
   VERCEL_INTEGRATION_SLUG: z.string().optional(),
+  SUPABASE_OAUTH_CLIENT_ID: z.string().optional(),
+  SUPABASE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  SUPABASE_OAUTH_REDIRECT_URI: z.url().optional(),
+  SUPABASE_OAUTH_SCOPE: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

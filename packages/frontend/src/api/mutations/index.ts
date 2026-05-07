@@ -8,7 +8,7 @@ export {
   useUninstallMcpServer,
   useUpdateMcpServer,
 } from "./mcp-servers";
-export { useDisconnectVercel } from "./integrations";
+export { useDisconnectVercel, useDisconnectSupabase } from "./integrations";
 export { uploadFile } from "./upload";
 export {
   usePreviewVersion,
