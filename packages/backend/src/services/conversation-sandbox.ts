@@ -5,6 +5,7 @@ import { getSandboxPool } from "../sandbox";
 import type { E2BSandbox } from "../sandbox/e2b-sandbox";
 import { maybeBootstrapDevServer } from "./dev-server/bootstrap";
 import { getShellSessionManager } from "./shell-session";
+import { writeSupabaseEnvLocal } from "./integration/sandbox-env";
 
 export interface ConversationSandboxResult {
   sandbox: E2BSandbox;
@@ -31,12 +32,19 @@ export async function acquireConversationSandbox(
   currentSandboxId: string | null | undefined,
 ): Promise<ConversationSandboxResult> {
   const pool = getSandboxPool();
-  const [sandbox, snapshots] = await Promise.all([
+  const [sandbox, snapshots, supabaseConfig] = await Promise.all([
     pool.acquire(currentSandboxId ?? undefined),
     db
       .select({ path: fileSnapshots.path, content: fileSnapshots.content })
       .from(fileSnapshots)
       .where(eq(fileSnapshots.conversationId, conversationId)),
+    db
+      .select({
+        url: conversations.supabaseUrl,
+        anonKey: conversations.supabaseAnonKey,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId)),
   ]);
 
   if (sandbox.sandboxId !== currentSandboxId) {
@@ -52,6 +60,17 @@ export async function acquireConversationSandbox(
       .set({ sandboxId: sandbox.sandboxId })
       .where(eq(conversations.id, conversationId));
 
+  }
+
+  // Re-write .env.local on every acquire so it stays in sync with the
+  // conversation row — covers reconnect/rotate/disconnect transparently.
+  const supa = supabaseConfig[0];
+  if (supa?.url && supa?.anonKey) {
+    try {
+      await writeSupabaseEnvLocal(sandbox, { url: supa.url, anonKey: supa.anonKey });
+    } catch (err) {
+      console.error(`[conversation-sandbox] .env.local injection failed:`, err);
+    }
   }
 
   // Always try — `maybeBootstrapDevServer` is idempotent per sandbox id, so

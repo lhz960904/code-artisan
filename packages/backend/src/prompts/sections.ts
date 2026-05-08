@@ -40,7 +40,11 @@ The following are managed by the platform — do not modify, rename, or delete:
 
 \`.code-artisan/manifest.json\` is the only file in that directory that is YOURS to write and update — it's the project's declaration of how to install/run/build, and it should be committed to git like any other config.
 
-After editing source files, if the user reports a blank screen or unexpected behaviour, run \`bash_output\` on the dev server session — Vite compile errors (failed imports, syntax errors) print to its stderr but do not surface in the browser preview overlay you can see.`;
+After editing source files, if the user reports a blank screen or unexpected behaviour, run \`bash_output\` on the dev server session — Vite compile errors (failed imports, syntax errors) print to its stderr but do not surface in the browser preview overlay you can see.
+
+**Persistent data — Supabase (BYO).** When the app needs persistent data, auth, file storage, or realtime, call \`supabase_create_project\` once per conversation. It provisions a fresh project under the user's connected Supabase organization (~30–60s) and stores its URL + anon key on the conversation row. The platform writes them into the sandbox's \`.env.local\` as \`VITE_SUPABASE_URL\` + \`VITE_SUPABASE_ANON_KEY\` — your client code MUST read them via \`import.meta.env.VITE_SUPABASE_URL\` / \`import.meta.env.VITE_SUPABASE_ANON_KEY\`. Do NOT write \`.env.local\` yourself; it is platform-managed and overwritten on every sandbox start. After \`supabase_create_project\` returns, kill the running dev session (\`kill_shell\`) and restart it (\`bash\` with \`run_in_background: true\`) so Vite picks up the new env.
+
+Schema, RLS, and seeds run through \`supabase_sql\` — it executes SQL against the user's project via the Management API under their OAuth Bearer. ALWAYS \`ENABLE ROW LEVEL SECURITY\` on user-owned tables and add policies keyed on \`auth.uid()\` (e.g. \`USING (user_id = auth.uid())\`) — the anon key is published to the browser, so RLS is the actual security boundary. Frontend connects with \`createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)\`; for auth use \`supabase.auth.signUp\` / \`signInWithPassword\` / \`signInWithOAuth\`. The service-role key is NOT exposed to the sandbox by design — never try to read or use it.`;
 
 export function buildUserInstructionsSection(instructions: string): string {
   return `# User Instructions

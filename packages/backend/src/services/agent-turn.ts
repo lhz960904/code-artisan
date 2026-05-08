@@ -24,7 +24,14 @@ import { buildAgentMessages } from "../utils/message";
 import { checkQuotaMiddleware } from "./middlewares/check-quota";
 import { fileTrackerMiddleware } from "./middlewares/track-file-changes";
 import { getShellSessionManager } from "./shell-session";
-import { createWebBashTool, createBashOutputTool, createKillShellTool, createExposePortTool } from "./web-tools";
+import {
+  createWebBashTool,
+  createBashOutputTool,
+  createKillShellTool,
+  createExposePortTool,
+  createSupabaseCreateProjectTool,
+  createSupabaseSqlTool,
+} from "./web-tools";
 import { agentRunnerRegistry } from "./agent-runner-registry";
 import { McpToolSet } from "../mcp/mcp-tools";
 import { getInstalledMcpServers } from "../mcp/registry";
@@ -168,6 +175,8 @@ export class AgentTurnService {
         createBashOutputTool({ manager: getShellSessionManager() }),
         createKillShellTool({ manager: getShellSessionManager() }),
         createExposePortTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
+        createSupabaseCreateProjectTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
+        createSupabaseSqlTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
         webSearchTool,
         webFetchTool,
         ...mcpTools,

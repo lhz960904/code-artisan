@@ -1,4 +1,4 @@
-# 发布与数据库集成设计方案
+# 发布与数据库集成设计方案（7 天 → 8 天，含 Day 5.5）
 
 > 让用户一键把对话里造出的 app 发布成可访问的真 URL，且支持持久化数据。
 > **方案核心**：BYO（Bring-Your-Own）—— 用户授权自己的 Vercel 与 Supabase，code-artisan 通过 OAuth 调他们的 API 完成 provisioning + 部署。
@@ -93,7 +93,7 @@ deployments
 ## 五、7 天落地计划
 
 > 每天交付一个**可独立验证的里程碑**，不会出现"做到一半啥都看不见"的状态。
-> 起始日期 2026-05-04（周一），完成日期 2026-05-10（周日）。
+> 起始日期 2026-05-04（周一），完成日期 2026-05-12（周二，含 Day 5.5 的 1 天插入）。
 
 ### Day 1 · 2026-05-05（Tue · 实际起手日）· Vercel OAuth 通 ✅
 
@@ -149,10 +149,10 @@ deployments
 
 ---
 
-### Day 4 · 2026-05-07（Thu）· Supabase OAuth 通 ⏳ 代码就绪 / 等 OAuth app 注册
+### Day 4 · 2026-05-07（Thu）· Supabase OAuth 通 ✅
 
 **任务**（结构上是 Day 1 的复刻，可以大量复用代码）：
-- [ ] 在 Supabase Dashboard 注册 OAuth app（任一 Org → Org Settings → OAuth Apps → New Application）—— **Haoze 待操作**；Redirect URL 填 `http://localhost:3000/api/integration/supabase/callback`
+- [x] 在 Supabase Dashboard 注册 OAuth app（任一 Org → Org Settings → OAuth Apps → New Application）；Redirect URL 填 `http://localhost:3000/api/integration/supabase/callback`
 - [x] backend：复用 `oauth-storage.ts`（`SETTINGS_KEY_SUPABASE_OAUTH` 已就位）+ `crypto.ts` 加密层
 - [x] backend：`integration.ts` 加 `/supabase` `/supabase/connect` `/supabase/callback` `DELETE /supabase` 四个路由
 - [x] backend：`services/integration/supabase-client.ts` —— OAuth 2.0 code 交换 + **refresh token 续期**（access_token 1h 过期；`getValidSupabaseAccessToken` 提前 60s 自动 refresh，refresh 失败 → 清 token + 抛 `SupabaseTokenInvalidError`）+ `fetchSupabaseIdentity` 取 `/v1/organizations` 第一个 org 落 identity
@@ -160,7 +160,7 @@ deployments
 - [x] frontend：`api/queries/integrations.ts` + `api/mutations/integrations.ts` 加 `supabaseIntegrationOptions` / `useDisconnectSupabase`
 - [x] frontend：设置页 `SupabaseIntegrationCard` 从 dashed 占位升级成真卡片（Connect / Disconnect / 显示 org 名）；`useIntegrationCallbackBus` + `ReturnFlash` 改成 provider-aware（vercel/supabase 共用同一条 BroadcastChannel + `/oauth/return` 桥接页）
 
-**交付**：⏳ 代码 e2e 已就绪，**等 Haoze 在 Supabase 注册 OAuth app 拿 client_id/secret 填进 `.env`**。env 没填时点 Connect 会回 `status=not-configured` flash（跟 Vercel 一致）。
+**交付**：✅ 用户点 Connect Supabase → popup → 选 org 授权 → popup 自动关 + 设置页卡片切到 "Connected to <org name>"。Token 落进 `settings` KV（AES-GCM 加密），1h access_token + refresh_token，`getValidSupabaseAccessToken(userId)` 是后续所有 Management API 调用的入口。
 
 **与 Day 1 的差异点**：
 - Supabase 走标准 OAuth 2.0 code flow（带 `expires_in` + `refresh_token`），不是 Vercel 那种 install-url + 长寿 token；refresh 链路在 `getValidSupabaseAccessToken` 里
@@ -172,18 +172,45 @@ deployments
 ### Day 5 · 2026-05-08（Fri）· Supabase Agent 工具 + Sandbox 注入
 
 **任务**：
-- [ ] backend：`services/web-tools/supabase-create-project.ts` —— agent 工具，调 Management API 创建 project，落 `conversations.supabase_project_ref`，等 project provision 完成（通常 30-60s，要轮询 status）
-- [ ] backend：`services/web-tools/supabase-sql.ts` —— agent 工具，用 service role key 跑 DDL/seed SQL
-- [ ] backend：`acquireConversationSandbox` 修改 —— 启动 sandbox 时如果 conversation 已有 supabase_project_ref，注入 `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` 到 dev server env（通过 manifest 启动逻辑传）
-- [ ] backend：把两个新工具注册到 `agent-turn.ts` 的工具列表
-- [ ] backend prompts：`PROJECT_CONVENTIONS` 加 Supabase 章节，告诉 agent 何时该建 project / 怎么用 RLS
-- [ ] 写一个新 skill `supabase-app`（或在 `hono-fullstack` 里加 Supabase 章节），教 agent 怎么用 Supabase Auth + RLS + Client SDK
+- [ ] backend：`services/integration/supabase-client.ts` 扩展 Management API helpers ——
+  - `createSupabaseProject({ userId, name, region, orgId? })`：POST `/v1/projects` + 轮询 `GET /v1/projects/{ref}` 直到 `status === 'ACTIVE_HEALTHY'`（30-60s，超 90s 报错），返回 `{ ref, url }`
+  - `getSupabaseProjectKeys({ userId, projectRef })`：GET `/v1/projects/{ref}/api-keys`，返回 `{ anonKey, serviceRoleKey }`
+  - `runSupabaseSql({ userId, projectRef, query })`：POST `/v1/projects/{ref}/database/query` + OAuth Bearer，返回 rows。**不需要 service-role key**——OAuth scope 含 Database(RW) 就够
+- [ ] DB schema：`conversations` 加 `supabase_url` + `supabase_anon_key` 两列（落在 row 上，sandbox 冷启动注入 env 时不用回查 Management API）
+- [ ] backend：`services/web-tools/supabase-create-project.ts` —— agent 工具，调上述 helper；落 `supabase_project_ref` + `supabase_url` + `supabase_anon_key`；幂等（已有 ref 直接返回）；建完后 kill 当前 dev session，下一次轮询/expose 会触发 bootstrap，新 `.env.local` 被新一轮 Vite 读到
+- [ ] backend：`services/web-tools/supabase-sql.ts` —— agent 工具，调 `runSupabaseSql`；conversation 无 ref 时拒绝并提示 agent 先建 project
+- [ ] backend：`acquireConversationSandbox` 修改 —— 启动 sandbox 时如果 conversation 有 `supabase_url` + `supabase_anon_key`，幂等写 `${workspaceRoot}/.env.local`（含 `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`），再走 `maybeBootstrapDevServer`
+- [ ] backend：把两个新工具注册到 `agent-turn.ts` 的 tools 数组（闭包传 `userId` + `conversationId`）
+- [ ] backend prompts：`PROJECT_CONVENTIONS` 加 Supabase 章节——何时调 `supabase_create_project` / 用 `import.meta.env.VITE_SUPABASE_*` 而非自己写 `.env.local` / 默认开 RLS + `auth.uid()` policy / 不要尝试 expose service-role key
 
-**交付**：在 dev sandbox 里让 agent 造一个"带登录的 todo app"，验证它能自动开 project、建表、写 RLS、生成的 app 在 preview 里能注册账号 + 写数据，数据真的进了用户 Supabase。
+**交付**：在 dev sandbox 里让 agent 造一个"带登录的 todo app"，验证：
+- 自动调 `supabase_create_project` 开 project，60s 内 ready
+- `supabase_sql` 建 `todos` 表 + RLS policy（owner = `auth.uid()`）
+- 生成的 app 在 preview 里能注册账号 + CRUD todo，数据真的进了用户的 Supabase Project
 
 ---
 
-### Day 6 · 2026-05-09（Sat）· Fullstack 部署 + Build-time 注入
+### Day 5.5 · 2026-05-09（Sat）· Database 面板（CRUD Table Editor）
+
+**为什么单列一天**：Day 5 完成后每个 conversation 都对应真实 Supabase project；workspace 右栏 Database tab 直接做成 Studio Table Editor 的 lite 版，让用户在 code-artisan 里就能查 / 改 / 删数据，不用跳 supabase.com。简历叙事更闭环。
+
+**任务**：
+- [ ] backend：`routes/database.ts` —— 把 Management API SQL 端点封装成稳定的内部 API：
+  - `GET /:conversationId/tables`：列 `public` schema 所有表
+  - `GET /:conversationId/tables/:name/columns`：introspect 列定义（走 `information_schema.columns`）
+  - `GET /:conversationId/tables/:name/rows?limit&offset&order`：分页读
+  - `POST /:conversationId/tables/:name/rows`：insert
+  - `PATCH /:conversationId/tables/:name/rows/:pk`：update
+  - `DELETE /:conversationId/tables/:name/rows/:pk`：delete
+  - 全部内部用 `runSupabaseSql` 跑参数化 SQL；conversation 无 ref → 404 + 友好提示
+- [ ] frontend：workspace 右栏 Database tab 实装——表列表 sidebar + 选中后 grid（inline edit / add / delete）+ 列头显示类型 / nullable + Empty state（"This conversation has no Supabase project yet"）
+- [ ] frontend：tab 头加 "Open in Supabase" 跳链兜底（跳到 supabase.com 该 project console）
+
+**交付**：选中一个有 todos 表的 conversation，Database tab 看见 rows、改一行、加一行、删一行，全部走 OAuth Bearer，无服务端 service-role key。
+
+---
+
+### Day 6 · 2026-05-10（Sun）· Fullstack 部署 + Build-time 注入
 
 **任务**：
 - [ ] 修改 `hono-fullstack` skill 模板：
@@ -201,7 +228,7 @@ deployments
 
 ---
 
-### Day 7 · 2026-05-10（Sun）· 端到端测试 + 收尾
+### Day 7 · 2026-05-11/12（Mon/Tue）· 端到端测试 + 收尾
 
 **任务**：
 - [ ] 端到端跑通至少 3 类项目的完整流程：

@@ -79,6 +79,8 @@ export const conversations = pgTable("conversations", {
   deployUrl: text("deploy_url"),
   vercelProjectId: text("vercel_project_id"),
   supabaseProjectRef: text("supabase_project_ref"),
+  supabaseUrl: text("supabase_url"),
+  supabaseAnonKey: text("supabase_anon_key"),
   agentRunning: boolean("agent_running").notNull().default(false),
   settings: jsonb("settings").notNull().default({}),
   // SET NULL: GC'ing a version must not lock the conversation.

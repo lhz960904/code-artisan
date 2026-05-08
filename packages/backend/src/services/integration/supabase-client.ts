@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { env } from "../../env.js";
 import {
   SETTINGS_KEY_SUPABASE_OAUTH,
@@ -199,4 +200,227 @@ export async function getValidSupabaseAccessToken(userId: string): Promise<strin
     await deleteStoredSupabaseToken(userId);
     throw new SupabaseTokenInvalidError();
   }
+}
+
+const PROJECT_POLL_INTERVAL_MS = 3_000;
+const PROJECT_POLL_TIMEOUT_MS = 90_000;
+const DEFAULT_PROJECT_REGION = "us-east-1";
+
+export class SupabaseManagementApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly endpoint: string,
+    public readonly bodyText: string,
+  ) {
+    super(`Supabase Management API ${endpoint} failed (${status}): ${bodyText}`);
+    this.name = "SupabaseManagementApiError";
+  }
+}
+
+export class SupabaseProjectProvisionTimeoutError extends Error {
+  constructor(
+    public readonly projectRef: string,
+    public readonly lastStatus: string,
+  ) {
+    super(
+      `Supabase project ${projectRef} did not reach ACTIVE_HEALTHY within ${PROJECT_POLL_TIMEOUT_MS}ms (last status: ${lastStatus}).`,
+    );
+    this.name = "SupabaseProjectProvisionTimeoutError";
+  }
+}
+
+export class SupabaseProjectInitFailedError extends Error {
+  constructor(public readonly projectRef: string) {
+    super(`Supabase project ${projectRef} reported INIT_FAILED.`);
+    this.name = "SupabaseProjectInitFailedError";
+  }
+}
+
+async function managementFetch(
+  accessToken: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const headers = new Headers(init.headers as HeadersInit | undefined);
+  headers.set("authorization", `Bearer ${accessToken}`);
+  if (init.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  return fetch(`${SUPABASE_API_BASE}${path}`, { ...init, headers });
+}
+
+async function managementJson<T>(
+  accessToken: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const resp = await managementFetch(accessToken, path, init);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new SupabaseManagementApiError(resp.status, path, text);
+  }
+  return (await resp.json()) as T;
+}
+
+export type SupabaseProjectStatus =
+  | "ACTIVE_HEALTHY"
+  | "COMING_UP"
+  | "GOING_DOWN"
+  | "INACTIVE"
+  | "INIT_FAILED"
+  | "PAUSED"
+  | "PAUSING"
+  | "REMOVED"
+  | "RESTARTING"
+  | "RESTORING"
+  | "UPGRADING"
+  | "UNKNOWN"
+  | (string & {});
+
+export interface SupabaseProject {
+  id: string;
+  ref?: string;
+  name: string;
+  organization_id: string;
+  region: string;
+  status: SupabaseProjectStatus;
+  endpoint?: string;
+  database?: { host: string; version: string };
+  created_at?: string;
+}
+
+function projectUrlFromRef(ref: string): string {
+  return `https://${ref}.supabase.co`;
+}
+
+function generateDbPassword(): string {
+  return randomBytes(18).toString("base64url");
+}
+
+export interface CreateSupabaseProjectParams {
+  userId: string;
+  name: string;
+  orgId: string;
+  region?: string;
+}
+
+export interface CreateSupabaseProjectResult {
+  ref: string;
+  url: string;
+  region: string;
+  organizationId: string;
+}
+
+export async function createSupabaseProject(
+  params: CreateSupabaseProjectParams,
+): Promise<CreateSupabaseProjectResult> {
+  const accessToken = await getValidSupabaseAccessToken(params.userId);
+  const region = params.region ?? DEFAULT_PROJECT_REGION;
+  const dbPass = generateDbPassword();
+
+  const created = await managementJson<SupabaseProject>(accessToken, "/v1/projects", {
+    method: "POST",
+    body: JSON.stringify({
+      name: params.name,
+      organization_id: params.orgId,
+      region,
+      db_pass: dbPass,
+    }),
+  });
+
+  const ref = created.ref ?? created.id;
+  await pollUntilProjectHealthy({ userId: params.userId, projectRef: ref });
+
+  return {
+    ref,
+    url: projectUrlFromRef(ref),
+    region,
+    organizationId: params.orgId,
+  };
+}
+
+export interface ProjectRefParams {
+  userId: string;
+  projectRef: string;
+}
+
+export async function getSupabaseProject(params: ProjectRefParams): Promise<SupabaseProject> {
+  const accessToken = await getValidSupabaseAccessToken(params.userId);
+  return managementJson<SupabaseProject>(accessToken, `/v1/projects/${params.projectRef}`);
+}
+
+async function pollUntilProjectHealthy(params: ProjectRefParams): Promise<void> {
+  const startedAt = Date.now();
+  let lastStatus = "UNKNOWN";
+  while (Date.now() - startedAt < PROJECT_POLL_TIMEOUT_MS) {
+    let project: SupabaseProject | null = null;
+    try {
+      project = await getSupabaseProject(params);
+    } catch (err) {
+      // Just-created projects may briefly 404 before they appear in the read API.
+      if (!(err instanceof SupabaseManagementApiError) || err.status !== 404) throw err;
+    }
+    if (project) {
+      lastStatus = project.status;
+      if (project.status === "ACTIVE_HEALTHY") return;
+      if (project.status === "INIT_FAILED") {
+        throw new SupabaseProjectInitFailedError(params.projectRef);
+      }
+    }
+    await new Promise((r) => setTimeout(r, PROJECT_POLL_INTERVAL_MS));
+  }
+  throw new SupabaseProjectProvisionTimeoutError(params.projectRef, lastStatus);
+}
+
+interface SupabaseApiKey {
+  name: string;
+  api_key: string;
+}
+
+export interface SupabaseProjectKeys {
+  anonKey: string;
+  serviceRoleKey: string;
+}
+
+export async function getSupabaseProjectKeys(
+  params: ProjectRefParams,
+): Promise<SupabaseProjectKeys> {
+  const accessToken = await getValidSupabaseAccessToken(params.userId);
+  const keys = await managementJson<SupabaseApiKey[]>(
+    accessToken,
+    `/v1/projects/${params.projectRef}/api-keys`,
+  );
+  const anon = keys.find((k) => k.name === "anon")?.api_key;
+  const serviceRole = keys.find((k) => k.name === "service_role")?.api_key;
+  if (!anon || !serviceRole) {
+    throw new Error(
+      `Supabase project ${params.projectRef} api-keys missing (got: ${keys.map((k) => k.name).join(", ") || "none"}).`,
+    );
+  }
+  return { anonKey: anon, serviceRoleKey: serviceRole };
+}
+
+export interface RunSupabaseSqlParams {
+  userId: string;
+  projectRef: string;
+  query: string;
+}
+
+export type SupabaseSqlRow = Record<string, unknown>;
+
+export async function runSupabaseSql(params: RunSupabaseSqlParams): Promise<SupabaseSqlRow[]> {
+  const accessToken = await getValidSupabaseAccessToken(params.userId);
+  return managementJson<SupabaseSqlRow[]>(
+    accessToken,
+    `/v1/projects/${params.projectRef}/database/query`,
+    {
+      method: "POST",
+      body: JSON.stringify({ query: params.query }),
+    },
+  );
+}
+
+export async function listSupabaseOrganizations(userId: string): Promise<SupabaseOrg[]> {
+  const accessToken = await getValidSupabaseAccessToken(userId);
+  return managementJson<SupabaseOrg[]>(accessToken, "/v1/organizations");
 }
