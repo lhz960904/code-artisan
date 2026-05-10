@@ -33,6 +33,9 @@ function looksBinaryContent(content: string): boolean {
 const IGNORE_FIND_ARGS = [
   ...SANDBOX_IGNORED_DIRS.map((dir) => `-not -path './${dir}/*' -not -path './*/${dir}/*'`),
   "-not -name '*.log'",
+  // Platform-managed local-env files; rewritten on every sandbox acquire from the conversation row.
+  "-not -name '.env.local'",
+  "-not -name '.env.*.local'",
 ].join(" ");
 
 export interface FileTrackerOptions {

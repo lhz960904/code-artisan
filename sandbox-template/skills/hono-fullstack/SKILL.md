@@ -1,15 +1,22 @@
 ---
 name: hono-fullstack
 description: >-
-  Use this skill when the user wants to build a full-stack web app from scratch and has not specified a different stack. Scaffolds a runnable demo project and documents the conventions. Stack: Vite + React + TypeScript + Tailwind v3 + shadcn/ui + TanStack Router + TanStack Query + Zustand (frontend); Hono + Bun (backend, unified dev server via @hono/vite-dev-server).
+  Use this skill ONLY when the app needs a real server layer — calling third-party APIs with hidden keys (LLM, Stripe, OpenAI, payment processors), proxying webhooks, server-side rate limiting, or complex orchestration that can't run safely from the browser. For frontend-only apps (with or without persistence), use `frontend-starter` instead — it's simpler. Stack: Vite + React + TypeScript + Tailwind v3 + shadcn/ui + TanStack Router + TanStack Query + Zustand (frontend); Hono + Bun (backend, unified dev server via @hono/vite-dev-server). Pair with the `supabase` skill for any persistent data — the server stays for server-only work, data goes through frontend-direct Supabase + RLS.
 ---
 
 ## When to use
 
-- User asks to build a full-stack web app / SaaS / landing + API / demo project.
-- User hasn't specified a stack — this is the default recommended stack.
+- App calls a third-party API where the key MUST stay server-side (LLM providers, Stripe, payment gateways, email services with secret keys).
+- App needs server-side webhook handlers (Stripe / GitHub / external service callbacks).
+- App needs server-side rate limiting / IP-based throttling that can't run client-side.
+- App needs complex orchestration (multi-step transactions across external services, server-side LLM streaming proxies).
 
-Do **not** use this skill if the user explicitly asks for Next.js, Remix, SvelteKit, or a non-full-stack project (pure static site, pure CLI, etc.).
+## When NOT to use
+
+- **App is frontend-only** — landing pages, dashboards, todos, content sites, or any data-driven app where the frontend can talk to Supabase directly. Use **`frontend-starter`** instead, paired with the `supabase` skill if the app needs persistence. RLS enforces access control. No server, fewer moving parts, simpler deploy.
+- User explicitly asks for Next.js / Remix / SvelteKit — use that stack instead.
+
+If you're tempted to add a database driver (`pg`, `drizzle-orm`, `prisma`) or a service-role Supabase client to this template's `server/index.ts`, **stop**. That's a sign you should be using `frontend-starter` plus the `supabase` skill instead — RLS handles access control. This template's server is for **server-only secrets and orchestration**, not data CRUD.
 
 ## Workflow
 
@@ -17,8 +24,11 @@ Do **not** use this skill if the user explicitly asks for Next.js, Remix, Svelte
    ```bash
    cp -r /opt/skills/hono-fullstack/template/. .
    ```
-   The template already ships with `.code-artisan/manifest.json` declaring `bun install` + `bun dev` on port **5173**. The platform will pick up this manifest, run install, start the dev server, and expose the preview URL automatically — **do not run `bun install`, `bun dev`, or `expose_port` yourself on the first turn.**
-2. Iterate on the user's actual request (add routes, components, API endpoints, etc.). Vite HMR will reload changes live in the user's preview.
+   The template ships with `.code-artisan/manifest.json` declaring `bun install` + `bun dev` on port **5173**. The platform picks up this manifest, runs install, starts the dev server, and exposes the preview URL automatically — **do not run `bun install`, `bun dev`, or `expose_port` yourself on the first turn.**
+
+2. **If the app also needs persistent data, follow the `supabase` skill's data patterns**: call `supabase_create_project`, define schema + RLS via `supabase_sql`, and read/write from the **frontend** using `import.meta.env.VITE_SUPABASE_*` + `createClient` from `@supabase/supabase-js`. **Do NOT** read or write data from the Hono server using a service-role key — data goes through the browser → Supabase → RLS path. The Hono server stays for server-only work (LLM calls, hidden secrets, third-party API proxying).
+
+3. Iterate on the user's actual request — but only put server-only logic in `server/index.ts`. Vite HMR reloads changes live in the user's preview.
 
 The dev server runs on port **5173 only** — `strictPort` is on. If you ever need to restart it (e.g. after a config change that requires a full restart), `kill_shell` the dev session and start it again yourself with `bash` (`run_in_background: true`, command `bun dev`). Do not change the port.
 
@@ -94,9 +104,15 @@ Do **not** curl the public `*.e2b.app` URL from inside the sandbox — that's th
 
 ## Don'ts
 
+- **Don't add a database driver, ORM, or service-role Supabase client to `server/index.ts`.** Persistent data goes through frontend-direct Supabase + RLS — see the `frontend-starter` and `supabase` skills. The Hono server is only for server-only secrets and orchestration.
+- **Don't use this skill for apps that just need login + persistent data.** Use `frontend-starter` instead — no server needed, simpler deploy. Reach for `hono-fullstack` only when there's genuine server-only work.
 - Don't add Next.js / Remix / SvelteKit or other meta-frameworks — this template intentionally stays as Vite + Hono.
-- Don't add a database unless the user explicitly asks. The demo is intentionally stateless.
 - Don't change the dev server port (5173). It's fixed for preview integration.
 - Don't change the `dev` script in `package.json` — `"dev": "vite"` is load-bearing (see "How the dev server works").
 - Don't rewrite the unified dev server in `server/index.ts` — don't call `serve(...)`, don't dynamically import `vite`, don't build your own request dispatcher.
 - Don't edit files under `/opt/skills/hono-fullstack/template/` — that's the read-only source. Always edit the copied files in the workspace.
+
+## See also
+
+- The `frontend-starter` skill — for frontend-only apps (default for most requests). Pair with `supabase` when persistence is needed.
+- The `supabase` skill — full Supabase data-layer reference (RLS recipes, auth flows, storage, realtime). Pair with this skill when persistence is needed.
