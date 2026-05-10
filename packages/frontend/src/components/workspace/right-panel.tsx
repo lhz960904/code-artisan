@@ -38,7 +38,7 @@ export function RightPanel({ conversationId }: RightPanelProps) {
         <CodeView conversationId={conversationId} />
       </div>
       <div className={cn("absolute inset-0", view === "database" ? "block" : "hidden")}>
-        <DatabasePanel />
+        <DatabasePanel conversationId={conversationId} />
       </div>
     </div>
   );

@@ -13,6 +13,9 @@ export interface ConversationResponse {
   settings: ConversationSettings;
   currentVersionId: string | null;
   previewingVersionId: string | null;
+  supabaseProjectRef: string | null;
+  supabaseUrl: string | null;
+  supabaseAnonKey: string | null;
   createdAt: string;
   updatedAt: string;
   /** Only populated by GET /conversation/:id. List endpoint omits it. */

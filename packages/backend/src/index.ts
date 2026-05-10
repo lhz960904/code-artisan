@@ -17,6 +17,7 @@ import { modelsRouter } from "./routes/models.js";
 import { versionRouter } from "./routes/version.js";
 import { integrationRouter } from "./routes/integration.js";
 import { deploymentRouter } from "./routes/deployment.js";
+import { databaseRouter } from "./routes/database.js";
 
 const app = new Hono();
 
@@ -38,6 +39,7 @@ app.use("/api/*", requireAuth);
 
 app.route("/api/conversation", conversationRouter);
 app.route("/api/conversation", versionRouter);
+app.route("/api/conversation", databaseRouter);
 app.route("/api/message", messageRouter);
 app.route("/api/snapshot", snapshotRouter);
 app.route("/api/attachment", attachmentRouter);

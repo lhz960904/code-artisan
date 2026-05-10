@@ -27,3 +27,10 @@ export {
   type VersionListItem,
   type VersionFile,
 } from "./versions";
+export {
+  databaseKeys,
+  databaseTablesOptions,
+  databaseRowsOptions,
+  type DatabaseTablesResponse,
+  type DatabaseRowsResponse,
+} from "./database";
