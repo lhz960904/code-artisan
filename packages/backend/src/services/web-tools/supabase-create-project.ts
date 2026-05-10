@@ -13,6 +13,7 @@ import {
   SupabaseProjectInitFailedError,
   SupabaseProjectProvisionTimeoutError,
   SupabaseTokenInvalidError,
+  updateSupabaseAuthConfig,
 } from "../integration/supabase-client";
 import { writeSupabaseEnvLocal } from "../integration/sandbox-env";
 
@@ -77,6 +78,17 @@ export function createSupabaseCreateProjectTool(opts: {
           name: input.name,
           orgId: stored.org_id,
           region: input.region,
+        });
+
+        // Auto-confirm signups so signUp returns a session immediately — the
+        // default email-confirm redirect goes to a fixed Site URL that doesn't
+        // exist in throwaway preview sandboxes.
+        await updateSupabaseAuthConfig({
+          userId: opts.userId,
+          projectRef: result.ref,
+          config: { mailer_autoconfirm: true },
+        }).catch((err) => {
+          console.error("[supabase] enable mailer_autoconfirm failed:", err);
         });
 
         const keys = await getSupabaseProjectKeys({

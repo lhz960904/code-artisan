@@ -424,3 +424,20 @@ export async function listSupabaseOrganizations(userId: string): Promise<Supabas
   const accessToken = await getValidSupabaseAccessToken(userId);
   return managementJson<SupabaseOrg[]>(accessToken, "/v1/organizations");
 }
+
+export async function updateSupabaseAuthConfig(params: {
+  userId: string;
+  projectRef: string;
+  config: Record<string, unknown>;
+}): Promise<void> {
+  const accessToken = await getValidSupabaseAccessToken(params.userId);
+  const path = `/v1/projects/${params.projectRef}/config/auth`;
+  const resp = await managementFetch(accessToken, path, {
+    method: "PATCH",
+    body: JSON.stringify(params.config),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw new SupabaseManagementApiError(resp.status, path, text);
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "frontend-starter",
+  "scripts": {
+    "install": "bun install",
+    "dev": {
+      "command": "bun dev",
+      "port": 5173
+    },
+    "build": {
+      "command": "bun run build",
+      "output": "dist"
+    }
+  }
+}

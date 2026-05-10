@@ -18,6 +18,7 @@ import { db } from "../db";
 import { conversations, fileSnapshots, messages, versions } from "../db/schema";
 import { and, eq, notInArray } from "drizzle-orm";
 import { acquireConversationSandbox } from "./conversation-sandbox";
+import { getStoredSupabaseToken } from "./integration/supabase-client";
 import { maybeBootstrapDevServer } from "./dev-server/bootstrap";
 import { randomUUID } from "node:crypto";
 import { buildAgentMessages } from "../utils/message";
@@ -63,11 +64,12 @@ export class AgentTurnService {
   }
 
   async *run(userMessage: UserMessage): AsyncGenerator<WebAgentEvent> {
-    const [userMessageId, resumeMessages, sandboxResult, mcpTools] = await Promise.all([
+    const [userMessageId, resumeMessages, sandboxResult, mcpTools, supabaseConnected] = await Promise.all([
       this._insertMessage(userMessage),
       this._buildAgentMessages(),
       this._setupSandbox(),
       this._setupMcpTools(),
+      this._loadSupabaseConnectionState(),
     ]);
 
     this.currentTurnUserMessageId = userMessageId;
@@ -77,7 +79,13 @@ export class AgentTurnService {
     yield { type: "user_message_saved", messageId: userMessageId };
 
     if (!this.agent) {
-      this.agent = this._buildAgent(resumeMessages, sandboxResult.sandbox, sandboxResult.initialFiles, mcpTools);
+      this.agent = this._buildAgent(
+        resumeMessages,
+        sandboxResult.sandbox,
+        sandboxResult.initialFiles,
+        mcpTools,
+        supabaseConnected,
+      );
     }
 
     // Shared id across this turn's partial + message events.
@@ -133,6 +141,7 @@ export class AgentTurnService {
     sandbox: E2BSandbox,
     initialFiles: Map<string, string> | null,
     mcpTools: FunctionTool[],
+    supabaseConnected: boolean,
   ): Agent {
     const provider = createModelProvider(this.turnOptions.model);
 
@@ -164,25 +173,36 @@ export class AgentTurnService {
 
     const settings = (this.conversation.settings as ConversationSettings | null) ?? {};
 
+    const tools: FunctionTool[] = [
+      createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
+      createBashOutputTool({ manager: getShellSessionManager() }),
+      createKillShellTool({ manager: getShellSessionManager() }),
+      createExposePortTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
+      webSearchTool,
+      webFetchTool,
+      ...mcpTools,
+    ];
+    if (supabaseConnected) {
+      tools.push(
+        createSupabaseCreateProjectTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
+        createSupabaseSqlTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
+      );
+    }
+
     return createAgent({
       model: provider,
       sandbox: sandbox,
-      prompt: buildWebSystemPrompt(settings.systemPrompt),
+      prompt: buildWebSystemPrompt({ supabaseConnected, userSystemPrompt: settings.systemPrompt }),
       initMessages: resumeMessages as NonSystemMessage[],
       middlewares,
-      tools: [
-        createWebBashTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
-        createBashOutputTool({ manager: getShellSessionManager() }),
-        createKillShellTool({ manager: getShellSessionManager() }),
-        createExposePortTool({ conversationId: this.conversation.id, manager: getShellSessionManager() }),
-        createSupabaseCreateProjectTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
-        createSupabaseSqlTool({ userId: this.conversation.userId, conversationId: this.conversation.id }),
-        webSearchTool,
-        webFetchTool,
-        ...mcpTools,
-      ],
+      tools,
       skillsDirs: ["/opt/skills"],
     });
+  }
+
+  private async _loadSupabaseConnectionState(): Promise<boolean> {
+    const stored = await getStoredSupabaseToken(this.conversation.userId);
+    return Boolean(stored?.org_id);
   }
 
   private async _setupSandbox(): Promise<{ sandbox: E2BSandbox; initialFiles: Map<string, string> | null }> {

@@ -40,9 +40,16 @@ The following are managed by the platform — do not modify, rename, or delete:
 
 \`.code-artisan/manifest.json\` is the only file in that directory that is YOURS to write and update — it's the project's declaration of how to install/run/build, and it should be committed to git like any other config.
 
-After editing source files, if the user reports a blank screen or unexpected behaviour, run \`bash_output\` on the dev server session — Vite compile errors (failed imports, syntax errors) print to its stderr but do not surface in the browser preview overlay you can see.
+After editing source files, if the user reports a blank screen or unexpected behaviour, run \`bash_output\` on the dev server session — Vite compile errors (failed imports, syntax errors) print to its stderr but do not surface in the browser preview overlay you can see.`;
 
-When the app needs persistent data, user accounts, file storage, or realtime updates, use the \`supabase\` skill — it walks through provisioning a project under the user's connected org and wiring the client correctly with RLS.`;
+export function buildSupabaseConnectionReminder(connected: boolean): string | null {
+  if (connected) return null;
+  return `# Persistence
+
+The user has NOT connected Supabase to this code-artisan workspace. The Supabase tools (\`supabase_create_project\`, \`supabase_sql\`) and the \`supabase\` skill are unavailable for this run.
+
+If the user requests anything persistence-related (todos, accounts, login, saved settings, posts, file uploads, realtime), do NOT pretend it's persistent. Use in-memory React state (\`useState\` / Zustand) and tell the user up-front, in plain words: data only lives in this preview tab and resets on reload — they can connect Supabase from Settings → Integrations to make it persistent. Do NOT substitute \`localStorage\` for real persistence; it hides the limitation cross-device and is worse than honest in-memory state.`;
+}
 
 export function buildUserInstructionsSection(instructions: string): string {
   return `# User Instructions

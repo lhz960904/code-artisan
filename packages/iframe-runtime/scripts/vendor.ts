@@ -10,6 +10,7 @@ const ARTIFACTS = ["runtime.iife.js", "vite-plugin.js"];
 
 const VENDOR_TARGETS = [
   "sandbox-template/skills/hono-fullstack/template/.code-artisan",
+  "sandbox-template/skills/frontend-starter/template/.code-artisan",
 ];
 
 async function main() {
