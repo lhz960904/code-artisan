@@ -113,30 +113,53 @@ CREATE POLICY "anyone can read" ON posts FOR SELECT USING (true);
 CREATE POLICY "owner can write" ON posts FOR ALL USING (auth.uid() = author_id);
 ```
 
-## Auth — `supabase.auth`
+## Auth
+
+**Default: no auth.** Most demo and personal-project apps don't need login. The user owns the preview tab — their data is theirs. Skip auth entirely, write a single shared dataset with permissive RLS:
+
+```sql
+ALTER TABLE todos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anyone can read"   ON todos FOR SELECT USING (true);
+CREATE POLICY "anyone can insert" ON todos FOR INSERT WITH CHECK (true);
+CREATE POLICY "anyone can update" ON todos FOR UPDATE USING (true);
+CREATE POLICY "anyone can delete" ON todos FOR DELETE USING (true);
+```
+
+No `user_id` column, no `auth.users` reference, no signup form. Use this **unless the user explicitly asks for login / accounts / multi-user / sign up**.
+
+### Login — only when the user explicitly asks
+
+The platform auto-disables email confirmation on every project (`mailer_autoconfirm=true`), so `signUp` returns a session **directly** with no email round-trip:
 
 ```ts
-// Sign up (sends confirmation email by default)
-const { data, error } = await supabase.auth.signUp({ email, password });
+// Sign up — session is returned immediately. Do NOT render "check your email".
+const { error } = await supabase.auth.signUp({ email, password });
+if (error) throw error;
 
-// Sign in
-const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+// Subsequent sessions
+await supabase.auth.signInWithPassword({ email, password });
 
-// Current user (call after session loads)
+// Watch session changes (wire in your app root)
+supabase.auth.onAuthStateChange((event, session) => { /* … */ });
+
+// Current user
 const { data: { user } } = await supabase.auth.getUser();
-
-// Subscribe to session changes — wire this in your app root
-supabase.auth.onAuthStateChange((event, session) => {
-  // update auth store / redirect / etc.
-});
 
 // Sign out
 await supabase.auth.signOut();
 ```
 
-**Demo tip — disable email confirmation.** By default, sign-up requires the user to click a confirmation link sent to their email, which breaks self-contained demos. The user can disable this in Supabase Dashboard → Authentication → Sign In / Up → toggle off "Confirm email". Mention this if the app needs instant sign-up for demoing.
+Pair the login flow with `auth.uid()`-keyed RLS on user-owned tables (see "RLS recipe" below — that variant uses `auth.uid() = user_id`).
 
-For OAuth providers (Google / GitHub), use `supabase.auth.signInWithOAuth({ provider: "google" })` — but that requires the user to configure the provider in their Supabase dashboard, so prefer email/password unless they ask for OAuth.
+If `supabase_create_project` returned a WARNING about email confirmation not being disabled (auth:write OAuth scope missing), pass that message through to the user verbatim and stop — don't try to work around it by removing auth or relaxing RLS.
+
+### OAuth providers
+
+Only when the user explicitly asks for Google / GitHub / etc. They must configure the provider in their Supabase dashboard first; this skill can't do that for them.
+
+```ts
+await supabase.auth.signInWithOAuth({ provider: "google" });
+```
 
 ## File storage
 
@@ -184,6 +207,9 @@ Realtime still respects RLS — users only get events for rows they're allowed t
 
 ## Don'ts
 
+- **Don't render "check your email" UI after signUp.** Email confirmation is auto-disabled on every project this platform provisions; signUp returns a session directly.
+- **Don't mix auth modes.** Pick one: (a) **no auth** → no `user_id` column, permissive `WITH CHECK (true)` RLS — for personal/demo apps; (b) **login** → `user_id uuid REFERENCES auth.users(id)` column + `auth.uid() = user_id` RLS — when the user asked for accounts. Don't add a `user_id` column without auth-keyed RLS, and don't write a login flow without RLS that scopes to it.
+- **Don't bypass auth to "skip email confirmation".** Email confirmation is already auto-disabled. If `supabase_create_project` returned a WARNING that auth:write scope is missing, surface that to the user and stop — do NOT remove auth, hardcode `user_id`, or relax RLS as a workaround.
 - **Don't try to use the service-role key.** It is intentionally not exposed to the sandbox. Anything privileged (DDL, RLS setup, seed data) goes through `supabase_sql` instead — that already runs with full project authority via OAuth Bearer.
 - **Don't write `.env.local` yourself.** The platform owns it; manual edits are overwritten on every sandbox start. Read env via `import.meta.env.VITE_SUPABASE_*` and that's it.
 - **Don't skip RLS.** A table without `ENABLE ROW LEVEL SECURITY` + policies is wide open to the internet. Ship RLS in the same `supabase_sql` call as the `CREATE TABLE`.

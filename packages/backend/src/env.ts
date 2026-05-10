@@ -22,7 +22,6 @@ const envSchema = z.object({
   SUPABASE_OAUTH_CLIENT_ID: z.string().optional(),
   SUPABASE_OAUTH_CLIENT_SECRET: z.string().optional(),
   SUPABASE_OAUTH_REDIRECT_URI: z.url().optional(),
-  SUPABASE_OAUTH_SCOPE: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

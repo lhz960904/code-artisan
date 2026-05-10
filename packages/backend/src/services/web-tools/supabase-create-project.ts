@@ -80,16 +80,22 @@ export function createSupabaseCreateProjectTool(opts: {
           region: input.region,
         });
 
-        // Auto-confirm signups so signUp returns a session immediately — the
-        // default email-confirm redirect goes to a fixed Site URL that doesn't
-        // exist in throwaway preview sandboxes.
-        await updateSupabaseAuthConfig({
-          userId: opts.userId,
-          projectRef: result.ref,
-          config: { mailer_autoconfirm: true },
-        }).catch((err) => {
+        // Auto-confirm signups so signUp returns a session immediately — the default
+        // email-confirm redirect goes to a fixed Site URL that doesn't exist in
+        // throwaway preview sandboxes. PATCH needs auth:write OAuth scope; if the
+        // user's stored token predates that scope being requested, this 401s and
+        // the warning gets surfaced to the agent (and through it, the user).
+        let autoconfirmError: string | null = null;
+        try {
+          await updateSupabaseAuthConfig({
+            userId: opts.userId,
+            projectRef: result.ref,
+            config: { mailer_autoconfirm: true },
+          });
+        } catch (err) {
+          autoconfirmError = err instanceof Error ? err.message : String(err);
           console.error("[supabase] enable mailer_autoconfirm failed:", err);
-        });
+        }
 
         const keys = await getSupabaseProjectKeys({
           userId: opts.userId,
@@ -111,16 +117,33 @@ export function createSupabaseCreateProjectTool(opts: {
           anonKey: keys.anonKey,
         });
 
+        const messageParts = [
+          `Provisioned Supabase project ${result.ref} in ${result.region}.`,
+          `.env.local was written with VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY.`,
+        ];
+        if (autoconfirmError) {
+          messageParts.push(
+            `WARNING: failed to disable email confirmation on this project (${autoconfirmError}).`,
+            `This usually means the user's Supabase OAuth token was issued before the auth:write scope was requested.`,
+            `Tell the user verbatim: "Please go to Settings → Integrations, disconnect Supabase, then reconnect — the new connection will request the auth:write permission needed to disable email confirmation. After reconnecting, ask me to retry."`,
+            `Do NOT work around this by removing auth, hardcoding user_id, or relaxing RLS — those break access control.`,
+          );
+        } else {
+          messageParts.push(
+            `Email confirmation is auto-disabled on this project — signUp returns a session directly, no "check email" step.`,
+          );
+        }
+        messageParts.push(
+          `To activate env, kill the current dev session and restart it with bash(run_in_background: true).`,
+        );
+
         return {
           ref: result.ref,
           url: result.url,
           anon_key: keys.anonKey,
           region: result.region,
           already_existed: false,
-          message:
-            `Provisioned Supabase project ${result.ref} in ${result.region}. ` +
-            `.env.local was written with VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY. ` +
-            `To activate them, kill the current dev session, then start it again with bash(run_in_background: true).`,
+          message: messageParts.join(" "),
         };
       } catch (err) {
         return formatSupabaseToolError("supabase_create_project", err);

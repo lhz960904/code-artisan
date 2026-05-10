@@ -23,6 +23,13 @@ export type SupabaseOAuthToken = {
 const SUPABASE_API_BASE = "https://api.supabase.com";
 const REFRESH_SKEW_MS = 60_000;
 
+// "all" maps to every permission enabled on this OAuth App's Dashboard config —
+// the App config is the source of truth for which scopes we can request. Keep
+// the App's permissions in sync with the endpoints we actually hit:
+// organizations:read, projects:read+write, database:write, secrets:read, auth:write
+// (and storage:read+write if/when we touch buckets via Management API).
+const DEFAULT_OAUTH_SCOPE = "all";
+
 export class SupabaseOAuthNotConfiguredError extends Error {
   constructor() {
     super(
@@ -57,7 +64,6 @@ export function getSupabaseOAuthConfig(): {
     SUPABASE_OAUTH_CLIENT_ID,
     SUPABASE_OAUTH_CLIENT_SECRET,
     SUPABASE_OAUTH_REDIRECT_URI,
-    SUPABASE_OAUTH_SCOPE,
   } = env;
   if (!SUPABASE_OAUTH_CLIENT_ID || !SUPABASE_OAUTH_CLIENT_SECRET || !SUPABASE_OAUTH_REDIRECT_URI) {
     throw new SupabaseOAuthNotConfiguredError();
@@ -66,7 +72,7 @@ export function getSupabaseOAuthConfig(): {
     clientId: SUPABASE_OAUTH_CLIENT_ID,
     clientSecret: SUPABASE_OAUTH_CLIENT_SECRET,
     redirectUri: SUPABASE_OAUTH_REDIRECT_URI,
-    scope: SUPABASE_OAUTH_SCOPE ?? "all",
+    scope: DEFAULT_OAUTH_SCOPE,
   };
 }
 
