@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Database, Loader2 } from "lucide-react";
+import {
+  useIsFetching,
+  useQuery,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Database, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   conversationDetailOptions,
+  databaseKeys,
   databaseRowsOptions,
   databaseTablesOptions,
   supabaseIntegrationOptions,
@@ -80,6 +86,13 @@ function ConnectedDatabase({ conversationId }: { conversationId: string }) {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const tablesQuery = useQuery(databaseTablesOptions(conversationId));
+  const queryClient = useQueryClient();
+  const fetchingCount = useIsFetching({ queryKey: databaseKeys.all(conversationId) });
+  const isRefreshing = fetchingCount > 0;
+
+  const refreshAll = () => {
+    queryClient.invalidateQueries({ queryKey: databaseKeys.all(conversationId) });
+  };
 
   useEffect(() => {
     const tables = tablesQuery.data?.tables;
@@ -95,8 +108,18 @@ function ConnectedDatabase({ conversationId }: { conversationId: string }) {
   return (
     <div className="flex h-full bg-background">
       <aside className="w-60 shrink-0 border-r border-border bg-card">
-        <div className="flex h-9 items-center border-b border-border px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Tables
+        <div className="flex h-9 items-center justify-between border-b border-border pl-3 pr-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <span>Tables</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={refreshAll}
+            disabled={isRefreshing}
+            title="Refresh"
+          >
+            <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+          </Button>
         </div>
         <ScrollArea className="h-[calc(100%-2.25rem)]">
           {tablesQuery.isLoading ? (

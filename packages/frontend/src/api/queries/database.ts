@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 
 export const databaseKeys = {
+  all: (conversationId: string) => ["database", conversationId] as const,
   tables: (conversationId: string) => ["database", conversationId, "tables"] as const,
   rows: (conversationId: string, name: string, limit: number, offset: number) =>
     ["database", conversationId, "tables", name, { limit, offset }] as const,
