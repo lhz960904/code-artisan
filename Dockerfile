@@ -1,5 +1,17 @@
-FROM oven/bun:1 AS build
+FROM node:20-slim AS build
 WORKDIR /app
+
+# Install bun for the backend build step (single binary).
+# pnpm itself runs under Node to avoid Bun's exports-condition resolver
+# matching @better-auth/core's "dev-source" entry → loading src/*.ts whose
+# `import type { DatabaseSync } from "node:sqlite"` Bun 1.3.13 can't resolve.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip ca-certificates \
+    && curl -fsSL https://bun.sh/install | bash \
+    && cp /root/.bun/bin/bun /usr/local/bin/bun \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy workspace config (.npmrc enables hoisted node-linker → small,
 # fast-to-commit Docker layer; pnpm's symlink farm tanks Railway build time)
@@ -12,9 +24,8 @@ COPY packages/frontend/package.json packages/frontend/
 # its package.json for lockfile validity, skip its deps via --filter below
 COPY packages/cli/package.json packages/cli/
 
-# Install pnpm and dependencies (skip cli — saves ~120 packages of ink/react/etc)
-RUN bun install -g pnpm \
-    && pnpm install --frozen-lockfile --filter '!@code-artisan/cli'
+# pnpm install runs under Node (not Bun) — see comment above.
+RUN pnpm install --frozen-lockfile --filter '!@code-artisan/cli'
 
 # Copy source files (agent is workspace dep of shared/backend, exports raw .ts)
 COPY packages/shared/ packages/shared/
@@ -31,7 +42,7 @@ RUN cd packages/shared && pnpm run build
 # Build frontend (vite)
 RUN cd packages/frontend && pnpm run build
 
-# Build backend (bun build)
+# Build backend (bun build — Bun is faster here and matches the runtime stage)
 RUN cd packages/backend && bun run build
 
 # Production stage
