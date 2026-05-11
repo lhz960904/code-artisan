@@ -1,17 +1,18 @@
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 WORKDIR /app
 
 # Install bun for the backend build step (single binary).
-# pnpm itself runs under Node to avoid Bun's exports-condition resolver
-# matching @better-auth/core's "dev-source" entry → loading src/*.ts whose
-# `import type { DatabaseSync } from "node:sqlite"` Bun 1.3.13 can't resolve.
+# Stay on Node 22 (not 20) — pnpm 10+ requires Node 22's node:sqlite for its
+# store index, and pnpm 11+ explicitly requires Node 22.13+. We pin the pnpm
+# version via the root package.json's `packageManager` field; corepack picks
+# it up automatically below.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl unzip ca-certificates \
     && curl -fsSL https://bun.sh/install | bash \
     && cp /root/.bun/bin/bun /usr/local/bin/bun \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable
 
 # Copy workspace config (.npmrc enables hoisted node-linker → small,
 # fast-to-commit Docker layer; pnpm's symlink farm tanks Railway build time)

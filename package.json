@@ -10,6 +10,7 @@
     "test": "pnpm --filter @code-artisan/agent test && pnpm --filter @code-artisan/backend test",
     "sandbox:build": "pnpm --filter @code-artisan/iframe-runtime build && npx @e2b/cli@latest template create code-artisan -p sandbox-template -d e2b.Dockerfile"
   },
+  "packageManager": "pnpm@10.26.2",
   "engines": {
     "node": ">=20"
   },
