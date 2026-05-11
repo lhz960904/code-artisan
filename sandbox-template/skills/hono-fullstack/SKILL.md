@@ -55,9 +55,8 @@ bun dev  →  vite  →  @hono/vite-dev-server plugin  →  server/index.ts
 
 **Preserve these unchanged:**
 
-- `export default { port, fetch: app.fetch }` — the shape `@hono/vite-dev-server` expects for loading your Hono app
-- The `if (typeof Bun !== "undefined") { ... serveStatic ... }` block — production static-asset fallback. Not used in dev, critical in prod.
-- `import { Hono } from "hono"` and `const app = new Hono()`
+- `export default app` — both `@hono/vite-dev-server` (dev) and `api/[[...path]].ts` (prod) load the Hono app from this default export.
+- `import { Hono } from "hono"` and `const app = new Hono()`.
 
 **Add routes by appending** to the existing route list:
 
@@ -69,7 +68,18 @@ app.get("/api/todos", (c) => c.json({ todos }));
 app.post("/api/todos", async (c) => { /* ... */ });
 ```
 
-Do **not** wrap the whole file in `serve({ ... })`, do **not** dynamically `import("vite").createServer()`, do **not** write your own request dispatcher. The plugin handles all of that.
+Do **not** wrap the whole file in `serve({ ... })`, do **not** dynamically `import("vite").createServer()`, do **not** write your own request dispatcher, do **not** add Bun-specific code (`Bun.file`, `typeof Bun !== "undefined"`) — production runs as a Vercel function, not Bun. Static assets are served by Vercel's static layer from Vite's build output.
+
+## How production / deploy works
+
+The template is wired for **Vercel deployment**:
+
+- `vite build` → `dist/` (static assets, served by Vercel's CDN edge)
+- `api/[[...path]].ts` → Vercel function entry that imports `server/index.ts`'s `app` and wraps it with `@hono/vercel`'s `handle(app)`. Every request matching `/api/*` is rewritten to this function (`vercel.json`).
+- `vercel.json` declares the rewrite. Don't change it unless you know what you're doing.
+- The platform's `Publish` button (frontend Popover) drives `npx vercel deploy --prod` against this layout. Supabase env (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) is auto-synced into the Vercel project before each deploy by the platform — you don't manage it manually.
+
+**Don't** edit `api/[[...path]].ts`, `vercel.json`, or the `runtime` config — they're load-bearing for prod. **Don't** add a custom `start` script or self-host with Bun in production.
 
 ## Verifying the backend
 
@@ -110,6 +120,8 @@ Do **not** curl the public `*.e2b.app` URL from inside the sandbox — that's th
 - Don't change the dev server port (5173). It's fixed for preview integration.
 - Don't change the `dev` script in `package.json` — `"dev": "vite"` is load-bearing (see "How the dev server works").
 - Don't rewrite the unified dev server in `server/index.ts` — don't call `serve(...)`, don't dynamically import `vite`, don't build your own request dispatcher.
+- Don't add Bun-specific code (`Bun.file`, `typeof Bun !== "undefined"`, `import("hono/bun")`) to `server/index.ts` — production is Vercel function, not Bun runtime. Bun is only the dev-time JS engine.
+- Don't edit `api/[[...path]].ts` or `vercel.json` — they wire prod deploy. Replace `server/index.ts` content if you want, but keep `export default app` so both dev and prod entries can load it.
 - Don't edit files under `/opt/skills/hono-fullstack/template/` — that's the read-only source. Always edit the copied files in the workspace.
 
 ## See also

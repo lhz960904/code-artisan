@@ -15,23 +15,4 @@ app.get("/api/hello", (c) => {
   return c.json({ message, timestamp: new Date().toISOString() });
 });
 
-if (typeof Bun !== "undefined") {
-  const { serveStatic } = await import("hono/bun");
-  app.use("/assets/*", serveStatic({ root: "./dist/client" }));
-  app.get("*", async () => {
-    const indexHtml = Bun.file("./dist/client/index.html");
-    if (!(await indexHtml.exists())) {
-      return new Response("Not built. Run `bun run build` first.", {
-        status: 503,
-      });
-    }
-    return new Response(indexHtml, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-  });
-}
-
-export default {
-  port: Number(process.env.PORT ?? 5173),
-  fetch: app.fetch,
-};
+export default app;

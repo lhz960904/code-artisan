@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && bun build server/index.ts --outdir dist --target bun",
-    "start": "NODE_ENV=production bun dist/index.js",
+    "build": "vite build",
+    "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hono/vercel": "^0.5.0",
     "@radix-ui/react-slot": "^1.1.2",
     "@tanstack/react-query": "^5.66.0",
     "@tanstack/react-router": "^1.112.0",
@@ -25,7 +26,6 @@
   },
   "devDependencies": {
     "@hono/vite-dev-server": "^0.18.2",
-    "@types/bun": "^1.2.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

@@ -202,6 +202,30 @@ export async function getVercelProject(params: {
   return (await resp.json()) as VercelProject;
 }
 
+export async function upsertVercelProjectEnv(params: {
+  accessToken: string;
+  userId: string;
+  teamId?: string;
+  projectId: string;
+  vars: Array<{ key: string; value: string }>;
+}): Promise<void> {
+  if (params.vars.length === 0) return;
+  const query = new URLSearchParams({ upsert: "true" });
+  if (params.teamId) query.set("teamId", params.teamId);
+  const body = params.vars.map((v) => ({
+    key: v.key,
+    value: v.value,
+    type: "encrypted" as const,
+    target: ["production", "preview"] as const,
+  }));
+  await vercelFetch(`/v10/projects/${params.projectId}/env?${query}`, params.accessToken, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    userId: params.userId,
+  });
+}
+
 export async function getStoredVercelToken(userId: string): Promise<VercelOAuthToken | null> {
   return readEncryptedSetting<VercelOAuthToken>(userId, SETTINGS_KEY_VERCEL_OAUTH);
 }

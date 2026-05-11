@@ -9,6 +9,7 @@ import {
   createVercelProject,
   getStoredVercelToken,
   getVercelProject,
+  upsertVercelProjectEnv,
 } from "../integration/vercel-client.js";
 
 export type DeploymentRow = typeof deployments.$inferSelect;
@@ -63,6 +64,20 @@ export async function* deployConversation(params: {
   try {
     const projectId = await ensureVercelProject({ conversation: conv, token, userId });
     const orgId = token.team_id ?? token.user_id;
+
+    if (conv.supabaseUrl && conv.supabaseAnonKey) {
+      yield* setStatus(row.id, "pending", "Syncing Supabase env to Vercel project…");
+      await upsertVercelProjectEnv({
+        accessToken: token.access_token,
+        userId,
+        teamId: token.team_id,
+        projectId,
+        vars: [
+          { key: "VITE_SUPABASE_URL", value: conv.supabaseUrl },
+          { key: "VITE_SUPABASE_ANON_KEY", value: conv.supabaseAnonKey },
+        ],
+      });
+    }
 
     const { sandbox } = await acquireConversationSandbox(conversationId, conv.sandboxId);
 

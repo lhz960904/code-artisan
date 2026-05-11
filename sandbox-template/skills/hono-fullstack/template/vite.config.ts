@@ -27,7 +27,7 @@ export default defineConfig({
     allowedHosts: [".e2b.app"],
   },
   build: {
-    outDir: "dist/client",
+    outDir: "dist",
     emptyOutDir: true,
   },
 });
