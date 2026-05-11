@@ -1,13 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useIsFetching,
   useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query";
+import {
+  type ColumnDef,
+  type ColumnSizingState,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
 import { ChevronLeft, ChevronRight, Database, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   conversationDetailOptions,
   databaseKeys,
@@ -186,10 +200,36 @@ function TableView({ conversationId, tableName, offset, onOffsetChange }: TableV
     databaseRowsOptions(conversationId, tableName, { limit: PAGE_SIZE, offset }),
   );
   const rows = rowsQuery.data?.rows ?? [];
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+  // Memo on the keys signature so column refs only break when shape changes,
+  // not when rows reload. Keeps width state stable across pagination.
+  const columnKeysStr = rows.length > 0 ? Object.keys(rows[0]).join("|") : "";
+  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
+    if (!columnKeysStr) return [];
+    return columnKeysStr.split("|").map((key) => ({
+      id: key,
+      accessorKey: key,
+      header: key,
+    }));
+  }, [columnKeysStr]);
+
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  useEffect(() => {
+    setColumnSizing({});
+  }, [tableName]);
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    state: { columnSizing },
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: "onChange",
+    defaultColumn: { size: 200, minSize: 60, maxSize: 800 },
+    getCoreRowModel: getCoreRowModel(),
+  });
+
   const canPrev = offset > 0;
-  // We don't COUNT(*) — too expensive on large tables. If this page is full, assume
-  // there might be more; if it's short, we know we hit the end.
+  // No COUNT(*) — too expensive on large tables. Page full → maybe more; short → end.
   const canNext = rows.length === PAGE_SIZE;
 
   return (
@@ -237,40 +277,54 @@ function TableView({ conversationId, tableName, offset, onOffsetChange }: TableV
         ) : rows.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">No rows.</div>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-card text-muted-foreground">
-              <tr>
-                {columns.map((col) => (
-                  <th
-                    key={col}
-                    className="border-b border-border px-3 py-2 text-left font-mono font-medium"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="font-mono">
-              {rows.map((row, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-border/50 last:border-0 hover:bg-muted/30"
-                >
-                  {columns.map((col) => {
-                    const display = formatCell(row[col]);
+          <table
+            className="text-xs"
+            style={{ width: table.getTotalSize(), tableLayout: "fixed" }}
+          >
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              {table.getHeaderGroups().map((hg) => (
+                <TableRow key={hg.id} className="hover:bg-transparent">
+                  {hg.headers.map((header) => (
+                    <TableHead
+                      key={header.id}
+                      style={{ width: header.getSize() }}
+                      className="relative h-8 px-3 font-mono text-xs uppercase tracking-wide text-muted-foreground"
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={cn(
+                          "absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none transition-colors",
+                          header.column.getIsResizing()
+                            ? "bg-primary"
+                            : "bg-transparent hover:bg-border",
+                        )}
+                      />
+                    </TableHead>
+                  ))}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody className="font-mono">
+              {table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => {
+                    const display = formatCell(cell.getValue());
                     return (
-                      <td
-                        key={col}
-                        className="max-w-[20rem] truncate px-3 py-1.5 align-top"
+                      <TableCell
+                        key={cell.id}
+                        style={{ width: cell.column.getSize() }}
+                        className="truncate px-3 align-top"
                         title={display}
                       >
                         {display}
-                      </td>
+                      </TableCell>
                     );
                   })}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
+            </TableBody>
           </table>
         )}
       </ScrollArea>
