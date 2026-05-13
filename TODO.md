@@ -2,19 +2,12 @@
 
 ## P1
 
-- [ ] 部署能力(集成 Vercel) —— Day 1-6 已通；详见 `docs/publish-design.md`
-  - [x] OAuth + AES-GCM token 存储 + Settings UI（Day 1）
-  - [x] Vercel project 自动创建 + `vercel deploy` SSE 流式 + Publish popover（Day 2-3）
-  - [x] Fullstack 项目部署：`@hono/vercel` adapter + vercel.json + Supabase env 自动同步到 Vercel project（Day 6）
-  - [ ] E2E 手测：frontend-starter / frontend-starter+Supabase / hono-fullstack 三条路径都能 deploy 出可用 URL
-  - [ ] Prod 部署 onboarding：Railway env vars 补齐 + Vercel/Supabase OAuth Redirect URL 切到 prod 域名（Day 7）
 - [ ] 分享/开放功能 + dashboard 内容丰富
-- [x] 版本控制（preview / restore / chip / banner 全链路；事件化 restore + active chain AI 上下文裁剪）
-- [x] DB 能力（Supabase BYO OAuth + `supabase_create_project` / `supabase_sql` agent tools + sandbox `.env.local` 注入 + `supabase` skill；scope hardcoded `all`，autoconfirm 自动开）—— Day 4-5
-- [x] DB 面板（3 态：未连 OAuth / 未 provision project / 正常；左 sidebar 表列表 + 主区 TanStack Table 列宽拖拽 + 翻页 + 手动刷新）—— Day 5.5
-- [ ] `supabase_create_project` 加 health check：当 conversation 的 `supabaseProjectRef` 已存在但项目被用户在 Supabase Dashboard 手动删了（410/REMOVED），清掉字段并重建，避免 stale ref 导致 deploy 后 CORS 假象
-- [ ] i18n 框架（消息组件文案 Thinking/Thought、文件 chip 等）
-- [ ] Custom Rules（用户自定义 system prompt 规则, Agents.md）
+  - [ ] DB migration + share/unshare API + 顶栏 Share popover
+  - [ ] Public DTO + public API + `/s/$slug` 路由骨架
+  - [ ] workspace 组件加 `readOnly` 模式（消息/文件/预览适配，版本面板隐藏）
+  - [ ] tool_use 默认折叠 + iframe 失败兜底 banner
+  - [ ] 联调 + 真实分享自己项目验证（隐身窗口走完整流程）
 
 ## P2
 
