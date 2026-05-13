@@ -17,13 +17,7 @@ import type { Env } from "../../config/env.schema.js";
                   options: { singleLine: true, translateTime: "SYS:HH:MM:ss" },
                 }
               : undefined,
-          redact: [
-            "req.headers.cookie",
-            "req.headers.authorization",
-            "*.password",
-            "*.token",
-            "*.secret",
-          ],
+          redact: ["req.headers.cookie", "req.headers.authorization", "*.password", "*.token", "*.secret"],
           autoLogging: { ignore: (req) => req.url === "/api/health" },
           // Placeholder for OTel traceId injection — populated when tracing module lands.
           customProps: () => ({}),

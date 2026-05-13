@@ -4,6 +4,7 @@ import { FastifyAdapter, type NestFastifyApplication } from "@nestjs/platform-fa
 import { Logger as PinoLogger } from "nestjs-pino";
 import { AppModule } from "./app.module.js";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter.js";
+import { ResponseTransformInterceptor } from "./common/interceptors/response-transform.interceptor.js";
 import { ENV } from "./config/config.module.js";
 import type { Env } from "./config/env.schema.js";
 
@@ -12,6 +13,7 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(PinoLogger));
+  app.useGlobalInterceptors(new ResponseTransformInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableShutdownHooks();
 
