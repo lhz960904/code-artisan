@@ -18,6 +18,7 @@ import { versionRouter } from "./routes/version.js";
 import { integrationRouter } from "./routes/integration.js";
 import { deploymentRouter } from "./routes/deployment.js";
 import { databaseRouter } from "./routes/database.js";
+import { publicRouter } from "./routes/public.js";
 
 const app = new Hono();
 
@@ -33,6 +34,8 @@ app.all("/api/auth/*", (c) => auth.handler(c.req.raw));
 app.route("/api/conversation-ws", conversationWsRouter);
 // Public: static model catalog (user-tier filtering will add optional session lookup later).
 app.route("/api/models", modelsRouter);
+// Public: share-link read-only access (no session required).
+app.route("/api/public", publicRouter);
 
 // Everything below requires an authenticated session.
 app.use("/api/*", requireAuth);

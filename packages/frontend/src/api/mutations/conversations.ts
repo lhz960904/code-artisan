@@ -8,6 +8,11 @@ export interface ConversationUpdatePayload {
   settings?: Partial<ConversationSettings>;
 }
 
+export interface ConversationShareResponse {
+  shareSlug: string | null;
+  sharedAt: string | null;
+}
+
 const conversationsApi = {
   create: (title?: string) =>
     apiFetch<ConversationResponse>("/conversation", {
@@ -20,6 +25,10 @@ const conversationsApi = {
       body: JSON.stringify(updates),
     }),
   delete: (id: string) => apiFetch<void>(`/conversation/${id}`, { method: "DELETE" }),
+  share: (id: string) =>
+    apiFetch<ConversationShareResponse>(`/conversation/${id}/share`, { method: "POST" }),
+  unshare: (id: string) =>
+    apiFetch<ConversationShareResponse>(`/conversation/${id}/share`, { method: "DELETE" }),
 };
 
 export function useConversationCreate() {
@@ -71,6 +80,42 @@ export function useConversationUpdate() {
     onSettled: (_data, _err, variables) => {
       void queryClient.invalidateQueries({ queryKey: conversationKeys.all() });
       void queryClient.invalidateQueries({ queryKey: conversationKeys.detail(variables.id) });
+    },
+  });
+}
+
+export function useShareConversation(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => conversationsApi.share(id),
+    onSuccess: (data) => {
+      const previous = queryClient.getQueryData<ConversationResponse>(conversationKeys.detail(id));
+      if (previous) {
+        queryClient.setQueryData<ConversationResponse>(conversationKeys.detail(id), {
+          ...previous,
+          shareSlug: data.shareSlug,
+          sharedAt: data.sharedAt,
+        });
+      }
+    },
+  });
+}
+
+export function useUnshareConversation(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => conversationsApi.unshare(id),
+    onSuccess: () => {
+      const previous = queryClient.getQueryData<ConversationResponse>(conversationKeys.detail(id));
+      if (previous) {
+        queryClient.setQueryData<ConversationResponse>(conversationKeys.detail(id), {
+          ...previous,
+          shareSlug: null,
+          sharedAt: null,
+        });
+      }
     },
   });
 }

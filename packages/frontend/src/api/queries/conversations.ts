@@ -16,6 +16,8 @@ export interface ConversationResponse {
   supabaseProjectRef: string | null;
   supabaseUrl: string | null;
   supabaseAnonKey: string | null;
+  shareSlug: string | null;
+  sharedAt: string | null;
   createdAt: string;
   updatedAt: string;
   /** Only populated by GET /conversation/:id. List endpoint omits it. */

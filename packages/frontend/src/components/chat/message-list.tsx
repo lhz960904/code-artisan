@@ -88,6 +88,29 @@ export function MessageList({ messages, status, conversationId }: MessageListPro
   );
 }
 
+// Pure render of a fixed message list — no queries, no version chips, no
+// streaming indicator. Used by the share viewer.
+export function StaticMessageView({ messages }: { messages: StoredMessage[] }) {
+  const chunks = useMemo(() => buildChunks(messages, { streamingMessageId: null }), [messages]);
+  return (
+    <div className="space-y-4">
+      {chunks.map((chunk) => (
+        <ChunkRenderer
+          key={chunk.key}
+          chunk={chunk}
+          isLive={false}
+          onPreviewVersion={noop}
+          onRestoreVersion={noop}
+          isPreviewPending={false}
+          isRestorePending={false}
+        />
+      ))}
+    </div>
+  );
+}
+
+const noop = () => {};
+
 function ChunkRenderer({
   chunk,
   isLive,

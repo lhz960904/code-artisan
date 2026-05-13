@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AccountMenu } from "@/components/account/account-menu";
 import { PublishPopover } from "./publish-popover";
+import { SharePopover } from "./share-popover";
 
 interface HeaderProps {
   conversationId: string;
@@ -35,6 +36,7 @@ export function Header({ conversationId }: HeaderProps) {
       <div className="flex items-center gap-3">
         <VersionPicker conversationId={conversationId} />
         <PublishPopover conversationId={conversationId} />
+        <SharePopover conversationId={conversationId} />
         <TokenBalance remaining={quota.remaining} />
         <UserAvatar conversationId={conversationId} />
       </div>

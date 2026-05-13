@@ -2,6 +2,9 @@ export {
   useConversationCreate,
   useConversationDelete,
   useConversationUpdate,
+  useShareConversation,
+  useUnshareConversation,
+  type ConversationShareResponse,
 } from "./conversations";
 export {
   useInstallMcpServer,

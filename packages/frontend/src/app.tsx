@@ -9,6 +9,7 @@ import { oauthReturnRoute } from "@/pages/oauth-return";
 import { pricingRoute } from "@/pages/pricing";
 import { authedRoute } from "@/pages/layout/authed";
 import { rootRoute } from "@/pages/layout/root";
+import { shareRoute } from "@/pages/share";
 import { dashboardRoute } from "./pages/dashboard";
 
 // appShellRoute.addChildren([mcpServersRoute])
@@ -19,6 +20,7 @@ const routeTree = rootRoute.addChildren([
   pricingRoute,
   oauthReturnRoute,
   debugMessagesRoute,
+  shareRoute,
   authedRoute.addChildren([dashboardRoute, chatRoute]),
 ]);
 
