@@ -1,0 +1,30 @@
+{
+  "name": "@code-artisan/backend-nest",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch --env-file=../../.env src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "bun dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@code-artisan/shared": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-fastify": "^11.0.0",
+    "fastify": "^5.0.0",
+    "nestjs-pino": "^4.3.0",
+    "pino-http": "^10.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.0.0",
+    "pino-pretty": "^11.0.0",
+    "typescript": "^5.7.0"
+  }
+}
