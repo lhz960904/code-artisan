@@ -13,6 +13,7 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(PinoLogger));
+  app.setGlobalPrefix("api");
   app.useGlobalInterceptors(new ResponseTransformInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableShutdownHooks();
