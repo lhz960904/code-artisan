@@ -1,7 +1,7 @@
 import { Global, Inject, Module, type OnApplicationShutdown } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres, { type Sql } from "postgres";
-import { ENV } from "../config/config.module.js";
 import type { Env } from "../config/env.schema.js";
 import * as schema from "./schema.js";
 import { DRIZZLE, type DrizzleDB } from "./db.token.js";
@@ -13,8 +13,9 @@ const POSTGRES_CLIENT = Symbol("POSTGRES_CLIENT");
   providers: [
     {
       provide: POSTGRES_CLIENT,
-      inject: [ENV],
-      useFactory: (env: Env): Sql => postgres(env.DATABASE_URL),
+      inject: [ConfigService],
+      useFactory: (cfg: ConfigService<Env, true>): Sql =>
+        postgres(cfg.get("DATABASE_URL", { infer: true })),
     },
     {
       provide: DRIZZLE,

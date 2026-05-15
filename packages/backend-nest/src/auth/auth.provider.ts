@@ -1,24 +1,29 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import type { Env } from "../config/env.schema.js";
 import type { DrizzleDB } from "../db/db.token.js";
 import { account, session, user, userQuotas, verification } from "../db/schema.js";
 
 export const AUTH = Symbol("AUTH");
 
-export function createAuth(env: Env, db: DrizzleDB) {
+export interface AuthConfig {
+  secret: string;
+  baseURL: string;
+  github: { clientId: string; clientSecret: string };
+}
+
+export function createAuth(config: AuthConfig, db: DrizzleDB) {
   return betterAuth({
-    secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: [env.BETTER_AUTH_URL],
+    secret: config.secret,
+    baseURL: config.baseURL,
+    trustedOrigins: [config.baseURL],
     database: drizzleAdapter(db, {
       provider: "pg",
       schema: { user, session, account, verification },
     }),
     socialProviders: {
       github: {
-        clientId: env.GITHUB_CLIENT_ID,
-        clientSecret: env.GITHUB_CLIENT_SECRET,
+        clientId: config.github.clientId,
+        clientSecret: config.github.clientSecret,
       },
     },
     emailAndPassword: { enabled: false },
