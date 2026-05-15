@@ -5,8 +5,10 @@ import {
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import type { FastifyRequest } from "fastify";
 import { AUTH, type Auth, type AuthSession, type AuthUser } from "./auth.provider.js";
+import { IS_PUBLIC_KEY } from "./public.decorator.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -17,9 +19,18 @@ declare module "fastify" {
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(@Inject(AUTH) private readonly auth: Auth) {}
+  constructor(
+    @Inject(AUTH) private readonly auth: Auth,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     const req = context.switchToHttp().getRequest<FastifyRequest>();
     const headers = toFetchHeaders(req.headers);
     const result = await this.auth.api.getSession({ headers });

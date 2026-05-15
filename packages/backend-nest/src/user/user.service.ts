@@ -1,17 +1,15 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { eq } from "drizzle-orm";
-import { DRIZZLE, type DrizzleDB } from "../db/db.token.js";
-import { userQuotas } from "../db/schema.js";
+import { Injectable } from "@nestjs/common";
+import { UserRepository } from "./user.repository.js";
 
 const DEFAULT_TOTAL_TOKENS = 1_000_000;
 
 @Injectable()
 export class UserService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(private readonly userRepo: UserRepository) {}
 
   async getQuota(userId: string) {
-    const [row] = await this.db.select().from(userQuotas).where(eq(userQuotas.userId, userId));
-    if (!row) {
+    const quota = await this.userRepo.findQuotaByUserId(userId);
+    if (!quota) {
       return {
         totalTokens: DEFAULT_TOTAL_TOKENS,
         usedTokens: 0,
@@ -19,9 +17,9 @@ export class UserService {
       };
     }
     return {
-      totalTokens: row.totalTokens,
-      usedTokens: row.usedTokens,
-      remaining: row.totalTokens - row.usedTokens,
+      totalTokens: quota.totalTokens,
+      usedTokens: quota.usedTokens,
+      remaining: quota.totalTokens - quota.usedTokens,
     };
   }
 }

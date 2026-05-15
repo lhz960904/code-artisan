@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
-import { McpRegistryService } from "./mcp-registry.service.js";
+import { McpCatalogService } from "./mcp-catalog.service.js";
 
 @Module({
-  providers: [McpRegistryService],
-  exports: [McpRegistryService],
+  providers: [McpCatalogService],
+  exports: [McpCatalogService],
 })
 export class McpModule {}
