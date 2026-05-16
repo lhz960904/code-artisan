@@ -8,5 +8,8 @@ import { SnapshotService } from "./snapshot.service.js";
   imports: [ConversationModule],
   controllers: [SnapshotController],
   providers: [SnapshotService, SnapshotRepository],
+  // Repo exported for unauthenticated consumers (e.g. public share viewer)
+  // that need the same data primitive without the ownership-check layer.
+  exports: [SnapshotRepository],
 })
 export class SnapshotModule {}

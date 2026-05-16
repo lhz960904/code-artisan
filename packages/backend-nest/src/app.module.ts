@@ -8,8 +8,10 @@ import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe.js";
 import { ConfigModule } from "./config/config.module.js";
 import { ConversationModule } from "./conversation/conversation.module.js";
 import { DatabaseModule } from "./db/db.module.js";
+import { MessageModule } from "./message/message.module.js";
 import { ModelsModule } from "./models/models.module.js";
 import { LoggerModule } from "./observability/logger/logger.module.js";
+import { PublicModule } from "./public/public.module.js";
 import { SettingModule } from "./setting/setting.module.js";
 import { SnapshotModule } from "./snapshot/snapshot.module.js";
 import { UserModule } from "./user/user.module.js";
@@ -24,7 +26,9 @@ import { UserModule } from "./user/user.module.js";
     ModelsModule,
     SettingModule,
     ConversationModule,
+    MessageModule,
     SnapshotModule,
+    PublicModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

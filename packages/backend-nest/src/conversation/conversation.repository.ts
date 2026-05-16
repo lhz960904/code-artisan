@@ -42,6 +42,23 @@ export class ConversationRepository {
     return row ?? null;
   }
 
+  // Safe DTO projection — share viewer is unauthenticated, must not leak
+  // userId, sandbox state, integration tokens, or version pointers.
+  async findShareableBySlug(slug: string) {
+    const [row] = await this.db
+      .select({
+        id: conversations.id,
+        title: conversations.title,
+        deployUrl: conversations.deployUrl,
+        sharedAt: conversations.sharedAt,
+        createdAt: conversations.createdAt,
+      })
+      .from(conversations)
+      .where(eq(conversations.shareSlug, slug));
+    if (!row || !row.deployUrl) return null;
+    return row;
+  }
+
   async updateOwned(userId: string, id: string, patch: ConversationUpdatePatch) {
     const [row] = await this.db
       .update(conversations)

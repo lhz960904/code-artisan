@@ -36,6 +36,13 @@ export class ConversationService {
     return row;
   }
 
+  // Unauthenticated share viewer lookup; returns safe-DTO row or throws 404.
+  async findShareableBySlug(slug: string) {
+    const row = await this.conversationRepo.findShareableBySlug(slug);
+    if (!row) throw new NotFoundException("Share not found");
+    return row;
+  }
+
   async update(userId: string, id: string, input: UpdateConversationInput) {
     const existing = await this.requireOwned(userId, id);
     const nextSettings = input.settings
