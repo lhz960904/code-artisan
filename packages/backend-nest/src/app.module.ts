@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { AgentRunnerModule } from "./agent-runner/agent-runner.module.js";
 import { AttachmentModule } from "./attachment/attachment.module.js";
 import { AuthGuard } from "./auth/auth.guard.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -16,7 +17,9 @@ import { MessageModule } from "./message/message.module.js";
 import { ModelsModule } from "./models/models.module.js";
 import { LoggerModule } from "./observability/logger/logger.module.js";
 import { PublicModule } from "./public/public.module.js";
+import { SandboxModule } from "./sandbox/sandbox.module.js";
 import { SettingModule } from "./setting/setting.module.js";
+import { ShellSessionModule } from "./shell-session/shell-session.module.js";
 import { SnapshotModule } from "./snapshot/snapshot.module.js";
 import { UserModule } from "./user/user.module.js";
 import { VersionModule } from "./version/version.module.js";
@@ -39,6 +42,9 @@ import { VersionModule } from "./version/version.module.js";
     IntegrationModule,
     DatabaseModule,
     DeploymentModule,
+    SandboxModule,
+    ShellSessionModule,
+    AgentRunnerModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

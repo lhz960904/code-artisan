@@ -1,0 +1,199 @@
+import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+import type { E2BSandbox } from "../sandbox/e2b-sandbox.js";
+import { ShellSession } from "./shell-session.js";
+import type {
+  SessionListener,
+  SessionMeta,
+  SessionOwner,
+  TailResult,
+  Unsubscribe,
+} from "./types.js";
+
+const DEFAULT_BUFFER_BYTES = 64 * 1024;
+const DEFAULT_SHELL_COMMAND = "bash -l";
+
+export interface CreateSessionOptions {
+  conversationId: string;
+  sandbox: E2BSandbox;
+  owner: SessionOwner;
+  // Omit for an interactive shell (`bash -l`); pass a command for a one-shot.
+  command?: string;
+  cols: number;
+  rows: number;
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export type ConversationEvent =
+  | { kind: "session_started"; meta: SessionMeta }
+  | { kind: "session_ended"; sessionId: string; exitCode: number }
+  | { kind: "preview_updated"; preview: PreviewState | null };
+
+export type ConversationListener = (event: ConversationEvent) => void;
+
+// Stored under the sandbox id, not the conversation id, so the URL lives
+// exactly as long as the sandbox does — survives page reloads, dies whenever
+// the sandbox is evicted/expired.
+export interface PreviewState {
+  url: string;
+  port: number;
+  // Owning shell session — preview auto-clears when this session ends.
+  sessionId?: string;
+}
+
+@Injectable()
+export class ShellSessionManagerService {
+  private readonly logger = new Logger(ShellSessionManagerService.name);
+  private readonly sessions = new Map<string, ShellSession>();
+  private readonly byConversation = new Map<string, Set<string>>();
+  private readonly conversationListeners = new Map<string, Set<ConversationListener>>();
+  private readonly previews = new Map<string, PreviewState>();
+
+  async create(opts: CreateSessionOptions): Promise<ShellSession> {
+    const id = randomUUID();
+    const command = opts.command ?? DEFAULT_SHELL_COMMAND;
+    const sandboxId = opts.sandbox.sandboxId;
+
+    let session: ShellSession | null = null;
+
+    const pty = await opts.sandbox.pty.create({
+      cols: opts.cols,
+      rows: opts.rows,
+      cwd: opts.cwd,
+      env: opts.env,
+      onData: (chunk) => session?.onData(chunk),
+      onExit: (exitCode) => {
+        if (!session) return;
+        session.onExit(exitCode);
+        this.emitConversation(session.conversationId, {
+          kind: "session_ended",
+          sessionId: session.id,
+          exitCode,
+        });
+        const preview = this.previews.get(sandboxId);
+        if (preview?.sessionId === session.id) {
+          this.clearPreview(sandboxId, session.conversationId);
+        }
+        this.remove(session.conversationId, session.id);
+      },
+    });
+
+    // For `command`-mode sessions the user isn't typing — pipe it into the PTY
+    // so the shell runs it then exits. Interactive sessions land at the prompt.
+    const isInteractive = opts.command === undefined;
+
+    session = new ShellSession({
+      id,
+      conversationId: opts.conversationId,
+      command,
+      owner: opts.owner,
+      cwd: opts.cwd,
+      cols: opts.cols,
+      rows: opts.rows,
+      pty,
+      bufferCapacityBytes: DEFAULT_BUFFER_BYTES,
+    });
+
+    this.sessions.set(id, session);
+    let ids = this.byConversation.get(opts.conversationId);
+    if (!ids) {
+      ids = new Set();
+      this.byConversation.set(opts.conversationId, ids);
+    }
+    ids.add(id);
+
+    if (!isInteractive) {
+      void pty.sendInput(`${command}\n`).catch((err) => {
+        this.logger.error(`sendInput initial command failed: ${err instanceof Error ? err.message : err}`);
+      });
+    }
+
+    this.emitConversation(opts.conversationId, { kind: "session_started", meta: session.meta() });
+    return session;
+  }
+
+  subscribeConversation(conversationId: string, listener: ConversationListener): Unsubscribe {
+    let set = this.conversationListeners.get(conversationId);
+    if (!set) {
+      set = new Set();
+      this.conversationListeners.set(conversationId, set);
+    }
+    set.add(listener);
+    return () => {
+      const current = this.conversationListeners.get(conversationId);
+      if (!current) return;
+      current.delete(listener);
+      if (current.size === 0) this.conversationListeners.delete(conversationId);
+    };
+  }
+
+  private emitConversation(conversationId: string, event: ConversationEvent): void {
+    const listeners = this.conversationListeners.get(conversationId);
+    if (!listeners) return;
+    for (const listener of listeners) listener(event);
+  }
+
+  get(sessionId: string): ShellSession | null {
+    return this.sessions.get(sessionId) ?? null;
+  }
+
+  list(conversationId: string): SessionMeta[] {
+    const ids = this.byConversation.get(conversationId);
+    if (!ids) return [];
+    return Array.from(ids)
+      .map((id) => this.sessions.get(id)?.meta())
+      .filter((m): m is SessionMeta => !!m);
+  }
+
+  readTail(sessionId: string, sinceOffset?: number, maxBytes?: number): TailResult | null {
+    return this.sessions.get(sessionId)?.readTail(sinceOffset, maxBytes) ?? null;
+  }
+
+  async sendInput(sessionId: string, data: string): Promise<void> {
+    await this.sessions.get(sessionId)?.sendInput(data);
+  }
+
+  async resize(sessionId: string, cols: number, rows: number): Promise<void> {
+    await this.sessions.get(sessionId)?.resize(cols, rows);
+  }
+
+  async kill(sessionId: string): Promise<void> {
+    await this.sessions.get(sessionId)?.kill();
+  }
+
+  subscribe(sessionId: string, listener: SessionListener): Unsubscribe {
+    const session = this.sessions.get(sessionId);
+    if (!session) return () => undefined;
+    return session.subscribe(listener);
+  }
+
+  // Evict a session from the maps (called on PTY exit). Public so the WS
+  // gateway can force-remove a zombie.
+  remove(conversationId: string, sessionId: string): void {
+    this.sessions.delete(sessionId);
+    const ids = this.byConversation.get(conversationId);
+    if (!ids) return;
+    ids.delete(sessionId);
+    if (ids.size === 0) this.byConversation.delete(conversationId);
+  }
+
+  // ---- Preview ----
+  // Keyed by sandboxId — preview lives as long as the sandbox does. Changes
+  // are broadcast as `preview_updated` events on the owning conversation's
+  // listener channel so the frontend preview panel updates in real time.
+
+  setPreview(sandboxId: string, conversationId: string, state: PreviewState): void {
+    this.previews.set(sandboxId, state);
+    this.emitConversation(conversationId, { kind: "preview_updated", preview: state });
+  }
+
+  clearPreview(sandboxId: string, conversationId: string): void {
+    this.previews.delete(sandboxId);
+    this.emitConversation(conversationId, { kind: "preview_updated", preview: null });
+  }
+
+  getPreview(sandboxId: string): PreviewState | null {
+    return this.previews.get(sandboxId) ?? null;
+  }
+}
