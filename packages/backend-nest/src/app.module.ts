@@ -9,6 +9,7 @@ import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe.js";
 import { ConfigModule } from "./config/config.module.js";
 import { ConversationModule } from "./conversation/conversation.module.js";
 import { DatabaseModule } from "./db/db.module.js";
+import { IntegrationModule } from "./integration/integration.module.js";
 import { MessageModule } from "./message/message.module.js";
 import { ModelsModule } from "./models/models.module.js";
 import { LoggerModule } from "./observability/logger/logger.module.js";
@@ -33,6 +34,7 @@ import { VersionModule } from "./version/version.module.js";
     PublicModule,
     VersionModule,
     AttachmentModule,
+    IntegrationModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

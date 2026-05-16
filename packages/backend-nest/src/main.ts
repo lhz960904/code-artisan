@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
@@ -15,6 +16,7 @@ async function bootstrap() {
   app.setGlobalPrefix("api");
   app.enableShutdownHooks();
 
+  await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
   const cfg = app.get(ConfigService) as ConfigService<Env, true>;
