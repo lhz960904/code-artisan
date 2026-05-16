@@ -10,6 +10,7 @@ import { ConfigModule } from "./config/config.module.js";
 import { ConversationModule } from "./conversation/conversation.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { DbModule } from "./db/db.module.js";
+import { DeploymentModule } from "./deployment/deployment.module.js";
 import { IntegrationModule } from "./integration/integration.module.js";
 import { MessageModule } from "./message/message.module.js";
 import { ModelsModule } from "./models/models.module.js";
@@ -37,6 +38,7 @@ import { VersionModule } from "./version/version.module.js";
     AttachmentModule,
     IntegrationModule,
     DatabaseModule,
+    DeploymentModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
