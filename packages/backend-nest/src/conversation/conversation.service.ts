@@ -28,6 +28,14 @@ export class ConversationService {
     return { ...conversation, previewUrl: null as string | null };
   }
 
+  // Public ownership primitive — other modules (snapshot, version, message, …)
+  // call this to validate access to a conversation before doing their work.
+  async requireOwned(userId: string, id: string) {
+    const row = await this.conversationRepo.findOwnedById(userId, id);
+    if (!row) throw new NotFoundException("Conversation not found");
+    return row;
+  }
+
   async update(userId: string, id: string, input: UpdateConversationInput) {
     const existing = await this.requireOwned(userId, id);
     const nextSettings = input.settings
@@ -67,11 +75,5 @@ export class ConversationService {
     await this.requireOwned(userId, id);
     await this.conversationRepo.removeWithCascade(id);
     return { deleted: true };
-  }
-
-  private async requireOwned(userId: string, id: string) {
-    const row = await this.conversationRepo.findOwnedById(userId, id);
-    if (!row) throw new NotFoundException("Conversation not found");
-    return row;
   }
 }

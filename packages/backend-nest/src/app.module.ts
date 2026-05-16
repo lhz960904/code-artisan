@@ -11,6 +11,7 @@ import { DatabaseModule } from "./db/db.module.js";
 import { ModelsModule } from "./models/models.module.js";
 import { LoggerModule } from "./observability/logger/logger.module.js";
 import { SettingModule } from "./setting/setting.module.js";
+import { SnapshotModule } from "./snapshot/snapshot.module.js";
 import { UserModule } from "./user/user.module.js";
 
 @Module({
@@ -23,6 +24,7 @@ import { UserModule } from "./user/user.module.js";
     ModelsModule,
     SettingModule,
     ConversationModule,
+    SnapshotModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

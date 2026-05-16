@@ -6,5 +6,7 @@ import { ConversationService } from "./conversation.service.js";
 @Module({
   controllers: [ConversationController],
   providers: [ConversationService, ConversationRepository],
+  // Other modules call ConversationService.requireOwned for ownership checks.
+  exports: [ConversationService],
 })
 export class ConversationModule {}
