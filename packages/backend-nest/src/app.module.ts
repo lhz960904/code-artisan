@@ -15,6 +15,7 @@ import { PublicModule } from "./public/public.module.js";
 import { SettingModule } from "./setting/setting.module.js";
 import { SnapshotModule } from "./snapshot/snapshot.module.js";
 import { UserModule } from "./user/user.module.js";
+import { VersionModule } from "./version/version.module.js";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { UserModule } from "./user/user.module.js";
     MessageModule,
     SnapshotModule,
     PublicModule,
+    VersionModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
