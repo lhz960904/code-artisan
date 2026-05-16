@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { rootRoute } from "./layout/root";
 import { HomeHeader } from "@/components/layout/home-header";
+import { ShowcaseGallery } from "@/components/home/showcase-gallery";
 import { Sender } from "@/components/chat/sender";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useStartConversation } from "@/hooks/use-start-conversation";
@@ -117,6 +118,8 @@ export function HomePage() {
           </div>
 
         </section>
+
+        <ShowcaseGallery />
 
       </main>
       <style>{`
