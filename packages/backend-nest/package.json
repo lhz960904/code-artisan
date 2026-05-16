@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@code-artisan/shared": "workspace:*",
+    "@fastify/multipart": "^10.0.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
+    "@supabase/supabase-js": "^2.105.4",
     "better-auth": "^1.6.11",
     "drizzle-orm": "^0.38.0",
     "fastify": "^5.0.0",

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
+import { AttachmentModule } from "./attachment/attachment.module.js";
 import { AuthGuard } from "./auth/auth.guard.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter.js";
@@ -31,6 +32,7 @@ import { VersionModule } from "./version/version.module.js";
     SnapshotModule,
     PublicModule,
     VersionModule,
+    AttachmentModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
