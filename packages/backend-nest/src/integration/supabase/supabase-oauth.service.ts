@@ -43,10 +43,25 @@ export class SupabaseOAuthNotConfiguredError extends Error {
   }
 }
 
+export class SupabaseNotConnectedError extends Error {
+  constructor() {
+    super("User has not connected their Supabase account.");
+    this.name = "SupabaseNotConnectedError";
+  }
+}
+
+export class SupabaseTokenInvalidError extends Error {
+  constructor() {
+    super("Supabase token is invalid (revoked / refresh failed). Reconnect required.");
+    this.name = "SupabaseTokenInvalidError";
+  }
+}
+
 const SUPABASE_API_BASE = "https://api.supabase.com";
 // "all" maps to every permission enabled on the OAuth App Dashboard config —
 // keep that in sync with the endpoints we actually hit.
 const DEFAULT_OAUTH_SCOPE = "all";
+const REFRESH_SKEW_MS = 60_000;
 
 @Injectable()
 export class SupabaseOAuthService {
@@ -103,6 +118,34 @@ export class SupabaseOAuthService {
         redirect_uri: redirectUri,
       }),
     );
+  }
+
+  async refreshToken(refreshToken: string): Promise<SupabaseTokenResponse> {
+    return this.postTokenEndpoint(
+      new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }),
+    );
+  }
+
+  // Returns a still-valid access token, refreshing in place when within
+  // REFRESH_SKEW_MS of expiry. Throws SupabaseNotConnectedError when no token
+  // is stored, SupabaseTokenInvalidError when refresh fails (and clears the
+  // stored token so the user is prompted to reconnect).
+  async getValidAccessToken(userId: string): Promise<string> {
+    const stored = await this.getToken(userId);
+    if (!stored) throw new SupabaseNotConnectedError();
+    if (stored.expires_at - REFRESH_SKEW_MS > Date.now()) return stored.access_token;
+    try {
+      const refreshed = await this.refreshToken(stored.refresh_token);
+      const next = this.tokenFromExchangeResponse(refreshed, {}, stored);
+      await this.storeToken(userId, next);
+      return next.access_token;
+    } catch {
+      await this.deleteToken(userId);
+      throw new SupabaseTokenInvalidError();
+    }
   }
 
   async fetchIdentity(

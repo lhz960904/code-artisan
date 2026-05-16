@@ -8,7 +8,8 @@ import { ResponseTransformInterceptor } from "./common/interceptors/response-tra
 import { ZodValidationPipe } from "./common/pipes/zod-validation.pipe.js";
 import { ConfigModule } from "./config/config.module.js";
 import { ConversationModule } from "./conversation/conversation.module.js";
-import { DatabaseModule } from "./db/db.module.js";
+import { DatabaseModule } from "./database/database.module.js";
+import { DbModule } from "./db/db.module.js";
 import { IntegrationModule } from "./integration/integration.module.js";
 import { MessageModule } from "./message/message.module.js";
 import { ModelsModule } from "./models/models.module.js";
@@ -23,7 +24,7 @@ import { VersionModule } from "./version/version.module.js";
   imports: [
     ConfigModule,
     LoggerModule,
-    DatabaseModule,
+    DbModule,
     AuthModule,
     UserModule,
     ModelsModule,
@@ -35,6 +36,7 @@ import { VersionModule } from "./version/version.module.js";
     VersionModule,
     AttachmentModule,
     IntegrationModule,
+    DatabaseModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

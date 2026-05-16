@@ -25,7 +25,7 @@ const POSTGRES_CLIENT = Symbol("POSTGRES_CLIENT");
   ],
   exports: [DRIZZLE],
 })
-export class DatabaseModule implements OnApplicationShutdown {
+export class DbModule implements OnApplicationShutdown {
   constructor(@Inject(POSTGRES_CLIENT) private readonly client: Sql) {}
 
   async onApplicationShutdown(): Promise<void> {
