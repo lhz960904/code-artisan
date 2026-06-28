@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
 import { websocket } from "hono/bun";
 import { env } from "./env.js";
+import { startDbHeartbeat } from "./db/heartbeat.js";
 import { errorHandler, notFoundHandler, ok } from "./http/index.js";
 import { auth } from "./auth.js";
 import { requireAuth } from "./middlewares/require-auth.js";
@@ -57,6 +58,8 @@ app.use("*", serveStatic({ root: "./dist/public" }));
 app.get("*", serveStatic({ root: "./dist/public", path: "index.html" }));
 
 console.log(`Server running on http://localhost:${env.PORT}`);
+
+startDbHeartbeat();
 
 const BUN_IDLE_TIMEOUT_SEC = 120;
 
